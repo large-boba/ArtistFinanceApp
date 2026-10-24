@@ -39,5 +39,11 @@ jobs:
         run: npm run check
       - name: Production build
         run: npm run build
+      # Builds the Cloudflare worker locally (no deploy, no Cloudflare login or
+      # secrets). Proves every push still works on Cloudflare (T0.5).
+      - name: Cloudflare build (OpenNext adapter)
+        run: npx opennextjs-cloudflare build
+        env:
+          WRANGLER_SEND_METRICS: "false"
       # Later stages add: unit tests (Stage 1), supabase test db (Stage 2+)
       # and Playwright (when e2e tests exist).

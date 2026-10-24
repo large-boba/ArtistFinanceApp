@@ -12,9 +12,13 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "rules": "node scripts/check-rules.mjs && node --test scripts/*.test.mjs",
-    "check": "npm run lint && npm run typecheck && npm run rules"
+    "check": "npm run lint && npm run typecheck && npm run rules",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.13",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -27,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.152.0"
   }
 }

@@ -1,0 +1,4 @@
+# Variables for the local Cloudflare preview (`npm run preview`).
+# Copy this file to .dev.vars and fill in real values there. .dev.vars is
+# ignored by Git; this example file lists names only and never values.
+# No variables are needed yet.

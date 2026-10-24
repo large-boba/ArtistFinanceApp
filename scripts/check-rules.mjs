@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SKIP_DIRS = new Set([
   "node_modules", ".git", ".next", "out", "build", "dist", "coverage",
+  ".open-next", ".wrangler", // Cloudflare build output (generated, ignored by Git)
   "scripts", ".claude", "docs", "public", "playwright-report", "test-results",
 ]);
 const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
