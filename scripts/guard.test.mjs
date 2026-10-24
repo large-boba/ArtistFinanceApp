@@ -18,6 +18,9 @@ test("blocks edits to the build guide and secret files", () => {
   assert.ok(write(`${dir}/.env.local`));
   assert.ok(write(`${dir}/.env.production.local`));
   assert.ok(write(`${dir}/.env`));
+  assert.ok(write(`${dir}/.dev.vars`));
+  assert.ok(bash("cat .dev.vars"));
+  assert.equal(write(`${dir}/.dev.vars.example`), null);
 });
 
 test("allows ordinary edits and .env.example", () => {
@@ -178,6 +181,75 @@ test("Vercel is limited to local dev and build", () => {
   assert.ok(bash("npx vercel deploy"));
   assert.equal(bash("vercel dev"), null);
   assert.equal(bash("npx vercel build"), null);
+});
+
+test("Cloudflare is limited to local build and preview", () => {
+  for (const cmd of [
+    "wrangler deploy", "npx wrangler deploy", "wrangler versions upload", "wrangler secret put KEY",
+    "wrangler login", "wrangler tail", "wrangler r2 bucket create receipts", "wrangler dev --remote",
+    "npx opennextjs-cloudflare deploy", "opennextjs-cloudflare upload", "opennextjs-cloudflare preview --remote",
+    "pnpm wrangler deploy",
+    "wrangler dev -r", "wrangler dev --remote=true",
+    "node node_modules/wrangler/bin/wrangler.js deploy",
+    "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy",
+  ]) assert.ok(bash(cmd), cmd);
+  // Review round 2: aliases, .bin shims, node flags before the script.
+  for (const cmd of [
+    "npx wrangler2 deploy", "wrangler2 deploy",
+    "node node_modules/.bin/wrangler deploy",
+    "node --no-warnings node_modules/wrangler/bin/wrangler.js deploy",
+    "node node_modules/wrangler deploy",
+    "node node_modules/.bin/opennextjs-cloudflare deploy",
+    "wrangler dev -r=true", "wrangler dev --x-remote-bindings",
+  ]) assert.ok(bash(cmd), cmd);
+  assert.equal(bash("node node_modules/.bin/wrangler dev"), null);
+  assert.equal(bash("node --no-warnings node_modules/.bin/opennextjs-cloudflare build"), null);
+  assert.equal(bash("wrangler dev --remote=false"), null);
+  assert.equal(bash("node node_modules/wrangler/bin/wrangler.js dev"), null);
+  for (const cmd of [
+    "npx opennextjs-cloudflare build", "npx opennextjs-cloudflare preview", "wrangler dev",
+    "npx wrangler types", "wrangler --version", "opennextjs-cloudflare populateCache local",
+  ]) assert.equal(bash(cmd), null, cmd);
+});
+
+test("npm scripts that deploy to Cloudflare are blocked", () => {
+  const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-cf-`);
+  nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: {
+    preview: "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    deploy: "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+  } }));
+  const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
+  assert.ok(run("npm run deploy"));
+  assert.equal(run("npm run preview"), null);
+  assert.equal(run("npm run cf-typegen"), null);
+  nodeFs.rmSync(projectDir, { recursive: true, force: true });
+});
+
+test("extra words after a script name and scoped package names are checked (T0.5 review round 3)", () => {
+  const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-cf3-`);
+  nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: {
+    preview: "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    deploy: "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+  } }));
+  const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
+  for (const cmd of [
+    "npm run preview -- --remote", "npm run preview -- -r", "pnpm preview --remote",
+    "yarn run preview --remote", "bun run preview --remote", "npm run cf-typegen -- --remote",
+    "npx @opennextjs/cloudflare deploy", "npx -y @opennextjs/cloudflare@latest preview --remote",
+    "bunx @opennextjs/cloudflare deploy", "pnpm dlx @opennextjs/cloudflare deploy",
+    "npm exec @opennextjs/cloudflare deploy", "npx -c 'wrangler deploy'", "npm exec -c 'wrangler deploy'",
+    // Options with values before the subcommand, and --call= (final security check).
+    `npm --prefix ${projectDir} run deploy`, "npm -C . run deploy", "pnpm --dir . deploy",
+    "pnpm --filter web deploy", `npx --call="wrangler deploy"`, `npm exec --call="wrangler deploy"`,
+  ]) assert.ok(run(cmd), cmd);
+  assert.equal(run(`npm --prefix ${projectDir} run preview`), null);
+  for (const cmd of [
+    "npm run preview", "pnpm preview", "npx @opennextjs/cloudflare build",
+    "npx -p wrangler wrangler dev", "npx --yes wrangler@4 types", "npm exec -- wrangler dev",
+  ]) assert.equal(run(cmd), null, cmd);
+  nodeFs.rmSync(projectDir, { recursive: true, force: true });
 });
 
 test("recursive grep must exclude secret files", () => {

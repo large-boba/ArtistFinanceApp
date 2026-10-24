@@ -1,0 +1,30 @@
+// Cloudflare Workers settings for BentoBudget (read by wrangler and the
+// OpenNext adapter). Based on the adapter's template in
+// node_modules/@opennextjs/cloudflare/templates/wrangler.jsonc.
+//
+// Never put secrets here: this file is committed. Local secrets go in
+// .dev.vars (ignored by Git, see .dev.vars.example); hosted secrets are set
+// by the owner in the Cloudflare dashboard.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "bentobudget",
+	// The worker that `opennextjs-cloudflare build` writes.
+	"main": ".open-next/worker.js",
+	// Should match a date the installed local runtime (workerd) supports.
+	// Bump it deliberately when upgrading wrangler.
+	"compatibility_date": "2026-10-19",
+	// nodejs_compat: Next.js needs Node.js APIs inside the worker.
+	// global_fetch_strictly_public: a fetch() to the worker's own zone goes
+	// out over the public internet instead of straight to the origin server.
+	// This is NOT protection against fetching private addresses (SSRF):
+	// routes that fetch URLs still need their own allow-lists.
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	// Static files (JS, CSS, images) that the adapter copies out of the build.
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	}
+	// Deliberately not added yet (each needs a decision first): the R2
+	// incremental cache, the WORKER_SELF_REFERENCE service binding used for
+	// cache revalidation, the IMAGES binding for image optimisation, KV and D1.
+}

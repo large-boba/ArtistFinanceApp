@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SKIP_DIRS = new Set([
   "node_modules", ".git", ".next", "out", "build", "dist", "coverage",
+  ".open-next", ".wrangler", // Cloudflare build output (generated, ignored by Git)
   "scripts", ".claude", "docs", "public", "playwright-report", "test-results",
 ]);
 const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
@@ -30,7 +31,10 @@ const SECRET_NAME = /(SECRET|SERVICE_ROLE|PRIVATE|API_KEY|TOKEN|PASSWORD)/;
 const PUBLIC_KEY_NAME = /(PUBLISHABLE|ANON|PUBLIC)_KEY$/;
 const COLUMN_ITEM_SKIP = /^(constraint|primary|unique|foreign|check|exclude|like)\b/;
 
-const looksSecret = (name) => SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
+const looksSecret = (rawName) => {
+  const name = rawName.toUpperCase();
+  return SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
+};
 // Keys designed to be public (e.g. web-push VAPID public keys) are fine.
 
 export function findingsForFile(filePath, text) {
@@ -38,7 +42,8 @@ export function findingsForFile(filePath, text) {
   let findings = [];
   if (ext === ".sql") findings = checkSql(text);
   else if (CODE_EXT.has(ext)) findings = checkCode(text);
-  else if (path.basename(filePath).startsWith(".env")) findings = checkEnvFile(text);
+  else if (isEnvLike(filePath)) findings = checkEnvFile(text, filePath);
+  else if (isWranglerConfig(filePath)) findings = checkWranglerConfig(text, filePath);
   const lines = text.split("\n");
   return findings
     .filter((f) => !isIgnored(lines, f.line))
@@ -311,15 +316,82 @@ function checkCode(text) {
   return findings;
 }
 
-function checkEnvFile(text) {
+const isEnvLike = (p) => /^\.env/.test(path.basename(p)) || /^\.dev\.vars/.test(path.basename(p));
+const isWranglerConfig = (p) => /^wrangler\.(json|jsonc|toml)$/.test(path.basename(p));
+
+function checkEnvFile(text, filePath = "") {
   const findings = [];
+  const isExample = /\.(example|sample|template)$/.test(filePath);
   text.split("\n").forEach((line, idx) => {
-    const name = line.replace(/^\s*export\s+/, "").split("=")[0].trim();
+    if (/^\s*#/.test(line)) return;
+    const [rawName, ...rest] = line.replace(/^\s*export\s+/, "").split("=");
+    const name = rawName.trim();
+    const value = rest.join("=").trim().replace(/^["']|["']$/g, "");
     if (name.startsWith("NEXT_PUBLIC_") && looksSecret(name)) {
       findings.push({ line: idx + 1, severity: "error", rule: "no-public-secret",
         message: `${name} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)` });
     }
+    // Placeholders are words only (e.g. <your key>, xxxx, changeme), never key-like text.
+    if (isExample && looksSecret(name) && value && !/^(<[a-z ]+>|x+|changeme|\.\.\.)$/i.test(value)) {
+      findings.push({ line: idx + 1, severity: "error", rule: "no-secret-in-example",
+        message: `${name} has a value in a committed example file; example files list names only (guide §5)` });
+    }
   });
+  return findings;
+}
+
+// wrangler.json(c)/toml is committed, so its plain-text "vars" must never hold
+// secrets; those go in .dev.vars (local) or Cloudflare's encrypted secrets.
+function checkWranglerConfig(text, filePath = "wrangler.jsonc") {
+  const findings = [];
+  const flag = (key, index) => {
+    if (looksSecret(key)) {
+      findings.push({ line: lineOf(text, index), severity: "error", rule: "no-secret-in-wrangler-vars",
+        message: `${key} looks like a secret but wrangler vars are committed in plain text; use .dev.vars locally and Cloudflare secrets when hosted` });
+    }
+  };
+
+  if (filePath.endsWith(".toml")) {
+    let inVarsTable = false;
+    let offset = 0;
+    for (const line of text.split("\n")) {
+      const code = line.replace(/\s+#.*$/, "").trim();
+      if (code.startsWith("[")) inVarsTable = /^\[\s*(env\.[\w.-]+\.)?vars\s*\]$/.test(code.replace(/\s*\.\s*/g, "."));
+      else if (inVarsTable) {
+        const m = code.match(/^["']?([A-Za-z0-9_]+)["']?\s*=/);
+        if (m) flag(m[1], offset);
+      }
+      const inline = code.match(/^vars\s*=\s*\{(.*)\}/);
+      if (inline) for (const k of inline[1].matchAll(/["']?([A-Za-z0-9_]+)["']?\s*=/g)) flag(k[1], offset);
+      offset += line.length + 1;
+    }
+    return findings;
+  }
+
+  // JSON/JSONC: blank out comments (keeping length), then for each
+  // "vars": { ... } block, check every key inside it, however it's laid out.
+  let clean = "";
+  for (let i = 0, inString = false; i < text.length; i++) {
+    const c = text[i];
+    if (inString) { clean += c; if (c === "\\") clean += text[++i] ?? ""; else if (c === '"') inString = false; continue; }
+    if (c === '"') { inString = true; clean += c; continue; }
+    if (text.startsWith("//", i)) { const end = text.indexOf("\n", i); const stop = end === -1 ? text.length : end; clean += " ".repeat(stop - i); i = stop - 1; continue; }
+    if (text.startsWith("/*", i)) { const end = text.indexOf("*/", i + 2); const stop = end === -1 ? text.length : end + 2; clean += text.slice(i, stop).replace(/[^\n]/g, " "); i = stop - 1; continue; }
+    clean += c;
+  }
+  for (const m of clean.matchAll(/"vars"\s*:\s*\{/g)) {
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (let inString = false; j < clean.length && depth > 0; j++) {
+      const c = clean[j];
+      if (inString) { if (c === "\\") j++; else if (c === '"') inString = false; continue; }
+      if (c === '"') inString = true;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+    }
+    const start = m.index + m[0].length;
+    for (const k of clean.slice(start, j).matchAll(/"([A-Za-z0-9_]+)"\s*:/g)) flag(k[1], start + k.index);
+  }
   return findings;
 }
 
@@ -339,8 +411,7 @@ export function checkRepo(root) {
   const findings = [];
   for (const file of walk(root, root)) {
     const ext = path.extname(file).toLowerCase();
-    const isEnv = path.basename(file).startsWith(".env");
-    if (ext !== ".sql" && !CODE_EXT.has(ext) && !isEnv) continue;
+    if (ext !== ".sql" && !CODE_EXT.has(ext) && !isEnvLike(file) && !isWranglerConfig(file)) continue;
     const rel = path.relative(root, file);
     findings.push(...findingsForFile(rel, fs.readFileSync(file, "utf8")));
   }

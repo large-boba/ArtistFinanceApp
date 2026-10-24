@@ -1,10 +1,10 @@
 # BentoBudget
 
-A finance app for artists: an installable web app (PWA) for tracking expenses, income, events and profit. Built with Next.js + TypeScript, Tailwind, Supabase and Vercel.
+A finance app for artists: an installable web app (PWA) for tracking expenses, income, events and profit. Built with Next.js + TypeScript, Tailwind and Supabase, hosted on Cloudflare Workers through the OpenNext adapter.
 
 ## Every agent working here
 
-- `docs/build-guide.html` is the source of truth for architecture, design rules and stage order. Read the sections your task cites. Nobody edits it.
+- `docs/build-guide.html` is the source of truth for architecture, design rules and stage order. Read the sections your task cites. Nobody edits it. Where `DECISIONS.md` records an owner-approved change from the guide, `DECISIONS.md` wins. For example, hosting is **Cloudflare**, not Vercel.
 - `DECISIONS.md` records what's decided, what's still open and the current stage. Don't make a decision listed under "Still to decide". Stop and report it instead.
 - The `project-lead` agent runs the build as the main session. It holds the full list of non-negotiable rules in `.claude/agents/project-lead.md`. When your work touches security, dates, money, receipts, imports or exports, read that list first.
 - The team, its workflow and its safeguards are described in `docs/TEAM.md`. Stage plans and task cards are in `docs/stages/`.
@@ -12,6 +12,7 @@ A finance app for artists: an installable web app (PWA) for tracking expenses, i
 - Don't edit tests written by `test-engineer` to make your code pass. Report a disputed test to the lead.
 - Before reporting, run `npm run check` (before Stage 0 adds it: `node scripts/check-rules.mjs && node --test scripts/*.test.mjs`). Paste real output. Say plainly when a check couldn't run.
 - Explain what your code does in plain English. The owner is learning as they build.
+- **Next.js 16 differs from older versions.** Before writing Next.js code, read the matching guide in `node_modules/next/dist/docs/` (see `AGENTS.md`). The cloud container can't always reach nextjs.org, and the bundled docs match the installed version exactly.
 
 ## Rules that are easy to get wrong
 
@@ -27,4 +28,6 @@ A finance app for artists: an installable web app (PWA) for tracking expenses, i
 - `.claude/hooks/guard.mjs` blocks:
   - editing the build guide or `.env*.local` files;
   - force-pushes, pushes to `main` and `--no-verify`;
-  - commands that change a hosted Supabase project.
+  - commands that change a hosted Supabase project;
+  - Cloudflare deploys, secrets and remote commands (agents only build and preview locally).
+  - It treats `.dev.vars`, Cloudflare's local secrets file, like `.env.local`.
