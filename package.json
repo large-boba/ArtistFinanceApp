@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "rules": "node scripts/check-rules.mjs && node --test scripts/*.test.mjs",
     "check": "npm run lint && npm run typecheck && npm run rules"

@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 0 — Set up your workshop (in progress, see `docs/stages/stage-00.md`)
 - **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
-- **In progress:** T0.2 `npm run check` and CI → backend-engineer
+- **In progress:** Stage 0 gate. T0.1 and T0.2 are done; T0.3 and T0.4 need the owner.
 - **Blocked:** —
 
 ## Decided
@@ -32,12 +32,18 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | Data storage | Central Supabase database, collecting less. Local-only storage rejected. | §16 |
 | Email forwarding | After the core app is finished. | Stage 12 |
 | AI | One vision model reads receipts and suggests a category. | §11 |
-| Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, Vercel. Installed in T0.1: Next.js 16.4.3 (Turbopack, Tailwind via `@tailwindcss/turbopack`), React 19.3.0, TypeScript 5.9.3, Tailwind CSS 4.3.3, ESLint 9.39.5, npm 10.9.4. React Compiler and Cache Components are off. | §4 |
+| Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, Vercel. Installed in T0.1: Next.js 16.4.3 (Turbopack, Tailwind via `@tailwindcss/turbopack`), React 19.3.0, TypeScript 5.9.3, Tailwind CSS 4.3.3, ESLint 9.39.5, npm 10.9.4. React Compiler and Cache Components are off. Node.js **24 LTS** (`.nvmrc`, `engines >=24`), checked against nodejs.org on 2026-10-24. Node 26 isn't LTS yet, so revisit when it is. | §4 |
 | Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
 | Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
 | Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |
 | Test stack | Vitest (unit), pgTAP via `supabase test db` (database/RLS), Playwright (end-to-end). Tests are written before code by the test engineer. | §19 |
 | Guardrails | `scripts/check-rules.mjs` (rule checks, in a hook and CI), `.claude/hooks/guard.mjs` (blocks unsafe actions), CI on every push. | §5–§13 |
+
+## Follow-ups noted (not decisions)
+
+- `@types/node` is `^20` but the runtime is Node 24. Bump it in a later task (one change at a time).
+- npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
+- `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.
 
 ## Still to decide
 

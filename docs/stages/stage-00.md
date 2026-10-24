@@ -1,6 +1,6 @@
 # Stage 0 — Set up your workshop
 
-**Status:** in progress (opened 2026-10-24; stage start commit `dd90913`)
+**Status:** READY FOR SIGN-OFF. Waiting on the owner (T0.3, T0.4 and the Check yourself questions). Opened 2026-10-24; stage start commit `dd90913`.
 **Guide:** §17 Stage 0, §4 (stack), §1 (habits)
 
 ## You'll learn
@@ -16,11 +16,11 @@ What each tool does:
 
 | # | Claim | Evidence |
 |---|---|---|
-| 1 | The starter Next.js app (TypeScript, App Router, Tailwind) builds and passes lint and the rule checks | |
-| 2 | `.env.local` is ignored by Git before any keys exist | |
-| 3 | CI runs lint, typecheck, rule checks and build on every push, and is green | |
+| 1 | The starter Next.js app (TypeScript, App Router, Tailwind) builds and passes lint and the rule checks | T0.1 `54bc667`; lead re-run |
+| 2 | `.env.local` is ignored by Git before any keys exist | `git check-ignore -v .env.local` shows `.gitignore:3` |
+| 3 | CI runs lint, typecheck, rule checks and build on every push, and is green | CI run #14 on `f3f3dfb`: success |
 | 4 | The owner has run the app locally, changed some text and seen it update | NEEDS OWNER |
-| 5 | The first app commit is on GitHub | |
+| 5 | The first app commit is on GitHub | `54bc667` pushed to the working branch (reaches `main` when the owner merges PR #1) |
 | 6 | `main` is protected on GitHub: PR plus green CI required, no force pushes (team addition, not in the guide) | NEEDS OWNER |
 
 ## Task cards
@@ -46,7 +46,7 @@ The code reviewer approved with no blocking findings. Optional follow-ups:
 - the README was replaced;
 - the page title is left for Stage 1.
 
-### T0.2 — One command for all checks, and CI to run it   Status: building
+### T0.2 — One command for all checks, and CI to run it   Status: done
 Owner agent: backend-engineer   Tests: none. Tooling configuration; proven by running it and by CI   Security review: no
 Guide: §1 (habits), §17 Stage 0
 Outcome: These scripts in `package.json`:
@@ -59,7 +59,11 @@ Context: depends on T0.1.
 Rules that apply: CI must not need any secrets at this stage.
 Out of scope: test runners (Vitest arrives in Stage 1), Supabase.
 Done when: `npm run check` passes locally; deliberately breaking a type makes `npm run typecheck` fail (revert afterwards); CI is green on the pushed commit.
-Evidence:
+Evidence: commit `f3f3dfb`. GitHub CI run #14 passed (both the `rules` and `app` jobs).
+- The lead re-ran `npm run check`: exit 0, check-rules 0 errors, 52/52 tests.
+- The builder showed a deliberate type error failing `typecheck` (TS2322, exit 2), and a fresh-checkout simulation passed `npm ci`, `check` and `build`.
+- The code reviewer approved with no blocking findings. It verified the `@v7` actions exist, that the lockfile is in sync, and that `&&` chains pass failures through. It also re-ran everything on Node 24.22.1.
+- Optional finding taken: `lint` now uses `--max-warnings=0`, so warnings fail the check.
 
 ### T0.3 — Owner runs the app on their own computer      Status: todo
 Owner agent: **owner** (the lead prepares the steps)
@@ -86,6 +90,12 @@ Done when: the owner confirms the rule is active.
 Evidence:
 
 ## Stage gate
+
+**Gate run 2026-10-24 by the lead:**
+- Checks re-run after the last change: `npm run check` exit 0 (lint with 0 warnings, typecheck, check-rules 0 errors, 52/52 tests); `npm run build` exit 0; CI green on `f3f3dfb`.
+- "Done when" claims: 1, 2, 3 and 5 are proven (table above). Claims 4 and 6 need the owner.
+- §19 sweep: Stage 0 makes no testing-checklist item testable yet. ("No secret keys in browser code, Git history or logs" becomes testable once keys exist, in Stage 2.)
+- Whole-stage review: the stage diff is exactly the two reviewed task diffs plus the lead's record keeping, and both T0.1 and T0.2 were approved by the code reviewer. No security-sensitive code (auth, RLS, routes, secrets) was touched, so there was no security review.
 
 Run the `stage-gate` skill. The "Check yourself" questions for the owner:
 - What's the difference between your code on your computer, in Git and on GitHub?
