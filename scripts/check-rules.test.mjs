@@ -214,6 +214,25 @@ test("public keys are allowed and capitalised Input components are checked", () 
   assert.deepEqual(rules("p.tsx", `<InputGroup capture="x" />`), []);
 });
 
+// Cases found by the security reviewer.
+test("security definer functions are only allowed in the private schema", () => {
+  const exposed = "create function public.account_totals(p_account uuid)\nreturns bigint\nlanguage sql security definer\nset search_path = ''\nas $$ select 1::bigint $$;\n";
+  assert.deepEqual(errorRules("m.sql", exposed), ["definer-only-in-private"]);
+  const unqualified = exposed.replace("public.account_totals", "account_totals");
+  assert.deepEqual(errorRules("m.sql", unqualified), ["definer-only-in-private"]);
+  assert.deepEqual(errorRules("m.sql", "alter function public.f() security definer;\n"), ["definer-only-in-private"]);
+  const invoker = exposed.replace("security definer", "security invoker");
+  assert.deepEqual(rules("m.sql", invoker), []);
+});
+
+test("turning protections off is an error; using (true) is a warning", () => {
+  assert.deepEqual(errorRules("m.sql", "alter table public.expenses disable row level security;\n"), ["rls-never-disabled"]);
+  assert.deepEqual(errorRules("m.sql", "alter view public.profit set (security_invoker = false);\n"), ["view-security-invoker"]);
+  const open = "create policy \"all\" on public.fx_rates for select to authenticated using (true);\n";
+  assert.deepEqual(rules("m.sql", open), ["policy-allows-everything"]);
+  assert.deepEqual(errorRules("m.sql", open), []);
+});
+
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-rules-"));
   fs.mkdirSync(path.join(root, "supabase/migrations"), { recursive: true });

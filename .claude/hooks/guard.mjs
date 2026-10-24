@@ -4,32 +4,41 @@
 // the stderr message is shown to the agent.
 //
 // This is a seatbelt, not a lock: it catches the usual ways of doing these
-// things. GitHub branch protection on `main` and the reviewers are the real
-// protection.
+// things. GitHub branch protection on `main`, the permission deny list in
+// .claude/settings.json and the reviewers are the real protection.
 
 import { execSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const PROTECTED_BRANCHES = new Set(["main", "master"]);
 const SECRET_PATH = /(^|\/)\.env(\.[\w-]+)?\.local$|(^|\/)\.env$/;
+const SECRET_IN_TEXT = /\.env(\.[\w-]+)?\.local\b/;
 const SECRET_CANDIDATES = [".env", ".env.local", ".env.development.local", ".env.production.local", ".env.test.local"];
-const INTERPRETERS = new Set(["node", "python", "python3", "ruby", "perl", "deno", "bun", "php"]);
+const INTERPRETERS = new Set(["node", "python", "python3", "ruby", "perl", "deno", "bun", "php", "tsx", "ts-node", "jq"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
+const RUNNERS = new Set(["npx", "pnpx", "bunx"]);
 
 const REASONS = {
   force: "force-pushing rewrites history. Ask the owner to do it if it is really needed.",
   main: "nobody pushes to main. Work goes to the feature branch and reaches main through a reviewed PR.",
+  merge: "only the owner merges pull requests. Report that the PR is ready instead.",
   noVerify: "skipping git hooks hides failures. Fix the failing check instead.",
-  supabase: "changing a hosted Supabase project is an owner-only action. Report the command to the lead for the owner to run.",
-  secret: "reading, copying or staging a .env*.local file exposes secrets. Use .env.example for variable names.",
+  supabase: "this Supabase command can act on the hosted project. Only local commands (start, stop, status, db reset/diff/lint, test db, migration new/up, functions serve, gen types --local) are allowed; report anything else to the lead for the owner to run.",
+  vercel: "deploying or changing Vercel settings is an owner-only action. Only `vercel dev` and `vercel build` are allowed.",
+  secret: "reading, copying, writing or staging a .env*.local file exposes or destroys secrets. Use .env.example for variable names.",
+  recursiveGrep: "a recursive grep can print secret values from .env*.local. Add --exclude='.env*' (or use the Grep tool, which skips ignored files).",
   guide: "docs/build-guide.html is the owner's source of truth. Propose changes to the lead instead of editing it.",
 };
 
 // Split a shell command into segments of words, honouring quotes. Heredoc
 // bodies are dropped first: they are data being written, not commands.
 export function segments(command) {
-  const text = command.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, "");
+  const text = command
+    .replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, "")
+    .replace(/\\\r?\n/g, " "); // backslash-newline continues the line
   const out = [];
   let words = [];
   let word = null;
@@ -62,6 +71,25 @@ function globMatchesSecret(word) {
 
 const isSecretWord = (w) => SECRET_PATH.test(w) || globMatchesSecret(w);
 
+// Drop wrappers and shell keywords that run the command after them.
+function unwrap(words) {
+  let w = words;
+  for (;;) {
+    while (w.length && /^\w+=/.test(w[0])) w = w.slice(1); // leading VAR=value
+    const head = w[0];
+    if (["then", "do", "else", "elif", "{", "!", "time", "nohup", "exec", "command", "builtin"].includes(head)) { w = w.slice(1); continue; }
+    if (["sudo", "doas", "env", "nice", "stdbuf", "xargs", "timeout", "ionice", "caffeinate"].includes(head)) {
+      w = w.slice(1);
+      while (w.length && (w[0].startsWith("-") || /^\w+=/.test(w[0]))) {
+        w = ["-u", "-g", "-C", "-p", "-U", "-n", "-s", "-k", "-I", "-L", "-P"].includes(w[0]) ? w.slice(2) : w.slice(1);
+      }
+      if (head === "timeout" && w.length && /^\d+(\.\d+)?[smhd]?$/.test(w[0])) w = w.slice(1);
+      continue;
+    }
+    return w;
+  }
+}
+
 function checkGit(args, currentBranch) {
   let i = 0;
   while (i < args.length && args[i].startsWith("-")) {
@@ -72,7 +100,8 @@ function checkGit(args, currentBranch) {
   const rest = args.slice(i + 1);
 
   if (rest.includes("--no-verify")) return REASONS.noVerify;
-  if (sub === "commit" && rest.some((a) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(a) && !a.startsWith("--"))) return REASONS.noVerify;
+  if (sub === "commit" && rest.some((a) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(a))) return REASONS.noVerify;
+  if (sub === "config" && rest.some((a) => /^core\.hookspath$/i.test(a))) return REASONS.noVerify;
 
   if (sub === "push") {
     const positional = [];
@@ -86,24 +115,27 @@ function checkGit(args, currentBranch) {
       positional.push(a);
     }
     const refspecs = positional.slice(1);
-    if (refspecs.length === 0) {
-      const branch = currentBranch();
-      if (branch && PROTECTED_BRANCHES.has(branch)) return REASONS.main;
-    }
+    const onProtected = () => { const b = currentBranch(); return b && PROTECTED_BRANCHES.has(b); };
+    if (refspecs.length === 0 && onProtected()) return REASONS.main;
     for (const spec of refspecs) {
       if (spec.startsWith("+")) return REASONS.force;
       const dest = (spec.includes(":") ? spec.split(":").pop() : spec).replace(/^refs\/heads\//, "");
-      const src = spec.split(":")[0];
       if (PROTECTED_BRANCHES.has(dest)) return REASONS.main;
-      if (src === "HEAD" && !spec.includes(":")) {
-        const branch = currentBranch();
-        if (branch && PROTECTED_BRANCHES.has(branch)) return REASONS.main;
-      }
+      if (spec === "HEAD" && onProtected()) return REASONS.main;
     }
   }
 
   const readOnly = ["check-ignore", "ls-files", "status"].includes(sub);
   if (!readOnly && rest.some(isSecretWord)) return REASONS.secret;
+  return null;
+}
+
+function checkGh(args) {
+  const words = args.filter((a) => !a.startsWith("-"));
+  if (words[0] === "pr" && words[1] === "merge") return REASONS.merge;
+  if (words[0] === "api" && args.some((a) => /\/merges?\b|\/pulls\/\d+\/merge|automerge|auto-merge/i.test(a))) return REASONS.merge;
+  if (words[0] === "api" && args.some((a) => /\/git\/refs\/heads\/(main|master)\b|\/contents\//.test(a)) &&
+      args.some((a) => /^(-X|--method)$/.test(a) || /^--method=/.test(a))) return REASONS.main;
   return null;
 }
 
@@ -122,7 +154,7 @@ const SUPABASE_NEEDS_LOCAL_FLAG = new Set(["migration list", "gen types"]);
 const SUPABASE_VALUE_FLAGS = new Set(["--workdir", "--profile", "-o", "--output", "--network-id", "--dns-resolver"]);
 
 function checkSupabase(args) {
-  if (args.some((a) => /^--(linked|project-ref|db-url)(=|$)/.test(a))) return REASONS.supabase;
+  if (args.some((a) => /^--(linked|project-ref|project-id|db-url)(=|$)/.test(a))) return REASONS.supabase;
   const words = [];
   for (let i = 0; i < args.length; i++) {
     if (SUPABASE_VALUE_FLAGS.has(args[i])) { i++; continue; }
@@ -136,59 +168,92 @@ function checkSupabase(args) {
   return REASONS.supabase;
 }
 
-// `npx supabase`, `npm exec supabase`, `pnpm dlx supabase`, `yarn dlx supabase`...
-function packageRunnerTarget(name, args) {
-  const runners = new Set(["npx", "pnpx", "bunx"]);
-  const managers = new Set(["npm", "pnpm", "yarn", "bun"]);
-  let rest = null;
-  if (runners.has(name)) rest = args;
-  else if (managers.has(name) && ["exec", "dlx", "x"].includes(args[0])) rest = args.slice(1);
-  if (!rest) return null;
-  const idx = rest.findIndex((a) => !a.startsWith("-") && a !== "--");
-  if (idx === -1 || !/^supabase(@.*)?$/.test(rest[idx])) return null;
-  return rest.slice(idx + 1);
+function checkVercel(args) {
+  const words = args.filter((a) => !a.startsWith("-"));
+  if (words.length === 0 && args.every((a) => ["--version", "-v", "--help", "-h"].includes(a)) && args.length) return null;
+  if (["dev", "build", "help", "whoami"].includes(words[0])) return null;
+  return REASONS.vercel;
 }
 
-// Drop wrappers such as `sudo -u root`, `env X=1`, `time`, `nohup`.
-function unwrap(words) {
-  let w = words;
-  for (;;) {
-    while (w.length && /^\w+=/.test(w[0])) w = w.slice(1); // leading VAR=value
-    if (!w.length || !["sudo", "env", "time", "nohup", "exec", "command", "doas"].includes(w[0])) return w;
-    w = w.slice(1);
-    while (w.length && w[0].startsWith("-")) {
-      w = ["-u", "-g", "-C", "-p", "-U"].includes(w[0]) ? w.slice(2) : w.slice(1);
-    }
+function readPackageScripts(projectDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8")).scripts ?? {};
+  } catch {
+    return {};
   }
 }
 
-function checkWords(words, currentBranch, depth) {
-  const w = unwrap(words.map((x) => x.replace(/^\d*[<>]+/, "")).filter(Boolean));
+// npm/pnpm/yarn/bun: `run <script>` (and pnpm/yarn/bun `<script>`), or
+// `exec`/`dlx`/`x <bin>`. Returns words to check, or null.
+function resolvePackageManager(name, args, ctx) {
+  const rest = args.filter((a) => a !== "--");
+  const first = rest.find((a) => !a.startsWith("-"));
+  if (!first) return null;
+  const after = rest.slice(rest.indexOf(first) + 1);
+  if (["exec", "dlx", "x"].includes(first)) return { words: after.filter((a) => !a.startsWith("-") || after.indexOf(a) > 0) };
+  const scripts = readPackageScripts(ctx.projectDir);
+  let scriptName = null;
+  if (["run", "run-script"].includes(first)) scriptName = after.find((a) => !a.startsWith("-"));
+  else if (name !== "npm" && scripts[first] !== undefined) scriptName = first;
+  if (scriptName && scripts[scriptName] !== undefined) return { script: scripts[scriptName] };
+  if (name !== "npm" && first === "supabase") return { words: after.length ? ["supabase", ...after] : ["supabase"] };
+  if (name !== "npm" && ["vercel", "gh", "git"].includes(first)) return { words: [first, ...after] };
+  return null;
+}
+
+function checkWords(rawWords, ctx, depth) {
+  // Writing to a secret file through a redirect: `> .env.local`, `>.env.local`.
+  for (let i = 0; i < rawWords.length; i++) {
+    const w = rawWords[i];
+    if ((/^\d*>>?$/.test(w) && isSecretWord(rawWords[i + 1] ?? "")) || (/^\d*>>?./.test(w) && isSecretWord(w.replace(/^\d*>>?/, "")))) return REASONS.secret;
+  }
+  // `$(<.env.local)` reads a file without naming a command.
+  if (rawWords.some((x) => /\$\(\s*<\s*\S*\.env(\.[\w-]+)?\.local/.test(x))) return REASONS.secret;
+  if (rawWords.some((x) => /^HUSKY=0$/.test(x))) return REASONS.noVerify;
+
+  const w = unwrap(rawWords.map((x) => x.replace(/^\d*[<>]+/, "")).filter(Boolean));
   if (!w.length) return null;
   const [cmd, ...args] = w;
   const name = path.basename(cmd);
 
-  // `$(<.env.local)` reads a file without naming a command.
-  if (words.some((x) => /\$\(\s*<\s*\S*\.env(\.[\w-]+)?\.local/.test(x))) return REASONS.secret;
-
-  if ((SHELLS.has(name) || name === "eval") && depth < 3) {
-    if (name === "eval") return evaluateCommand(args.join(" "), currentBranch, depth + 1);
-    const flag = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
-    if (flag !== -1 && args[flag + 1]) return evaluateCommand(args[flag + 1], currentBranch, depth + 1);
+  if (depth < 4) {
+    if (name === "eval") return evaluateCommand(args.join(" "), ctx, depth + 1);
+    if (SHELLS.has(name)) {
+      const flag = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+      if (flag !== -1 && args[flag + 1]) return evaluateCommand(args[flag + 1], ctx, depth + 1);
+    }
+    if (RUNNERS.has(name)) {
+      const idx = args.findIndex((a) => !a.startsWith("-"));
+      if (idx !== -1) return checkWords([args[idx].replace(/@.*$/, ""), ...args.slice(idx + 1).filter((a) => a !== "--")], ctx, depth + 1);
+      return null;
+    }
+    if (PACKAGE_MANAGERS.has(name)) {
+      const target = resolvePackageManager(name, args, ctx);
+      if (target?.script !== undefined) return evaluateCommand(target.script, ctx, depth + 1);
+      if (target?.words?.length) return checkWords([target.words[0].replace(/@.*$/, ""), ...target.words.slice(1)], ctx, depth + 1);
+    }
   }
-  if (name === "git") return checkGit(args, currentBranch);
+  if (name === "git") return checkGit(args, ctx.branch);
+  if (name === "gh") return checkGh(args);
   if (name === "supabase") return checkSupabase(args);
-  const viaRunner = packageRunnerTarget(name, args);
-  if (viaRunner) return checkSupabase(viaRunner);
-  if (INTERPRETERS.has(name) && args.some((a) => /\.env(\.[\w-]+)?\.local\b/.test(a))) return REASONS.secret;
+  if (name === "vercel") return checkVercel(args);
+  if (INTERPRETERS.has(name) && args.some((a) => SECRET_IN_TEXT.test(a))) return REASONS.secret;
+
+  if (["grep", "egrep", "fgrep"].includes(name)) {
+    const recursive = args.some((a) => a === "--recursive" || a === "--dereference-recursive" || /^-[a-zA-Z]*[rR][a-zA-Z]*$/.test(a));
+    if (recursive && !args.some((a) => /^--exclude=.*\.env/.test(a))) return REASONS.recursiveGrep;
+  }
+  if (name === "rg") {
+    const noIgnore = args.some((a) => /^(--no-ignore|--hidden|-[a-zA-Z]*u[a-zA-Z]*|--unrestricted)$/.test(a));
+    if (noIgnore && !args.some((a) => /^!?\.env/.test(a.replace(/^--glob=|^-g/, "")))) return REASONS.recursiveGrep;
+  }
 
   const secretArgs = args.filter(isSecretWord);
   if (secretArgs.length) {
     if (["ls", "test", "[", "echo", "printf", "touch"].includes(name)) return null;
     if (["grep", "rg", "egrep", "fgrep"].includes(name)) {
       const positional = args.filter((a) => !a.startsWith("-"));
-      const files = positional.slice(1);
-      if (!files.some(isSecretWord)) return null; // the secret name is only the search pattern
+      if (!positional.slice(1).some(isSecretWord)) return null; // the secret name is only the search pattern
     }
     return REASONS.secret;
   }
@@ -210,13 +275,13 @@ function switchedBranch(words) {
   return rest.find((a) => !a.startsWith("-"));
 }
 
-function evaluateCommand(command, currentBranch, depth = 0) {
-  let branch = currentBranch;
+function evaluateCommand(command, ctx, depth = 0) {
+  let local = ctx;
   for (const words of segments(command)) {
-    const reason = checkWords(words, branch, depth);
+    const reason = checkWords(words, local, depth);
     if (reason) return reason;
     const next = switchedBranch(words);
-    if (next !== undefined) branch = () => (next === null ? "main" : next); // unknown: assume the worst
+    if (next !== undefined) local = { ...local, branch: () => (next === null ? "main" : next) }; // unknown: assume the worst
   }
   return null;
 }
@@ -224,10 +289,10 @@ function evaluateCommand(command, currentBranch, depth = 0) {
 export function evaluate(input, options = {}) {
   const tool = input?.tool_name ?? "";
   const ti = input?.tool_input ?? {};
-  const projectDir = process.env.CLAUDE_PROJECT_DIR ?? input?.cwd ?? process.cwd();
+  const projectDir = options.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? input?.cwd ?? process.cwd();
 
   if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(tool)) {
-    const target = ti.file_path ?? ti.notebook_path ?? ti.path ?? "";
+    const target = String(ti.file_path ?? ti.notebook_path ?? ti.path ?? "");
     const rel = path.relative(projectDir, path.resolve(projectDir, target)).split(path.sep).join("/");
     if (rel === "docs/build-guide.html") return REASONS.guide;
     if (SECRET_PATH.test(rel)) return `${rel} holds secrets and is owner-managed. Add variable names to .env.example instead.`;
@@ -235,7 +300,7 @@ export function evaluate(input, options = {}) {
 
   if (tool === "Bash") {
     let cached;
-    const currentBranch = options.currentBranch ?? (() => {
+    const branch = options.currentBranch ?? (() => {
       if (cached === undefined) {
         try {
           cached = execSync("git rev-parse --abbrev-ref HEAD", { cwd: input?.cwd ?? projectDir, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
@@ -245,7 +310,7 @@ export function evaluate(input, options = {}) {
       }
       return cached;
     });
-    return evaluateCommand(String(ti.command ?? ""), currentBranch);
+    return evaluateCommand(String(ti.command ?? ""), { branch, projectDir });
   }
   return null;
 }
@@ -256,13 +321,12 @@ if (isMain) {
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => (raw += chunk));
   process.stdin.on("end", () => {
-    let input;
+    let reason = null;
     try {
-      input = JSON.parse(raw || "{}");
+      reason = evaluate(JSON.parse(raw || "{}"));
     } catch {
-      process.exit(0);
+      process.exit(0); // malformed input: fail open, the deny list and reviewers still apply
     }
-    const reason = evaluate(input);
     if (reason) {
       process.stderr.write(`Blocked by project guard: ${reason}\n`);
       process.exit(2);

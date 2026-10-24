@@ -29,7 +29,7 @@ What each tool does:
 Owner agent: frontend-engineer   Tests: none. This is generated scaffolding; it's verified by build, lint and the rule checks   Security review: no. No auth, data or secrets yet
 Guide: §17 Stage 0 step 3, §4
 Outcome: A fresh Next.js app in the repo root, created with the current `create-next-app`. Options: TypeScript, ESLint, Tailwind CSS, App Router, `src/` directory, import alias `@/*`, npm.
-Context: The repo already holds `CLAUDE.md`, `DECISIONS.md`, `docs/`, `scripts/`, `.claude/` and `.github/`. `create-next-app` refuses a non-empty folder, so generate the app in a temporary folder and copy it in, overwriting none of the existing files. Merge `.gitignore` if both have one. Check the current Next.js install docs first (§21).
+Context: The repo already holds `CLAUDE.md`, `DECISIONS.md`, `.gitignore`, `docs/`, `scripts/`, `.claude/` and `.github/`. `create-next-app` refuses a non-empty folder, so generate the app in a temporary folder and copy it in, overwriting none of the existing files. Merge the generated `.gitignore` into ours, but **don't** take its `.env*` line, which would also ignore `.env.example`. Keep our `.env` and `.env*.local` rules. Check the current Next.js install docs first (§21).
 Rules that apply: one new thing at a time (no extra libraries); never commit `.env*.local`; `scripts/check-rules.mjs` must pass.
 Out of scope: Vitest, Supabase, Zod, any screens beyond the starter page, PWA files.
 Done when: `npm run build` succeeds; `npm run lint` passes; `node scripts/check-rules.mjs` passes; `git check-ignore -v .env.local` shows it's ignored; the installed Next.js, React, TypeScript and Tailwind versions are listed in the report so the lead can record them in `DECISIONS.md`.
@@ -65,7 +65,7 @@ Evidence:
 ### T0.4 — Protect the main branch on GitHub              Status: todo
 Owner agent: **owner** (the lead prepares the steps)
 Guide: §1 (save points), §17 Stage 0
-Why: the agents' safety hook blocks pushes to `main`, but a hook can be worked around. GitHub's branch protection is the real lock.
+Why: the agents' safety hook blocks pushes to `main`, and their permission settings block merging PRs, but a hook can be worked around. GitHub's branch protection is the real lock. Only you merge pull requests. The agents will tell you when a PR is ready.
 Steps for the owner: on GitHub, go to the repo's **Settings → Branches** (or **Rules → Rulesets**) and add a rule for `main` that:
 - requires a pull request before merging;
 - requires the CI status checks to pass;

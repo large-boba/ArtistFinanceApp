@@ -19,6 +19,9 @@ The lead gives you the task card, the diff range and the builder's report. Read 
 ## Attack checklist
 
 - **RLS:** is it enabled on every new table *in the same migration*? Does each account-scoped table have a policy for each of select, insert, update and delete, each using `private.has_permission` with the right permission? The exceptions are Stage 2's owner-only policies, `profiles` (own row only) and `fx_rates` (read-only for `authenticated`). Is every view `security_invoker = true`, and is no materialized view exposed? A view without it runs as its owner and returns every account's rows. Does insert check `created_by = auth.uid()`? Do update policies cover both `using` and `with check`, so a row can't be moved to another account? Run the `rls-test` cast against the change, and write ad-hoc attack queries if the existing tests miss a path.
+- **Update policies:** do both `using` and `with check` call `has_permission` on `account_id`? Are `account_id` and `created_by` immutable (trigger)? Try moving Bob's row into account A, and helper H moving A's row out.
+- **Functions:** is any function in `public` `security definer`? Is execute revoked from `public`/`anon` on `private` definer functions? Call each exposed function as Bob with A's id.
+- **Server identity:** do routes use `getUser()`/`getClaims()`, never `getSession()`? Do service-role routes check permissions themselves?
 - **The permission function:** `security definer`, `set search_path = ''`, in the `private` schema, fully qualified names, checks `status = 'active'`, and isn't exposed through the API schema.
 - **Membership:** no self-promotion, last-owner protection, and member changes only through a server route that checks `members.manage`.
 - **Storage:** paths start with `account_id`, policies use the permission function, overwrite is off, the bucket is private, and files are served only through short-lived signed URLs. Previews have EXIF/GPS stripped.

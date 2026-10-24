@@ -63,3 +63,10 @@ To be filled in as providers and fields are added: what personal data, why, wher
   - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
 
   Owner to turn on GitHub branch protection for `main` (T0.4).
+- 2026-10-24 — Round 2 (code-reviewer and security-reviewer) fixed:
+  - Supabase commands now use a local-only allowlist; Vercel is limited to dev and build.
+  - Agents can't merge PRs: only the owner merges (deny list plus guard).
+  - The guard follows package scripts, wrappers and branch switches, and blocks recursive grep over secrets.
+  - check-rules keeps definer functions in `private` and flags RLS being switched off.
+  - Docs: update policies check both `using` and `with check`, `account_id`/`created_by` are immutable, server identity comes from `getUser`/`getClaims`, and the storage policy rules are written down.
+  - `.gitignore` added.

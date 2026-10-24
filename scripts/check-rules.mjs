@@ -194,6 +194,35 @@ function checkSql(raw) {
     }
   }
 
+  // 3b. security definer functions run with their owner's rights. Anything in
+  // an exposed schema (public) can be called by anyone through /rest/v1/rpc,
+  // so definer functions belong in `private` only.
+  for (const m of outside.matchAll(/create\s+(?:or\s+replace\s+)?(?:function|procedure)\s+([\w."]+)\s*\(/g)) {
+    const end = starts.find((s) => s > m.index) ?? outside.length;
+    if (/security\s+definer/.test(outside.slice(m.index, end)) && !normaliseName(m[1]).startsWith("private.")) {
+      err(m.index, "definer-only-in-private",
+        `security definer function ${normaliseName(m[1])} is outside the private schema, so anyone can call it via the API (guide §5)`);
+    }
+  }
+  for (const m of outside.matchAll(/alter\s+(?:function|procedure)\s+([\w."]+)[^;]*\bsecurity\s+definer/g)) {
+    if (!normaliseName(m[1]).startsWith("private.")) {
+      err(m.index, "definer-only-in-private",
+        `function ${normaliseName(m[1])} is made security definer outside the private schema (guide §5)`);
+    }
+  }
+
+  // 3c. Switching protections off.
+  for (const m of outside.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?([\w."]+)\s+(disable|no\s+force)\s+row\s+level\s+security/g)) {
+    err(m.index, "rls-never-disabled", `row level security is turned off on ${normaliseName(m[1])} (guide §5)`);
+  }
+  for (const m of outside.matchAll(/alter\s+view\s+(?:if\s+exists\s+)?([\w."]+)[^;]*security_invoker\s*=\s*'?(false|off|0)'?/g)) {
+    err(m.index, "view-security-invoker", `view ${normaliseName(m[1])} has security_invoker switched off, so it bypasses RLS (guide §5)`);
+  }
+  for (const m of outside.matchAll(/\b(using|with\s+check)\s*\(\s*true\s*\)/g)) {
+    findings.push({ line: lineOf(sql, m.index), severity: "warning", rule: "policy-allows-everything",
+      message: "policy condition is `true`, which allows every row. Only right for shared read-only data like fx_rates (guide §5, §9)" });
+  }
+
   // 4. Views bypass RLS unless they run as the caller.
   for (const m of outside.matchAll(/create\s+(?:or\s+replace\s+)?(?:(?:temp|temporary)\s+)?(?:recursive\s+)?(materialized\s+)?view\s+(?:if\s+not\s+exists\s+)?([\w."]+)([\s\S]*?)\bas\b/g)) {
     const name = normaliseName(m[2]);

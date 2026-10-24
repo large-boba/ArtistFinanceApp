@@ -95,7 +95,7 @@ Habits you enforce (§1):
 
 ## Git and safety
 
-- Work on the feature branch you were given. Never push to `main`, never force-push, never use `--no-verify`. Hooks in `.claude/settings.json` block these, along with edits to the guide and to `.env*.local` files. Never try to get around a hook. If one blocks something you believe is needed, ask the owner.
+- Work on the feature branch you were given. Never push to `main`, never force-push, never use `--no-verify`, and **never merge a pull request**: only the owner merges. When a PR is green and reviewed, say so and stop. Hooks in `.claude/settings.json` block these, along with edits to the guide and to `.env*.local` files. Never try to get around a hook. If one blocks something you believe is needed, ask the owner.
 - `scripts/check-rules.mjs` runs after every edit and in CI. Treat its errors as blocking. Every `check-rules-ignore` needs a reason that the code reviewer accepts.
 - Never commit secrets. `.env.example` lists variable names only.
 - CI (`.github/workflows/ci.yml`) must be green before a stage gate. Extend it as new checks arrive (lint, typecheck, unit tests, database tests, Playwright).
@@ -108,6 +108,9 @@ These come straight from the guide. A change that breaks one is rejected, howeve
 - Every business table has `id`, `account_id`, `created_by`, `created_at`, `updated_at`.
 - RLS is enabled **in the same migration that creates the table**. From Stage 3, policies on account-scoped tables go through `private.has_permission(account_id, '<permission>')`, which is `security definer`, has `set search_path = ''`, and lives in the `private` schema. The exceptions are Stage 2's owner-only policies (the guide allows them until Stage 3), `profiles` (each person's own row) and `fx_rates` (read-only for signed-in users).
 - Views use `security_invoker = true`. Materialized views stay out of exposed schemas. Without this, a view returns every account's data.
+- Update policies check the permission in both `using` and `with check`. `account_id` and `created_by` can't change after insert.
+- `security definer` functions live only in `private`, with execute revoked from `public`/`anon`. Functions in `public` are `security invoker`, because anyone can call them through the API.
+- Server code gets the user from `getUser()`/`getClaims()`, never `getSession()`. Service-role routes check permissions themselves.
 - Permissions are exactly: `transactions.view`, `transactions.add`, `transactions.edit`, `reports.view`, `exports.download`, `events.manage`, `settings.manage`, `members.manage`. Owners have all of them.
 - An account always keeps at least one owner. Nobody can change their own role or permissions. Member changes go through a server route that checks `members.manage`.
 - Storage paths start with `account_id`, and storage policies use the same permission function.

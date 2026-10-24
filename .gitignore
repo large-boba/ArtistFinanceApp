@@ -1,0 +1,14 @@
+# Secrets: never commit these. .env.example (names only) is committed.
+.env
+.env*.local
+
+# Dependencies and build output (Stage 0 merges in create-next-app's list)
+node_modules/
+.next/
+out/
+coverage/
+test-results/
+playwright-report/
+
+# Personal Claude Code settings
+.claude/settings.local.json

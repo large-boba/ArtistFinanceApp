@@ -2,6 +2,8 @@
 // Run: node --test scripts/*.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import nodeFs from "node:fs";
+import os from "node:os";
 import { evaluate } from "../.claude/hooks/guard.mjs";
 
 const dir = "/repo";
@@ -143,6 +145,59 @@ test("blocks reading, copying or staging secret files", () => {
     `printf %s "$(<.env.local)"`,
     "cat < .env.local",
   ]) assert.ok(bash(cmd), cmd);
+});
+
+// Cases found by the security reviewer.
+test("only the owner merges pull requests", () => {
+  assert.ok(bash("gh pr merge 12 --squash"));
+  assert.ok(bash("gh pr merge --auto 12"));
+  assert.ok(bash("gh api -X PUT repos/o/r/pulls/12/merge"));
+  assert.equal(bash("gh pr view 12"), null);
+  assert.equal(bash("gh pr create --fill"), null);
+});
+
+test("package scripts and wrappers are followed to the real command", () => {
+  const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-`);
+  nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: { "db:push": "supabase db push", check: "npm run lint", lint: "next lint" } }));
+  const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
+  assert.ok(run("npm run db:push"));
+  assert.ok(run("pnpm db:push"));
+  assert.ok(run("pnpm supabase db push"));
+  assert.ok(run("npm exec supabase -- db push"));
+  assert.ok(run("timeout 300 npx supabase db push"));
+  assert.ok(run("supabase gen types typescript --local --project-id abc"));
+  assert.equal(run("npm run check"), null);
+  assert.equal(run("npm run lint"), null);
+  assert.equal(run("npx next build"), null);
+  nodeFs.rmSync(projectDir, { recursive: true, force: true });
+});
+
+test("Vercel is limited to local dev and build", () => {
+  assert.ok(bash("vercel --prod"));
+  assert.ok(bash("vercel env pull .env.local"));
+  assert.ok(bash("npx vercel deploy"));
+  assert.equal(bash("vercel dev"), null);
+  assert.equal(bash("npx vercel build"), null);
+});
+
+test("recursive grep must exclude secret files", () => {
+  assert.ok(bash("grep -rn SERVICE_ROLE ."));
+  assert.ok(bash("grep --recursive KEY ."));
+  assert.ok(bash("rg --hidden --no-ignore KEY"));
+  assert.equal(bash("grep -rn --exclude='.env*' SERVICE_ROLE ."), null);
+  assert.equal(bash("rg SERVICE_ROLE"), null);
+  assert.equal(bash("grep -n foo src/app/page.tsx"), null);
+});
+
+test("line continuations, shell keywords and runners don't hide commands", () => {
+  assert.ok(bash("git push \\\n  origin main"));
+  assert.ok(bash("for b in x; do git push --force origin $b; done"));
+  assert.ok(bash("if true; then git push origin main; fi"));
+  assert.ok(bash(`npx tsx -e "require('fs').readFileSync('.env.local')"`));
+  assert.ok(bash("echo X > .env.local"));
+  assert.ok(bash("echo X >.env.local"));
+  assert.ok(bash("HUSKY=0 git commit -m x"));
+  assert.ok(bash("git config core.hooksPath /dev/null"));
 });
 
 test("allows harmless mentions of secret files", () => {

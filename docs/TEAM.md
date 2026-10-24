@@ -45,10 +45,12 @@ No team, human or AI, can promise zero mistakes. This one is built so that mista
    - money stored as decimals;
    - secrets exposed to the browser;
    - a receipt input that skips the photo library.
-5. **Safety hooks** (`.claude/settings.json`) block the usual ways an agent could:
+5. **Safety hooks and a deny list** (`.claude/settings.json`) block the usual ways an agent could:
    - edit the build guide;
    - read secret files;
    - force-push or push to `main`;
+   - merge a pull request;
+   - deploy;
    - change a live database.
 
    They're a seatbelt, not a lock. A determined workaround could slip past. The real locks are:
