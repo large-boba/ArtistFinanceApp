@@ -4,10 +4,10 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 ## Status
 
-- **Current stage:** Stage 0 — Set up your workshop (not started)
-- **Done:** repository cleared; build guide, project lead agent and this log added
+- **Current stage:** Stage 0 — Set up your workshop (planned in `docs/stages/stage-00.md`, not started)
+- **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
 - **In progress:** —
-- **Blocked:** —
+- **Blocked:** waiting for the owner's go-ahead to start Stage 0
 
 ## Decided
 
@@ -33,6 +33,11 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | Email forwarding | After the core app is finished. | Stage 12 |
 | AI | One vision model reads receipts and suggests a category. | §11 |
 | Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, Vercel. | §4 |
+| Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
+| Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
+| Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |
+| Test stack | Vitest (unit), pgTAP via `supabase test db` (database/RLS), Playwright (end-to-end). Tests are written before code by the test engineer. | §19 |
+| Guardrails | `scripts/check-rules.mjs` (rule checks, in a hook and CI), `.claude/hooks/guard.mjs` (blocks unsafe actions), CI on every push. | §5–§13 |
 
 ## Still to decide
 
@@ -51,3 +56,4 @@ To be filled in as providers and fields are added: what personal data, why, wher
 ## Change history
 
 - 2026-10-24 — Repository cleared to start fresh; build guide v5 adopted as the source of truth.
+- 2026-10-24 — Agent team formed: specialists, test-first maker-checker workflow, stage gates with owner sign-off, automatic rule checks, safety hooks and CI.
