@@ -241,7 +241,12 @@ function checkWords(rawWords, ctx, depth) {
 
   if (["grep", "egrep", "fgrep"].includes(name)) {
     const recursive = args.some((a) => a === "--recursive" || a === "--dereference-recursive" || /^-[a-zA-Z]*[rR][a-zA-Z]*$/.test(a));
-    if (recursive && !args.some((a) => /^--exclude=.*\.env/.test(a))) return REASONS.recursiveGrep;
+    const VALUE_OPTS = new Set(["-e", "-f", "-m", "-A", "-B", "-C", "--include", "--exclude", "--exclude-dir"]);
+    const positional = args.filter((a, i) => !a.startsWith("-") && !VALUE_OPTS.has(args[i - 1]));
+    const paths = args.some((a) => a === "-e" || a.startsWith("--regexp")) ? positional : positional.slice(1);
+    // Folders that never hold .env files are safe to search recursively.
+    const safeOnly = paths.length > 0 && paths.every((p) => /^(\.\/)?(src|supabase|scripts|tests?|docs|app|components|lib|public)(\/|$)/.test(p));
+    if (recursive && !safeOnly && !args.some((a) => /^--exclude=.*\.env/.test(a))) return REASONS.recursiveGrep;
   }
   if (name === "rg") {
     const noIgnore = args.some((a) => /^(--no-ignore|--hidden|-[a-zA-Z]*u[a-zA-Z]*|--unrestricted)$/.test(a));

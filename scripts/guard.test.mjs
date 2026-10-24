@@ -187,6 +187,10 @@ test("recursive grep must exclude secret files", () => {
   assert.equal(bash("grep -rn --exclude='.env*' SERVICE_ROLE ."), null);
   assert.equal(bash("rg SERVICE_ROLE"), null);
   assert.equal(bash("grep -n foo src/app/page.tsx"), null);
+  assert.equal(bash("grep -rn getSession src/"), null);
+  assert.equal(bash("grep -rn foo src supabase --include=*.ts"), null);
+  assert.ok(bash("grep -rn foo src ."));
+  assert.ok(bash("grep -rn foo"));
 });
 
 test("line continuations, shell keywords and runners don't hide commands", () => {
