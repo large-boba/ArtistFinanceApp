@@ -14,8 +14,10 @@
 	// Bump it deliberately when upgrading wrangler.
 	"compatibility_date": "2026-10-19",
 	// nodejs_compat: Next.js needs Node.js APIs inside the worker.
-	// global_fetch_strictly_public: server-side fetch() can only reach public
-	// addresses, never the worker's own zone or private networks.
+	// global_fetch_strictly_public: a fetch() to the worker's own zone goes
+	// out over the public internet instead of straight to the origin server.
+	// This is NOT protection against fetching private addresses (SSRF):
+	// routes that fetch URLs still need their own allow-lists.
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	// Static files (JS, CSS, images) that the adapter copies out of the build.
 	"assets": {

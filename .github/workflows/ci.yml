@@ -41,6 +41,8 @@ jobs:
         run: npm run build
       # Builds the Cloudflare worker locally (no deploy, no Cloudflare login or
       # secrets). Proves every push still works on Cloudflare (T0.5).
+      # It runs `next build` again inside the adapter on purpose: the step above
+      # proves Next.js builds, this one proves the worker packaging.
       - name: Cloudflare build (OpenNext adapter)
         run: npx opennextjs-cloudflare build
         env:

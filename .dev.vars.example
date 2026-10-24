@@ -2,3 +2,9 @@
 # Copy this file to .dev.vars and fill in real values there. .dev.vars is
 # ignored by Git; this example file lists names only and never values.
 # No variables are needed yet.
+
+# NEXTJS_ENV picks which .env files the preview loads. The adapter's setup
+# tool writes NEXTJS_ENV=development; we leave it out so the local preview
+# loads the production env files, the same as the deployed worker.
+# Uncomment it to preview with the development env files instead.
+# NEXTJS_ENV=development
