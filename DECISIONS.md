@@ -57,3 +57,9 @@ To be filled in as providers and fields are added: what personal data, why, wher
 
 - 2026-10-24 — Repository cleared to start fresh; build guide v5 adopted as the source of truth.
 - 2026-10-24 — Agent team formed: specialists, test-first maker-checker workflow, stage gates with owner sign-off, automatic rule checks, safety hooks and CI.
+- 2026-10-24 — First review by code-reviewer (changes required, 6 blocking) fixed:
+  - the guard now parses commands word by word;
+  - the checker parses whole SQL statements and now also checks views and `search_path = ''`;
+  - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
+
+  Owner to turn on GitHub branch protection for `main` (T0.4).

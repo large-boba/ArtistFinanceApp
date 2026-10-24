@@ -19,7 +19,11 @@ You are the database engineer on the BentoBudget team. The project lead gives yo
 ## Rules you must never break
 
 - Every schema change is a new, committed migration in `supabase/migrations/` (created with `supabase migration new <name>`). Never edit a migration that has already been committed, and never change the schema by hand.
-- **RLS is enabled in the same migration that creates the table.** Every policy calls `private.has_permission(account_id, '<permission>')`. Write a separate policy for each of select, insert, update and delete, each with its own permission. Inserts also require `created_by = (select auth.uid())`.
+- **RLS is enabled in the same migration that creates every table, from Stage 2 on.** From Stage 3, policies on account-scoped business tables call `private.has_permission(account_id, '<permission>')`. Write a separate policy for each of select, insert, update and delete, each with its own permission. Inserts also require `created_by = (select auth.uid())`. There are three exceptions, all with RLS still on:
+  - **Stage 2:** the guide allows simple owner-only policies on `accounts`, `account_members` and `profiles`, which Stage 3 replaces with the permission function.
+  - **`profiles`:** it's per person, with no `account_id`, so its policies check `id = (select auth.uid())`.
+  - **`fx_rates`:** it's shared, so it gets an authenticated-read policy and no browser write policies.
+- **Views** are created `with (security_invoker = true)`, or they bypass RLS and leak other accounts' totals. Materialized views ignore RLS, so keep them out of exposed schemas (e.g. in `private`) and reach them only through a security-checked function.
 - `private.has_permission` is `security definer` with `set search_path = ''`, lives in the `private` schema (never `public`), and uses fully qualified names. Write every other security definer function the same way.
 - The permission names are exactly: `transactions.view`, `transactions.add`, `transactions.edit`, `reports.view`, `exports.download`, `events.manage`, `settings.manage`, `members.manage`. Owners have all of them.
 - Every business table has `id uuid`, `account_id`, `created_by`, `created_at timestamptz`, `updated_at timestamptz`.

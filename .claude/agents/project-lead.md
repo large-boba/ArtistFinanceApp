@@ -106,7 +106,8 @@ These come straight from the guide. A change that breaks one is rejected, howeve
 
 **Security and access (§5, §16)**
 - Every business table has `id`, `account_id`, `created_by`, `created_at`, `updated_at`.
-- RLS is enabled **in the same migration that creates the table**. Policies go through `private.has_permission(account_id, '<permission>')`, which is `security definer`, has `set search_path = ''`, and lives in the `private` schema.
+- RLS is enabled **in the same migration that creates the table**. From Stage 3, policies on account-scoped tables go through `private.has_permission(account_id, '<permission>')`, which is `security definer`, has `set search_path = ''`, and lives in the `private` schema. The exceptions are Stage 2's owner-only policies (the guide allows them until Stage 3), `profiles` (each person's own row) and `fx_rates` (read-only for signed-in users).
+- Views use `security_invoker = true`. Materialized views stay out of exposed schemas. Without this, a view returns every account's data.
 - Permissions are exactly: `transactions.view`, `transactions.add`, `transactions.edit`, `reports.view`, `exports.download`, `events.manage`, `settings.manage`, `members.manage`. Owners have all of them.
 - An account always keeps at least one owner. Nobody can change their own role or permissions. Member changes go through a server route that checks `members.manage`.
 - Storage paths start with `account_id`, and storage policies use the same permission function.
@@ -122,7 +123,8 @@ These come straight from the guide. A change that breaks one is rejected, howeve
 **Money and currency (§7, §8, §9)**
 - Money is integer minor units, with decimals per ISO 4217 (yen has 0, some currencies have 3). Exchange rates are `numeric`. No floating-point money anywhere.
 - Every transaction stores the original amount and currency, the home amount, the rate, the rate date, the rate source and how the rate was set. Use the rate for the transaction date, or the most recent earlier rate. The saved home amount is locked. Reports sum stored home amounts only and never convert totals.
-- Tax rates are per-account settings, never hard-coded. Tax-inclusive tax = `total × rate ÷ (1 + rate)`. Always record the tax shown on a receipt.
+- Convert on the server or in the database and round once, to the home currency's minor unit. Tax and fees are converted with the same rate as their amount. An artist-entered home amount is kept exactly, with the rate derived from it. A platform's own converted amount beats a reference rate.
+- Tax rates are per-account settings, never hard-coded. Tax-inclusive tax = `total × rate ÷ (1 + rate)`. Always record the tax shown on a receipt. Store a "registered from" date so each transaction is treated by its own date. Foreign-currency receipts default to "not claimable".
 - Income is cash basis. Refunds are separate negative rows linked to the original sale. Payouts are not income, except vendor-shelf payouts. Gross and fees are stored separately.
 - Every transaction has `source` and an optional `external_id`, unique on (account, source, external_id). Categories come from a controlled list in one of three groups: `production`, `event_venue`, `operating`.
 - Deleting an event never deletes its transactions. All schema changes are committed migrations.

@@ -34,6 +34,9 @@ Switch identity in pgTAP with `set local role authenticated;` and `set local req
 9. **Anon** reads and writes nothing.
 10. **`fx_rates`:** any signed-in user can read it, and no browser role can insert, update or delete.
 11. **RLS is on:** a catalog check that every table in `public` has `relrowsecurity = true`, so a newly added table can't slip through.
+12. **Views can't leak:** a catalog check that every view in `public` has `security_invoker=true` in `reloptions`, and that no materialized view is in `public`. Bob querying a report view sees only account B's totals.
+
+**Exceptions** (§5, Stage 2): in Stage 2, `accounts`, `account_members` and `profiles` use simple owner-only policies. Test claims 1–3, 8 and 9 against them; claims 4–7 apply once Stage 3 brings in the permission function. `profiles` is per person: Bob can't read or change Alice's profile.
 
 ## Storage (Stage 7 onward)
 

@@ -45,16 +45,22 @@ No team, human or AI, can promise zero mistakes. This one is built so that mista
    - money stored as decimals;
    - secrets exposed to the browser;
    - a receipt input that skips the photo library.
-5. **Safety hooks** (`.claude/settings.json`) block any agent from:
-   - editing the build guide;
-   - touching secret files;
-   - force-pushing or pushing to `main`;
-   - changing a live database.
+5. **Safety hooks** (`.claude/settings.json`) block the usual ways an agent could:
+   - edit the build guide;
+   - read secret files;
+   - force-push or push to `main`;
+   - change a live database.
+
+   They're a seatbelt, not a lock. A determined workaround could slip past. The real locks are:
+   - `.gitignore` keeps secret files out of Git;
+   - GitHub branch protection on `main` (your Stage 0 task);
+   - the reviewers.
 6. **Stage gates with evidence, and your sign-off.**
 
 ## What only you can do
 
-- **Accounts and keys:** create accounts (Supabase, Vercel, email, AI and exchange-rate providers) and enter real keys in `.env.local`. Agents never see them.
+- **Accounts and keys:** create accounts (Supabase, Vercel, email, AI and exchange-rate providers) and enter real keys in `.env.local`. Agents are blocked from reading that file, and Git ignores it.
+- **Branch protection:** turn on branch protection for `main` on GitHub (Stage 0, T0.4).
 - **Decisions:** make the decisions listed under "Still to decide" in `DECISIONS.md`.
 - **Real devices:** test on real phones, including the installed app, the camera and the photo library.
 - **`main` branch:** merge pull requests into `main`.

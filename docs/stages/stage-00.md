@@ -21,6 +21,7 @@ What each tool does:
 | 3 | CI runs lint, typecheck, rule checks and build on every push, and is green | |
 | 4 | The owner has run the app locally, changed some text and seen it update | NEEDS OWNER |
 | 5 | The first app commit is on GitHub | |
+| 6 | `main` is protected on GitHub: PR plus green CI required, no force pushes (team addition, not in the guide) | NEEDS OWNER |
 
 ## Task cards
 
@@ -42,7 +43,7 @@ Outcome: These scripts in `package.json`:
 - `rules` runs `node scripts/check-rules.mjs && node --test scripts/*.test.mjs`;
 - `check` runs `npm run lint && npm run typecheck && npm run rules`.
 
-In `.github/workflows/ci.yml`, a new `app` job runs `npm ci`, `npm run check` and `npm run build` on Node 22. The existing `rules` job stays.
+In `.github/workflows/ci.yml`, a new `app` job runs `npm ci`, `npm run check` and `npm run build`. Both jobs use the current Node.js LTS (check nodejs.org, don't assume), and `package.json` sets an `engines.node` range to match. The lead records the version in `DECISIONS.md` so the owner installs the same one. The existing `rules` job stays, moved to the same Node version.
 Context: depends on T0.1.
 Rules that apply: CI must not need any secrets at this stage.
 Out of scope: test runners (Vitest arrives in Stage 1), Supabase.
@@ -59,6 +60,18 @@ Steps for the owner:
 4. Open the local address and change the heading text in `src/app/page.tsx`.
 5. Watch the page update.
 Done when: the owner confirms it worked.
+Evidence:
+
+### T0.4 — Protect the main branch on GitHub              Status: todo
+Owner agent: **owner** (the lead prepares the steps)
+Guide: §1 (save points), §17 Stage 0
+Why: the agents' safety hook blocks pushes to `main`, but a hook can be worked around. GitHub's branch protection is the real lock.
+Steps for the owner: on GitHub, go to the repo's **Settings → Branches** (or **Rules → Rulesets**) and add a rule for `main` that:
+- requires a pull request before merging;
+- requires the CI status checks to pass;
+- blocks force pushes;
+- blocks deletion.
+Done when: the owner confirms the rule is active.
 Evidence:
 
 ## Stage gate

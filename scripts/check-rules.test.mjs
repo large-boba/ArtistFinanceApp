@@ -136,6 +136,61 @@ test("server actions are a warning, not an error", () => {
   assert.deepEqual(errorRules("a.ts", ts), []);
 });
 
+// Cases found by the code reviewer on 2026-10-24.
+test("one-line tables and several columns per line are checked", () => {
+  const sql = "create table public.t (id uuid, amount numeric, expense_date timestamptz);\nalter table public.t enable row level security;\n";
+  assert.deepEqual(errorRules("m.sql", sql), ["money-integer-minor-units", "date-not-timestamp"]);
+  const two = "create table t (\n  id uuid primary key, home_amount real\n);\nalter table t enable row level security;\n";
+  assert.deepEqual(errorRules("m.sql", two), ["money-integer-minor-units"]);
+});
+
+test("add without the word column, and alter column type, are checked", () => {
+  assert.deepEqual(errorRules("m.sql", "alter table public.expenses add home_amount numeric(12,2);\n"), ["money-integer-minor-units"]);
+  assert.deepEqual(errorRules("m.sql", "alter table public.expenses alter column expense_date type timestamptz;\n"), ["date-not-timestamp"]);
+  assert.deepEqual(errorRules("m.sql", "alter table public.t add constraint total_positive check (total_minor > 0);\n"), []);
+});
+
+test("search_path must be set to empty, and not only inside the body", () => {
+  const head = "create function private.f()\nreturns boolean\nlanguage sql security definer\n";
+  assert.deepEqual(errorRules("m.sql", `${head}set search_path = public\nas $$ select true $$;\n`), ["definer-search-path"]);
+  assert.deepEqual(errorRules("m.sql", `${head}as $$ set search_path = ''; select true $$;\n`), ["definer-search-path"]);
+  assert.deepEqual(errorRules("m.sql", `${head}set search_path to ''\nas $$ select true $$;\n`), []);
+});
+
+test("function bodies and return tables are not mistaken for columns", () => {
+  const sql = "create function private.totals()\nreturns table (total_minor numeric)\nlanguage plpgsql security invoker\nas $$\ndeclare total numeric;\nbegin\n  return;\nend $$;\n";
+  assert.deepEqual(rules("m.sql", sql), []);
+});
+
+test("percentages and ratios are not money", () => {
+  const sql = "create table t (\n  fee_percent numeric(5,2),\n  tax_rate numeric\n);\nalter table t enable row level security;\n";
+  assert.deepEqual(rules("m.sql", sql), []);
+});
+
+test("registered-from style dates must be date columns", () => {
+  assert.deepEqual(errorRules("m.sql", "alter table accounts add column tax_registered_from timestamptz;\n"), ["date-not-timestamp"]);
+});
+
+test("views must use security_invoker; materialized views stay private", () => {
+  assert.deepEqual(errorRules("m.sql", "create view public.profit as select 1;\n"), ["view-security-invoker"]);
+  assert.deepEqual(rules("m.sql", "create or replace view public.profit with (security_invoker = true) as select 1;\n"), []);
+  assert.deepEqual(errorRules("m.sql", "create materialized view public.totals as select 1;\n"), ["view-security-invoker"]);
+  assert.deepEqual(rules("m.sql", "create materialized view private.totals as select 1;\n"), []);
+});
+
+test("capture is caught after arrow-function props, and data-capture-id is fine", () => {
+  const tsx = `<input type="file" onChange={(e) => onFiles(e)} capture="environment" />`;
+  assert.deepEqual(errorRules("p.tsx", tsx), ["no-capture-attribute"]);
+  assert.deepEqual(rules("p.tsx", `<input type="file" data-capture-id="x" onChange={() => a.capture} />`), []);
+});
+
+test("more secret spellings are caught", () => {
+  assert.deepEqual(errorRules("a.ts", "process.env.NEXT_PUBLIC_OPENAI_KEY"), ["no-public-secret"]);
+  assert.deepEqual(errorRules(".env.example", "export NEXT_PUBLIC_SUPABASE_SECRET_KEY="), ["no-public-secret"]);
+  assert.deepEqual(rules(".env.example", "NEXT_PUBLIC_SUPABASE_ANON_KEY="), []);
+  assert.deepEqual(errorRules("c.tsx", `"use client";\nconst { SUPABASE_SECRET_KEY } = process.env;\n`), ["no-server-env-in-client"]);
+});
+
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-rules-"));
   fs.mkdirSync(path.join(root, "supabase/migrations"), { recursive: true });

@@ -15,7 +15,7 @@ A finance app for artists: an installable web app (PWA) for tracking expenses, i
 
 ## Rules that are easy to get wrong
 
-- RLS is enabled in the same migration that creates a table. Policies use `private.has_permission(account_id, '<permission>')`.
+- RLS is enabled in the same migration that creates a table. From Stage 3, account-scoped tables' policies use `private.has_permission(account_id, '<permission>')`. The exceptions are Stage 2's owner-only policies, `profiles` (own row) and `fx_rates` (read-only). Views use `security_invoker = true`.
 - Transaction dates are `date` columns and `YYYY-MM-DD` strings, never timestamps. Time zones are IANA names.
 - Money is integer minor units (decimals per ISO 4217). Exchange rates are `numeric`. Converted home amounts are locked.
 - Secrets stay server-side. Never commit `.env.local`. Never log financial details or personal data.

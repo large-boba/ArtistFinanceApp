@@ -6,8 +6,8 @@
 // To silence one finding on purpose, put `check-rules-ignore: <reason>` in a
 // comment on the same line or the line above. Reviewers check every use.
 //
-// SQL checks assume one column definition per line, which is how our
-// migrations are written.
+// It is a seatbelt: it catches the common ways to break a rule, and the
+// reviewers and tests catch the rest.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -19,14 +19,18 @@ const SKIP_DIRS = new Set([
 ]);
 const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
-const TIMESTAMP_TYPES = /^timestamp(tz)?\b|^timestamp\s+with(out)?\s+time\s+zone/;
-const NON_INTEGER_MONEY_TYPES = /^(float|float4|float8|real|double\s+precision|numeric|decimal|money)\b/;
-const EXACT_DECIMAL_TYPES = /^(numeric|decimal)\b/;
+const TIMESTAMP_TYPE = /^timestamp/;
+const NON_INTEGER_TYPE = /^(float|float4|float8|real|double precision|numeric|decimal|money)$/;
+const EXACT_DECIMAL_TYPE = /^(numeric|decimal)$/;
 const MONEY_NAME = /(amount|_minor$|^gross|^fees?$|_fees?$|^fees?_|total|tax_paid|tax_collected|price)/;
+const NOT_MONEY_NAME = /(percent|pct|bps|ratio|count|qty|quantity|_rate$|^rate$)/;
 const RATE_NAME = /(^|_)rate$/;
-const DATE_NAME = /(^date$|_date$|_on$)/;
+const DATE_NAME = /(^date$|_date$|_on$|_from$|_until$)/;
 const SECRET_NAME = /(SECRET|SERVICE_ROLE|PRIVATE|API_KEY|TOKEN|PASSWORD)/;
-const SKIP_LINE_START = /^(?:(?:create|alter|drop|constraint|primary|unique|foreign|check|exclude|using|with|select|insert|update|delete|grant|revoke|comment|returns|language|security|set|as|begin|end|declare|return|if|then|else|for|on|to|from|where|and|or|not|references|perform|raise|loop|values)\b|\$\$|\)|\()/;
+const PUBLIC_KEY_NAME = /(PUBLISHABLE|ANON)_KEY$/;
+const COLUMN_ITEM_SKIP = /^(constraint|primary|unique|foreign|check|exclude|like)\b/;
+
+const looksSecret = (name) => SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
 
 export function findingsForFile(filePath, text) {
   const ext = path.extname(filePath).toLowerCase();
@@ -46,84 +50,161 @@ function isIgnored(lines, line) {
   return here.includes("check-rules-ignore") || above.includes("check-rules-ignore");
 }
 
-// Replace comments with spaces so line numbers stay correct.
-function stripSqlComments(sql) {
+// Blank out comments (keeping their length) so that indexes and line numbers
+// still match the original text.
+function blankSqlNoise(sql) {
   return sql
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/--[^\n]*/g, (m) => " ".repeat(m.length));
 }
 
-function lineOf(text, index) {
-  return text.slice(0, index).split("\n").length;
-}
+const lineOf = (text, index) => text.slice(0, index).split("\n").length;
 
-function normaliseTable(name) {
+function normaliseName(name) {
   const clean = name.replace(/"/g, "").toLowerCase();
   return clean.includes(".") ? clean : `public.${clean}`;
 }
 
+// Index just after the parenthesis that closes the one at `open`.
+function closeParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === "(") depth++;
+    else if (text[i] === ")" && --depth === 0) return i;
+  }
+  return text.length;
+}
+
+// Split on commas that are not inside parentheses, keeping each item's offset.
+function splitTopLevel(text, offset) {
+  const items = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    const c = text[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if ((c === "," && depth === 0) || i === text.length) {
+      const raw = text.slice(start, i);
+      const lead = raw.length - raw.trimStart().length;
+      if (raw.trim()) items.push({ text: raw.trim(), index: offset + start + lead });
+      start = i + 1;
+    }
+  }
+  return items;
+}
+
+function columnType(rest) {
+  const m = rest.match(/^(double\s+precision|timestamp(?:tz)?(?:\s*\(\d+\))?(?:\s+with(?:out)?\s+time\s+zone)?|[a-z_][a-z0-9_.]*)/);
+  return m ? m[1].replace(/\s+/g, " ").replace(/\s*\(\d+\)/, "") : "";
+}
+
+function checkColumn(column, type, line, findings) {
+  const at = { line, severity: "error" };
+  if (DATE_NAME.test(column) && TIMESTAMP_TYPE.test(type)) {
+    findings.push({ ...at, rule: "date-not-timestamp",
+      message: `column ${column} is ${type}; calendar dates must be \`date\` columns (guide §6)` });
+  }
+  if (RATE_NAME.test(column)) {
+    if (!EXACT_DECIMAL_TYPE.test(type)) {
+      findings.push({ ...at, rule: "rate-numeric",
+        message: `rate column ${column} is ${type}; exchange and tax rates must be \`numeric\` (guide §9)` });
+    }
+  } else if (MONEY_NAME.test(column) && !NOT_MONEY_NAME.test(column) && NON_INTEGER_TYPE.test(type)) {
+    findings.push({ ...at, rule: "money-integer-minor-units",
+      message: `money column ${column} is ${type}; store integer minor units (bigint) (guide §7)` });
+  }
+}
+
 function checkSql(raw) {
-  const sql = stripSqlComments(raw).toLowerCase();
+  const sql = blankSqlNoise(raw).toLowerCase();
   const findings = [];
+  const err = (index, rule, message) => findings.push({ line: lineOf(sql, index), severity: "error", rule, message });
 
-  // RLS must be enabled in the same migration that creates the table.
+  // Function bodies ($$ ... $$) are code, not table definitions: blank them for
+  // the table checks, but keep them for the function checks.
+  const outside = sql.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, (m) => m.replace(/[^\n]/g, " "));
+
+  // 1. RLS must be enabled in the same migration that creates the table.
   const rlsEnabled = new Set();
-  for (const m of sql.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?([\w."]+)\s+enable\s+row\s+level\s+security/g)) {
-    rlsEnabled.add(normaliseTable(m[1]));
+  for (const m of outside.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?([\w."]+)\s+enable\s+row\s+level\s+security/g)) {
+    rlsEnabled.add(normaliseName(m[1]));
   }
-  for (const m of sql.matchAll(/create\s+(?:(?:global|local)\s+)?(temp\s+|temporary\s+|unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?([\w."]+)/g)) {
-    if (m[1] && m[1].trim().startsWith("temp")) continue;
-    const table = normaliseTable(m[2]);
-    if (!rlsEnabled.has(table)) {
-      findings.push({
-        line: lineOf(sql, m.index), severity: "error", rule: "rls-in-same-migration",
-        message: `table ${table} is created without "alter table ${table} enable row level security" in the same migration (guide §5, Stage 3)`,
-      });
+
+  // 2. Column types in create table (...) and alter table ... add/alter.
+  for (const m of outside.matchAll(/create\s+(?:(?:global|local)\s+)?(temp\s+|temporary\s+|unlogged\s+)?table\s+(?:if\s+not\s+exists\s+)?([\w."]+)\s*(\(|as\b)/g)) {
+    const temp = m[1] && m[1].trim().startsWith("temp");
+    const table = normaliseName(m[2]);
+    if (!temp && !rlsEnabled.has(table)) {
+      err(m.index, "rls-in-same-migration",
+        `table ${table} is created without "alter table ${table} enable row level security" in the same migration (guide §5, Stage 3)`);
+    }
+    if (m[3] !== "(") continue;
+    const open = m.index + m[0].length - 1;
+    const body = outside.slice(open + 1, closeParen(outside, open));
+    for (const item of splitTopLevel(body, open + 1)) {
+      if (COLUMN_ITEM_SKIP.test(item.text)) continue;
+      const c = item.text.match(/^"?([a-z_][a-z0-9_]*)"?\s+([\s\S]+)$/);
+      if (c) checkColumn(c[1], columnType(c[2]), lineOf(sql, item.index), findings);
+    }
+  }
+  for (const m of outside.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?[\w."]+\s+([^;]*)/g)) {
+    const offset = m.index + m[0].length - m[1].length;
+    for (const item of splitTopLevel(m[1], offset)) {
+      const add = item.text.match(/^add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([\s\S]+)$/);
+      const alter = item.text.match(/^alter\s+(?:column\s+)?"?([a-z_][a-z0-9_]*)"?\s+(?:set\s+data\s+)?type\s+([\s\S]+)$/);
+      const c = add ?? alter;
+      if (c && !COLUMN_ITEM_SKIP.test(c[1])) checkColumn(c[1], columnType(c[2]), lineOf(sql, item.index), findings);
     }
   }
 
-  // security definer functions must pin search_path.
-  const boundary = /\bcreate\s+(?:or\s+replace\s+)?(?:function|procedure|table|policy|trigger|view|index|schema|type)\b/g;
-  const starts = [...sql.matchAll(boundary)].map((m) => m.index);
+  // 3. security definer functions must set search_path to empty, outside the body.
+  const boundary = /\bcreate\s+(?:or\s+replace\s+)?(?:function|procedure|table|policy|trigger|view|materialized\s+view|index|schema|type)\b/g;
+  const starts = [...sql.matchAll(boundary)].map((x) => x.index);
   for (let i = 0; i < starts.length; i++) {
-    const segment = sql.slice(starts[i], starts[i + 1] ?? sql.length);
+    const segment = outside.slice(starts[i], starts[i + 1] ?? outside.length);
     if (!/^create\s+(or\s+replace\s+)?(function|procedure)/.test(segment)) continue;
-    if (/security\s+definer/.test(segment) && !/set\s+search_path/.test(segment)) {
-      findings.push({
-        line: lineOf(sql, starts[i]), severity: "error", rule: "definer-search-path",
-        message: "security definer function has no `set search_path = ''` (guide §5)",
-      });
+    if (!/security\s+definer/.test(segment)) continue;
+    if (!/set\s+search_path\s*(=|to)\s*''/.test(segment)) {
+      err(starts[i], "definer-search-path",
+        "security definer function must have `set search_path = ''` in its definition (guide §5)");
     }
   }
 
-  // Column type rules, one column per line.
-  const lines = sql.split("\n");
-  lines.forEach((original, idx) => {
-    let line = original.trim().replace(/^,\s*/, "");
-    line = line.replace(/^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?[\w."]+\s+/, "");
-    line = line.replace(/^add\s+column\s+(?:if\s+not\s+exists\s+)?/, "");
-    line = line.replace(/^alter\s+column\s+([\w"]+)\s+(?:set\s+data\s+)?type\s+/, "$1 ");
-    if (!line || SKIP_LINE_START.test(line)) return;
-    const m = line.match(/^"?([a-z_][a-z0-9_]*)"?\s+([a-z][a-z0-9_]*(?:\s+(?:precision|with(?:out)?\s+time\s+zone))?)/);
-    if (!m) return;
-    const [, column, type] = m;
-    const at = { line: idx + 1, severity: "error" };
-    if (DATE_NAME.test(column) && TIMESTAMP_TYPES.test(type)) {
-      findings.push({ ...at, rule: "date-not-timestamp",
-        message: `column ${column} is ${type}; calendar dates must be \`date\` columns (guide §6)` });
-    }
-    if (RATE_NAME.test(column)) {
-      if (!EXACT_DECIMAL_TYPES.test(type)) {
-        findings.push({ ...at, rule: "rate-numeric",
-          message: `rate column ${column} is ${type}; exchange and tax rates must be \`numeric\` (guide §9)` });
+  // 4. Views bypass RLS unless they run as the caller.
+  for (const m of outside.matchAll(/create\s+(?:or\s+replace\s+)?(materialized\s+)?view\s+(?:if\s+not\s+exists\s+)?([\w."]+)([\s\S]*?)\bas\b/g)) {
+    const name = normaliseName(m[2]);
+    if (m[1]) {
+      if (!name.startsWith("private.")) {
+        err(m.index, "view-security-invoker",
+          `materialized view ${name} ignores RLS; keep it out of exposed schemas (e.g. in private) (guide §5, §12)`);
       }
-    } else if (MONEY_NAME.test(column) && NON_INTEGER_MONEY_TYPES.test(type)) {
-      findings.push({ ...at, rule: "money-integer-minor-units",
-        message: `money column ${column} is ${type}; store integer minor units (bigint) (guide §7)` });
+    } else if (!/security_invoker\s*=\s*(true|on|1)/.test(m[3])) {
+      err(m.index, "view-security-invoker",
+        `view ${name} needs \`with (security_invoker = true)\` or it bypasses RLS and leaks other accounts' data (guide §5, §12)`);
     }
-  });
+  }
 
   return findings;
+}
+
+// Attribute text of the JSX/HTML tag starting at `start`, with {...}
+// expressions blanked so `=>` or values inside them don't confuse the scan.
+function tagAttributes(text, start) {
+  let depth = 0;
+  let quote = null;
+  let out = "";
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (quote) { if (c === quote) quote = null; out += depth ? " " : c; continue; }
+    if (c === "{") { depth++; out += " "; continue; }
+    if (c === "}") { depth--; out += " "; continue; }
+    if (depth) { out += " "; continue; }
+    if (c === '"' || c === "'") { quote = c; out += c; continue; }
+    if (c === ">") break;
+    out += c;
+  }
+  return out;
 }
 
 function checkCode(text) {
@@ -131,9 +212,12 @@ function checkCode(text) {
   const add = (index, severity, rule, message) =>
     findings.push({ line: lineOf(text, index), severity, rule, message });
 
-  for (const m of text.matchAll(/<input\b[^>]*?\bcapture\b/g)) {
-    add(m.index, "error", "no-capture-attribute",
-      "file input has a `capture` attribute; leave it out so phones offer camera, library and files (guide §11)");
+  for (const m of text.matchAll(/<input\b/g)) {
+    const attrs = tagAttributes(text, m.index + m[0].length);
+    if (/(^|\s)capture(\s*=|\s|\/|$)/.test(attrs)) {
+      add(m.index, "error", "no-capture-attribute",
+        "file input has a `capture` attribute; leave it out so phones offer camera, library and files (guide §11)");
+    }
   }
 
   for (const m of text.matchAll(/new\s+Date\(\s*["'`]\d{4}-\d{2}-\d{2}["'`]\s*\)|Date\.parse\(\s*["'`]\d{4}-\d{2}-\d{2}["'`]\s*\)/g)) {
@@ -142,17 +226,27 @@ function checkCode(text) {
   }
 
   for (const m of text.matchAll(/NEXT_PUBLIC_\w+/g)) {
-    if (SECRET_NAME.test(m[0])) {
+    if (looksSecret(m[0])) {
       add(m.index, "error", "no-public-secret",
         `${m[0]} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)`);
     }
   }
 
   if (/^\s*["']use client["']/m.test(text)) {
-    for (const m of text.matchAll(/process\.env\.(\w+)/g)) {
-      if (!m[1].startsWith("NEXT_PUBLIC_")) {
+    for (const m of text.matchAll(/process\.env\.(\w+)|process\.env\[\s*["'`](\w+)["'`]\s*\]/g)) {
+      const name = m[1] ?? m[2];
+      if (!name.startsWith("NEXT_PUBLIC_")) {
         add(m.index, "error", "no-server-env-in-client",
-          `client component reads process.env.${m[1]}; secrets and server settings stay on the server (guide §5)`);
+          `client component reads process.env.${name}; secrets and server settings stay on the server (guide §5)`);
+      }
+    }
+    for (const m of text.matchAll(/\{([^}]*)\}\s*=\s*process\.env\b/g)) {
+      const names = m[1].split(",").map((s) => s.split(":")[0].trim()).filter(Boolean);
+      for (const name of names) {
+        if (!name.startsWith("NEXT_PUBLIC_")) {
+          add(m.index, "error", "no-server-env-in-client",
+            `client component reads process.env.${name}; secrets and server settings stay on the server (guide §5)`);
+        }
       }
     }
   }
@@ -168,8 +262,8 @@ function checkCode(text) {
 function checkEnvFile(text) {
   const findings = [];
   text.split("\n").forEach((line, idx) => {
-    const name = line.split("=")[0].trim();
-    if (name.startsWith("NEXT_PUBLIC_") && SECRET_NAME.test(name)) {
+    const name = line.replace(/^\s*export\s+/, "").split("=")[0].trim();
+    if (name.startsWith("NEXT_PUBLIC_") && looksSecret(name)) {
       findings.push({ line: idx + 1, severity: "error", rule: "no-public-secret",
         message: `${name} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)` });
     }
