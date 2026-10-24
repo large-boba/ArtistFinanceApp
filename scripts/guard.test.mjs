@@ -193,6 +193,17 @@ test("Cloudflare is limited to local build and preview", () => {
     "node node_modules/wrangler/bin/wrangler.js deploy",
     "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy",
   ]) assert.ok(bash(cmd), cmd);
+  // Review round 2: aliases, .bin shims, node flags before the script.
+  for (const cmd of [
+    "npx wrangler2 deploy", "wrangler2 deploy",
+    "node node_modules/.bin/wrangler deploy",
+    "node --no-warnings node_modules/wrangler/bin/wrangler.js deploy",
+    "node node_modules/wrangler deploy",
+    "node node_modules/.bin/opennextjs-cloudflare deploy",
+    "wrangler dev -r=true", "wrangler dev --x-remote-bindings",
+  ]) assert.ok(bash(cmd), cmd);
+  assert.equal(bash("node node_modules/.bin/wrangler dev"), null);
+  assert.equal(bash("node --no-warnings node_modules/.bin/opennextjs-cloudflare build"), null);
   assert.equal(bash("wrangler dev --remote=false"), null);
   assert.equal(bash("node node_modules/wrangler/bin/wrangler.js dev"), null);
   for (const cmd of [

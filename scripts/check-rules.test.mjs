@@ -242,10 +242,33 @@ test("wrangler vars must not hold secrets", () => {
   assert.deepEqual(rules("wrangler.jsonc", `{\n  "name": "x",\n  "assets": { "binding": "ASSETS" }\n}\n`), []);
 });
 
+test("wrangler vars are checked however they're laid out (review round 2)", () => {
+  // One-line block, key on the same line as "vars", and nothing after it misflagged.
+  const oneLine = `{\n  "vars": {"STRIPE_SECRET_KEY": "sk_live_x"},\n  "kv_namespaces": [{"binding": "SESSION_TOKEN_STORE"}]\n}\n`;
+  const found = findingsForFile("wrangler.jsonc", oneLine);
+  assert.deepEqual(found.map((f) => [f.rule, f.line]), [["no-secret-in-wrangler-vars", 2]]);
+  const sameLine = `{\n  "vars": { "APP_ENV": "x", "API_TOKEN": "y",\n    "OK": "z" }\n}\n`;
+  assert.deepEqual(errorRules("wrangler.jsonc", sameLine), ["no-secret-in-wrangler-vars"]);
+  // Braces inside comments and strings don't confuse it.
+  const tricky = `{\n  // "vars": { "FAKE_SECRET": 1 }\n  "vars": {\n    "NOTE": "a } b {",\n    /* } */\n    "DB_PASSWORD": "x"\n  }\n}\n`;
+  assert.deepEqual(findingsForFile("wrangler.jsonc", tricky).map((f) => f.line), [6]);
+  // Nested per-environment vars.
+  assert.deepEqual(errorRules("wrangler.jsonc", `{ "env": { "preview": { "vars": { "PRIVATE_KEY": "x" } } } }`), ["no-secret-in-wrangler-vars"]);
+});
+
+test("TOML vars with comments and inline tables are checked", () => {
+  assert.deepEqual(errorRules("wrangler.toml", `[vars] # settings\nAPI_TOKEN = "x"\n`), ["no-secret-in-wrangler-vars"]);
+  assert.deepEqual(errorRules("wrangler.toml", `name = "x"\nvars = { API_TOKEN = "x", APP_ENV = "y" }\n`), ["no-secret-in-wrangler-vars"]);
+  assert.deepEqual(errorRules("wrangler.toml", `[env.preview.vars]\nSECRET_SALT = "x"\n`), ["no-secret-in-wrangler-vars"]);
+});
+
 test("example env files list names only", () => {
   assert.deepEqual(errorRules(".env.example", "SUPABASE_SECRET_KEY=sb_secret_abc123\n"), ["no-secret-in-example"]);
   assert.deepEqual(errorRules(".dev.vars.example", "ANTHROPIC_API_KEY=sk-ant-123\n"), ["no-secret-in-example"]);
   assert.deepEqual(rules(".env.example", "SUPABASE_SECRET_KEY=\nANTHROPIC_API_KEY=<your key>\n# NEXTJS_ENV=development\nAPP_ENV=preview\n"), []);
+  assert.deepEqual(errorRules(".env.example", "SUPABASE_SECRET_KEY=your_sb_secret_abc123\n"), ["no-secret-in-example"]);
+  assert.deepEqual(errorRules(".env.example", "ANTHROPIC_API_KEY=<sk-ant-api03-abc>\n"), ["no-secret-in-example"]);
+  assert.deepEqual(errorRules(".env.sample", "DB_PASSWORD=hunter2\n"), ["no-secret-in-example"]);
 });
 
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {

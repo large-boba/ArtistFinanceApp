@@ -40,7 +40,7 @@ export function findingsForFile(filePath, text) {
   if (ext === ".sql") findings = checkSql(text);
   else if (CODE_EXT.has(ext)) findings = checkCode(text);
   else if (isEnvLike(filePath)) findings = checkEnvFile(text, filePath);
-  else if (isWranglerConfig(filePath)) findings = checkWranglerConfig(text);
+  else if (isWranglerConfig(filePath)) findings = checkWranglerConfig(text, filePath);
   const lines = text.split("\n");
   return findings
     .filter((f) => !isIgnored(lines, f.line))
@@ -318,7 +318,7 @@ const isWranglerConfig = (p) => /^wrangler\.(json|jsonc|toml)$/.test(path.basena
 
 function checkEnvFile(text, filePath = "") {
   const findings = [];
-  const isExample = /\.example$/.test(filePath);
+  const isExample = /\.(example|sample|template)$/.test(filePath);
   text.split("\n").forEach((line, idx) => {
     if (/^\s*#/.test(line)) return;
     const [rawName, ...rest] = line.replace(/^\s*export\s+/, "").split("=");
@@ -328,7 +328,8 @@ function checkEnvFile(text, filePath = "") {
       findings.push({ line: idx + 1, severity: "error", rule: "no-public-secret",
         message: `${name} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)` });
     }
-    if (isExample && looksSecret(name) && value && !/^(<.*>|x+|changeme|your[-_].*|\.\.\.)$/i.test(value)) {
+    // Placeholders are words only (e.g. <your key>, xxxx, changeme), never key-like text.
+    if (isExample && looksSecret(name) && value && !/^(<[a-z ]+>|x+|changeme|\.\.\.)$/i.test(value)) {
       findings.push({ line: idx + 1, severity: "error", rule: "no-secret-in-example",
         message: `${name} has a value in a committed example file; example files list names only (guide §5)` });
     }
@@ -338,25 +339,56 @@ function checkEnvFile(text, filePath = "") {
 
 // wrangler.json(c)/toml is committed, so its plain-text "vars" must never hold
 // secrets; those go in .dev.vars (local) or Cloudflare's encrypted secrets.
-function checkWranglerConfig(text) {
+function checkWranglerConfig(text, filePath = "wrangler.jsonc") {
   const findings = [];
-  const lines = text.split("\n");
-  let inTomlVars = false;
-  let jsonVarsDepth = 0;
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (/^\[/.test(trimmed)) inTomlVars = /^\[(env\.[\w-]+\.)?vars\]$/.test(trimmed);
-    if (/"vars"\s*:\s*\{/.test(line)) jsonVarsDepth = 1;
-    const key = (jsonVarsDepth > 0 && line.match(/^\s*"([A-Za-z0-9_]+)"\s*:/)?.[1]) ||
-      (inTomlVars && line.match(/^\s*([A-Za-z0-9_]+)\s*=/)?.[1]);
-    if (key && key !== "vars" && looksSecret(key)) {
-      findings.push({ line: idx + 1, severity: "error", rule: "no-secret-in-wrangler-vars",
+  const flag = (key, index) => {
+    if (looksSecret(key)) {
+      findings.push({ line: lineOf(text, index), severity: "error", rule: "no-secret-in-wrangler-vars",
         message: `${key} looks like a secret but wrangler vars are committed in plain text; use .dev.vars locally and Cloudflare secrets when hosted` });
     }
-    if (jsonVarsDepth > 0 && !/"vars"\s*:\s*\{/.test(line)) {
-      jsonVarsDepth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+  };
+
+  if (filePath.endsWith(".toml")) {
+    let inVarsTable = false;
+    let offset = 0;
+    for (const line of text.split("\n")) {
+      const code = line.replace(/\s+#.*$/, "").trim();
+      if (code.startsWith("[")) inVarsTable = /^\[(env\.[\w.-]+\.)?vars\]$/.test(code);
+      else if (inVarsTable) {
+        const m = code.match(/^"?([A-Za-z0-9_]+)"?\s*=/);
+        if (m) flag(m[1], offset);
+      }
+      const inline = code.match(/^vars\s*=\s*\{(.*)\}/);
+      if (inline) for (const k of inline[1].matchAll(/"?([A-Za-z0-9_]+)"?\s*=/g)) flag(k[1], offset);
+      offset += line.length + 1;
     }
-  });
+    return findings;
+  }
+
+  // JSON/JSONC: blank out comments (keeping length), then for each
+  // "vars": { ... } block, check every key inside it, however it's laid out.
+  let clean = "";
+  for (let i = 0, inString = false; i < text.length; i++) {
+    const c = text[i];
+    if (inString) { clean += c; if (c === "\\") clean += text[++i] ?? ""; else if (c === '"') inString = false; continue; }
+    if (c === '"') { inString = true; clean += c; continue; }
+    if (text.startsWith("//", i)) { const end = text.indexOf("\n", i); const stop = end === -1 ? text.length : end; clean += " ".repeat(stop - i); i = stop - 1; continue; }
+    if (text.startsWith("/*", i)) { const end = text.indexOf("*/", i + 2); const stop = end === -1 ? text.length : end + 2; clean += text.slice(i, stop).replace(/[^\n]/g, " "); i = stop - 1; continue; }
+    clean += c;
+  }
+  for (const m of clean.matchAll(/"vars"\s*:\s*\{/g)) {
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (let inString = false; j < clean.length && depth > 0; j++) {
+      const c = clean[j];
+      if (inString) { if (c === "\\") j++; else if (c === '"') inString = false; continue; }
+      if (c === '"') inString = true;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+    }
+    const start = m.index + m[0].length;
+    for (const k of clean.slice(start, j).matchAll(/"([A-Za-z0-9_]+)"\s*:/g)) flag(k[1], start + k.index);
+  }
   return findings;
 }
 

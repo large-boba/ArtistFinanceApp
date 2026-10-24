@@ -180,7 +180,13 @@ function checkVercel(args) {
 // Cloudflare hosting (DECISIONS.md, 2026-10-24): local build and preview
 // only. Everything else can touch the live account.
 // --remote, --remote=true, -r: run against the hosted account instead of locally.
-const isRemoteFlag = (a) => /^--remote(=(?!false$|0$).*)?$/.test(a) || a === "-r";
+// --x-remote-bindings connects local dev to hosted resources too.
+const isRemoteFlag = (a) => /^(--remote|-r)(=(?!false$|0$).*)?$/.test(a) || /^--x-remote-bindings(=(?!false$|0$).*)?$/.test(a);
+
+// Script paths that run the Cloudflare CLIs when given to `node`, including
+// the .bin shims and the package folder itself (which runs its main file).
+const WRANGLER_SCRIPT = /(^|\/)(node_modules\/\.bin\/wrangler2?|wrangler\/(bin\/wrangler\.js|wrangler-dist\/cli\.js)|node_modules\/wrangler\/?)$/;
+const OPENNEXT_SCRIPT = /(^|\/)(node_modules\/\.bin\/opennextjs-cloudflare|@opennextjs\/cloudflare\/(dist\/cli\/index\.js)?\/?)$/;
 
 function checkWrangler(args) {
   const words = args.filter((a) => !a.startsWith("-"));
@@ -220,7 +226,7 @@ function resolvePackageManager(name, args, ctx) {
   else if (name !== "npm" && scripts[first] !== undefined) scriptName = first;
   if (scriptName && scripts[scriptName] !== undefined) return { script: scripts[scriptName] };
   if (name !== "npm" && first === "supabase") return { words: after.length ? ["supabase", ...after] : ["supabase"] };
-  if (name !== "npm" && ["vercel", "gh", "git", "wrangler", "opennextjs-cloudflare"].includes(first)) return { words: [first, ...after] };
+  if (name !== "npm" && ["vercel", "gh", "git", "wrangler", "wrangler2", "opennextjs-cloudflare"].includes(first)) return { words: [first, ...after] };
   return null;
 }
 
@@ -260,12 +266,15 @@ function checkWords(rawWords, ctx, depth) {
   if (name === "gh") return checkGh(args);
   if (name === "supabase") return checkSupabase(args);
   if (name === "vercel") return checkVercel(args);
-  if (name === "wrangler") return checkWrangler(args);
+  if (name === "wrangler" || name === "wrangler2") return checkWrangler(args); // wrangler installs both names
   if (name === "opennextjs-cloudflare") return checkOpenNextCloudflare(args);
-  // `node node_modules/wrangler/bin/wrangler.js deploy` and the like.
-  if (INTERPRETERS.has(name) && args[0]) {
-    if (/(^|\/)wrangler\/(bin\/wrangler\.js|wrangler-dist\/cli\.js)$/.test(args[0])) return checkWrangler(args.slice(1));
-    if (/(^|\/)@opennextjs\/cloudflare\/dist\/cli\/index\.js$/.test(args[0])) return checkOpenNextCloudflare(args.slice(1));
+  // `node [flags] node_modules/wrangler/bin/wrangler.js deploy` and the like:
+  // look for the script path anywhere in the arguments, not only first.
+  if (INTERPRETERS.has(name)) {
+    const w = args.findIndex((a) => WRANGLER_SCRIPT.test(a));
+    if (w !== -1) return checkWrangler(args.slice(w + 1));
+    const o = args.findIndex((a) => OPENNEXT_SCRIPT.test(a));
+    if (o !== -1) return checkOpenNextCloudflare(args.slice(o + 1));
   }
   if (INTERPRETERS.has(name) && args.some((a) => SECRET_IN_TEXT.test(a))) return REASONS.secret;
 
