@@ -1,6 +1,6 @@
 # Stage 0 — Set up your workshop
 
-**Status:** not started
+**Status:** in progress (opened 2026-10-24; stage start commit `dd90913`)
 **Guide:** §17 Stage 0, §4 (stack), §1 (habits)
 
 ## You'll learn
@@ -25,7 +25,7 @@ What each tool does:
 
 ## Task cards
 
-### T0.1 — Scaffold the Next.js app                      Status: todo
+### T0.1 — Scaffold the Next.js app                      Status: building
 Owner agent: frontend-engineer   Tests: none. This is generated scaffolding; it's verified by build, lint and the rule checks   Security review: no. No auth, data or secrets yet
 Guide: §17 Stage 0 step 3, §4
 Outcome: A fresh Next.js app in the repo root, created with the current `create-next-app`. Options: TypeScript, ESLint, Tailwind CSS, App Router, `src/` directory, import alias `@/*`, npm.

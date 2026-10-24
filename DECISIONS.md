@@ -4,10 +4,10 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 ## Status
 
-- **Current stage:** Stage 0 — Set up your workshop (planned in `docs/stages/stage-00.md`, not started)
+- **Current stage:** Stage 0 — Set up your workshop (in progress, see `docs/stages/stage-00.md`)
 - **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
-- **In progress:** —
-- **Blocked:** waiting for the owner's go-ahead to start Stage 0
+- **In progress:** T0.1 scaffold the Next.js app → frontend-engineer
+- **Blocked:** —
 
 ## Decided
 
