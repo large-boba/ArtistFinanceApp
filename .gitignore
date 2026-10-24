@@ -1,6 +1,9 @@
 # Secrets: never commit these. .env.example (names only) is committed.
 .env
 .env*.local
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # Dependencies and build output (Stage 0 merges in create-next-app's list)
 node_modules/
@@ -30,3 +33,7 @@ yarn-debug.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Cloudflare (OpenNext and wrangler build output)
+.open-next/
+.wrangler/

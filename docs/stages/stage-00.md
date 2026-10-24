@@ -1,6 +1,6 @@
 # Stage 0 — Set up your workshop
 
-**Status:** READY FOR SIGN-OFF. Waiting on the owner (T0.3, T0.4 and the Check yourself questions). Opened 2026-10-24; stage start commit `dd90913`.
+**Status:** in progress. Reopened for T0.5 (Cloudflare hosting, the owner's decision of 2026-10-24); T0.3 and T0.4 wait on the owner. Opened 2026-10-24; stage start commit `dd90913`.
 **Guide:** §17 Stage 0, §4 (stack), §1 (habits)
 
 ## You'll learn
@@ -22,6 +22,8 @@ What each tool does:
 | 4 | The owner has run the app locally, changed some text and seen it update | NEEDS OWNER |
 | 5 | The first app commit is on GitHub | `54bc667` pushed to the working branch (reaches `main` when the owner merges PR #1) |
 | 6 | `main` is protected on GitHub: PR plus green CI required, no force pushes (team addition, not in the guide) | NEEDS OWNER |
+| 7 | The app builds for Cloudflare and runs in a local Cloudflare preview; CI checks the Cloudflare build (owner-requested addition) | |
+| 8 | The owner can open the app at a Cloudflare preview URL | NEEDS OWNER |
 
 ## Task cards
 
@@ -75,6 +77,50 @@ Steps for the owner:
 4. Open the local address and change the heading text in `src/app/page.tsx`.
 5. Watch the page update.
 Done when: the owner confirms it worked.
+Evidence:
+
+### T0.5 — Host on Cloudflare: adapter, config and local preview   Status: building
+Owner agent: backend-engineer   Tests: none. Hosting configuration; proven by the Cloudflare build, the local preview and CI   Security review: yes. It touches secrets handling (`.dev.vars`) and deploy configuration
+Guide: §4 (architecture; hosting replaced per `DECISIONS.md` 2026-10-24), §15 (PWA comes later, so don't add caching now), §17 Stage 0/6
+Why now: the owner wants to preview the app on Cloudflare. In the guide, a hosted preview first appears in Stage 6. The owner has brought hosting forward; this card doesn't bring forward any other Stage 6 work (manifest, service worker).
+Outcome:
+- `@opennextjs/cloudflare` (dependency) and `wrangler` (devDependency) installed, at versions that satisfy the adapter's peer range.
+- A `wrangler.jsonc` with:
+  - worker name `bentobudget`;
+  - `main` and `assets` as the adapter's docs specify;
+  - a current `compatibility_date`;
+  - the compatibility flags the adapter requires (at least `nodejs_compat`);
+  - **no** `vars` holding secrets and no bindings beyond what's required (no R2, KV or D1 yet).
+- An `open-next.config.ts` with the adapter's minimal default. Incremental cache/ISR comes later, with a decision first.
+- `package.json` scripts:
+  - `preview` runs `opennextjs-cloudflare build && opennextjs-cloudflare preview`;
+  - `deploy` runs `opennextjs-cloudflare build && opennextjs-cloudflare deploy`. Agents can never run it (the guard blocks it); it's for the owner and for Cloudflare's own build system;
+  - `cf-typegen` runs `wrangler types` with the adapter's recommended arguments.
+- Any `next.config.ts` change the adapter's docs require for `next dev` (for example `initOpenNextCloudflareForDev()`), only if required.
+- `.dev.vars.example` listing variable *names* only (empty for now is fine). `.gitignore` already covers `.dev.vars`, `.open-next/` and `.wrangler/`.
+- CI `app` job: add a step that runs `npx opennextjs-cloudflare build`, so every push proves the Cloudflare build works. It must need no Cloudflare credentials.
+- `README.md`: a short "Cloudflare preview" section with how to run `npm run preview` locally.
+
+Context: the adapter's docs site isn't reachable from this container, so use the README and docs bundled in `node_modules/@opennextjs/cloudflare` after installing, plus `npx opennextjs-cloudflare --help` and `npx wrangler --help`. Next.js 16.4.3 builds with Turbopack. If the adapter needs a webpack build, or a different build command, report it. Don't change the Next.js build silently.
+Rules that apply:
+- one new thing: this hosting setup only;
+- secrets never go in `wrangler.jsonc` or Git;
+- agents never deploy or log in. Only local `build` and `preview`; the guard enforces this;
+- `npm run check` must stay green.
+Out of scope: creating the Cloudflare account, connecting the repo, deploying, custom domains, R2/KV/D1, caching, PWA.
+Done when:
+- `npm run check` passes;
+- `npx opennextjs-cloudflare build` succeeds;
+- `npm run preview` serves the app locally, and `curl -s localhost:<port>` returns the starter page's HTML (status 200), after which the preview is stopped;
+- `npm run build` (plain Next.js) still passes;
+- CI is green with the new step;
+- `git status` shows no build output or secrets.
+Evidence:
+
+### T0.6 — Owner connects the repo to Cloudflare            Status: todo
+Owner agent: **owner** (the lead prepares the steps after T0.5 is accepted)
+Outcome: Cloudflare builds the app from GitHub and gives a preview URL the owner can open on their phone.
+Done when: the owner opens the app at its Cloudflare URL.
 Evidence:
 
 ### T0.4 — Protect the main branch on GitHub              Status: todo

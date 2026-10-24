@@ -61,7 +61,7 @@ No team, human or AI, can promise zero mistakes. This one is built so that mista
 
 ## What only you can do
 
-- **Accounts and keys:** create accounts (Supabase, Vercel, email, AI and exchange-rate providers) and enter real keys in `.env.local`. Agents are blocked from reading that file, and Git ignores it.
+- **Accounts and keys:** create accounts (Supabase, Cloudflare, email, AI and exchange-rate providers), enter real keys in `.env.local` / `.dev.vars`, and deploy. Agents are blocked from reading that file, and Git ignores it.
 - **Branch protection:** turn on branch protection for `main` on GitHub (Stage 0, T0.4).
 - **Decisions:** make the decisions listed under "Still to decide" in `DECISIONS.md`.
 - **Real devices:** test on real phones, including the installed app, the camera and the photo library.

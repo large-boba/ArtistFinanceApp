@@ -13,9 +13,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const PROTECTED_BRANCHES = new Set(["main", "master"]);
-const SECRET_PATH = /(^|\/)\.env(\.[\w-]+)?\.local$|(^|\/)\.env$/;
-const SECRET_IN_TEXT = /\.env(\.[\w-]+)?\.local\b/;
-const SECRET_CANDIDATES = [".env", ".env.local", ".env.development.local", ".env.production.local", ".env.test.local"];
+// .env.local etc. (Next.js) and .dev.vars (Cloudflare wrangler) hold real secrets.
+const SECRET_PATH = /(^|\/)\.env(\.[\w-]+)?\.local$|(^|\/)\.env$|(^|\/)\.dev\.vars(\.(?!example$)[\w-]+)?$/;
+const SECRET_IN_TEXT = /\.env(\.[\w-]+)?\.local\b|\.dev\.vars\b/;
+const SECRET_CANDIDATES = [".env", ".env.local", ".env.development.local", ".env.production.local", ".env.test.local", ".dev.vars"];
 const INTERPRETERS = new Set(["node", "python", "python3", "ruby", "perl", "deno", "bun", "php", "tsx", "ts-node", "jq"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
@@ -28,6 +29,7 @@ const REASONS = {
   noVerify: "skipping git hooks hides failures. Fix the failing check instead.",
   supabase: "this Supabase command can act on the hosted project. Only local commands (start, stop, status, db reset/diff/lint, test db, migration new/up, functions serve, gen types --local) are allowed; report anything else to the lead for the owner to run.",
   vercel: "deploying or changing Vercel settings is an owner-only action. Only `vercel dev` and `vercel build` are allowed.",
+  cloudflare: "deploying, uploading or changing the hosted Cloudflare account (deploy, secrets, login, KV/R2/D1, tail) is an owner-only action. Agents may only run `opennextjs-cloudflare build`/`preview` and `wrangler dev`/`types`; report anything else to the lead for the owner to run.",
   secret: "reading, copying, writing or staging a .env*.local file exposes or destroys secrets. Use .env.example for variable names.",
   recursiveGrep: "a recursive grep can print secret values from .env*.local. Add --exclude='.env*' (or use the Grep tool, which skips ignored files).",
   guide: "docs/build-guide.html is the owner's source of truth. Propose changes to the lead instead of editing it.",
@@ -175,6 +177,24 @@ function checkVercel(args) {
   return REASONS.vercel;
 }
 
+// Cloudflare hosting (DECISIONS.md, 2026-10-24): local build and preview
+// only. Everything else can touch the live account.
+function checkWrangler(args) {
+  const words = args.filter((a) => !a.startsWith("-"));
+  if (words.length === 0) return args.length && args.every((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : REASONS.cloudflare;
+  if (["dev", "types", "help", "whoami", "check"].includes(words[0])) return args.includes("--remote") ? REASONS.cloudflare : null;
+  return REASONS.cloudflare;
+}
+
+function checkOpenNextCloudflare(args) {
+  const words = args.filter((a) => !a.startsWith("-"));
+  if (words.length === 0) return args.every((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : REASONS.cloudflare;
+  if (words[0] === "build") return null;
+  if (words[0] === "preview") return args.includes("--remote") ? REASONS.cloudflare : null;
+  if (words[0] === "populateCache" && words[1] === "local") return null;
+  return REASONS.cloudflare;
+}
+
 function readPackageScripts(projectDir) {
   try {
     return JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8")).scripts ?? {};
@@ -197,7 +217,7 @@ function resolvePackageManager(name, args, ctx) {
   else if (name !== "npm" && scripts[first] !== undefined) scriptName = first;
   if (scriptName && scripts[scriptName] !== undefined) return { script: scripts[scriptName] };
   if (name !== "npm" && first === "supabase") return { words: after.length ? ["supabase", ...after] : ["supabase"] };
-  if (name !== "npm" && ["vercel", "gh", "git"].includes(first)) return { words: [first, ...after] };
+  if (name !== "npm" && ["vercel", "gh", "git", "wrangler", "opennextjs-cloudflare"].includes(first)) return { words: [first, ...after] };
   return null;
 }
 
@@ -237,6 +257,8 @@ function checkWords(rawWords, ctx, depth) {
   if (name === "gh") return checkGh(args);
   if (name === "supabase") return checkSupabase(args);
   if (name === "vercel") return checkVercel(args);
+  if (name === "wrangler") return checkWrangler(args);
+  if (name === "opennextjs-cloudflare") return checkOpenNextCloudflare(args);
   if (INTERPRETERS.has(name) && args.some((a) => SECRET_IN_TEXT.test(a))) return REASONS.secret;
 
   if (["grep", "egrep", "fgrep"].includes(name)) {

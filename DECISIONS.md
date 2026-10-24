@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 0 — Set up your workshop (in progress, see `docs/stages/stage-00.md`)
 - **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
-- **In progress:** Stage 0 gate. T0.1 and T0.2 are done; T0.3 and T0.4 need the owner.
+- **In progress:** T0.5 Cloudflare hosting setup → backend-engineer. T0.1 and T0.2 are done; T0.3 and T0.4 need the owner.
 - **Blocked:** —
 
 ## Decided
@@ -32,7 +32,8 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | Data storage | Central Supabase database, collecting less. Local-only storage rejected. | §16 |
 | Email forwarding | After the core app is finished. | Stage 12 |
 | AI | One vision model reads receipts and suggests a category. | §11 |
-| Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, Vercel. Installed in T0.1: Next.js 16.4.3 (Turbopack, Tailwind via `@tailwindcss/turbopack`), React 19.3.0, TypeScript 5.9.3, Tailwind CSS 4.3.3, ESLint 9.39.5, npm 10.9.4. React Compiler and Cache Components are off. Node.js **24 LTS** (`.nvmrc`, `engines >=24`), checked against nodejs.org on 2026-10-24. Node 26 isn't LTS yet, so revisit when it is. | §4 |
+| Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, **Cloudflare** (see Hosting). Installed in T0.1: Next.js 16.4.3 (Turbopack, Tailwind via `@tailwindcss/turbopack`), React 19.3.0, TypeScript 5.9.3, Tailwind CSS 4.3.3, ESLint 9.39.5, npm 10.9.4. React Compiler and Cache Components are off. Node.js **24 LTS** (`.nvmrc`, `engines >=24`), checked against nodejs.org on 2026-10-24. Node 26 isn't LTS yet, so revisit when it is. | §4 |
+| Hosting | **Cloudflare Workers via the OpenNext adapter (`@opennextjs/cloudflare`), replacing Vercel** (owner, 2026-10-24). Why: the free tier allows commercial use; trade-off: Next.js runs through an adapter, so some features need extra setup. The guide's Vercel references and §18 hosting costs no longer apply. Adapter 1.20.13 supports Next.js ≥ 16.4.1. Agents build and preview locally only; deploys, secrets and the account are owner-only. | §4, §18 |
 | Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
 | Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
 | Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |
@@ -69,6 +70,7 @@ To be filled in as providers and fields are added: what personal data, why, wher
   - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
 
   Owner to turn on GitHub branch protection for `main` (T0.4).
+- 2026-10-24 — **Hosting changed from Vercel to Cloudflare** (owner's decision). Guard and deny list extended: agents can't deploy, change secrets or use remote Cloudflare commands. `.dev.vars` is treated as a secrets file. Task T0.5 added to Stage 0.
 - 2026-10-24 — Round 2 (code-reviewer and security-reviewer) fixed:
   - Supabase commands now use a local-only allowlist; Vercel is limited to dev and build.
   - Agents can't merge PRs: only the owner merges (deny list plus guard).

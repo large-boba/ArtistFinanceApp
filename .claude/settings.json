@@ -19,7 +19,14 @@
       "mcp__github__enable_pr_auto_merge",
       "mcp__github__push_files",
       "mcp__github__create_or_update_file",
-      "mcp__github__delete_file"
+      "mcp__github__delete_file",
+      "Read(./.dev.vars)",
+      "Read(**/.dev.vars)",
+      "Edit(./.dev.vars)",
+      "Edit(**/.dev.vars)",
+      "Bash(wrangler deploy:*)",
+      "Bash(npx wrangler deploy:*)",
+      "Bash(npx opennextjs-cloudflare deploy:*)"
     ]
   },
   "hooks": {
@@ -30,7 +37,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.mjs"]
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.mjs"
+            ]
           }
         ]
       }
@@ -42,7 +51,9 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/check-after-edit.mjs"]
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-after-edit.mjs"
+            ]
           }
         ]
       }

@@ -18,6 +18,9 @@ test("blocks edits to the build guide and secret files", () => {
   assert.ok(write(`${dir}/.env.local`));
   assert.ok(write(`${dir}/.env.production.local`));
   assert.ok(write(`${dir}/.env`));
+  assert.ok(write(`${dir}/.dev.vars`));
+  assert.ok(bash("cat .dev.vars"));
+  assert.equal(write(`${dir}/.dev.vars.example`), null);
 });
 
 test("allows ordinary edits and .env.example", () => {
@@ -178,6 +181,33 @@ test("Vercel is limited to local dev and build", () => {
   assert.ok(bash("npx vercel deploy"));
   assert.equal(bash("vercel dev"), null);
   assert.equal(bash("npx vercel build"), null);
+});
+
+test("Cloudflare is limited to local build and preview", () => {
+  for (const cmd of [
+    "wrangler deploy", "npx wrangler deploy", "wrangler versions upload", "wrangler secret put KEY",
+    "wrangler login", "wrangler tail", "wrangler r2 bucket create receipts", "wrangler dev --remote",
+    "npx opennextjs-cloudflare deploy", "opennextjs-cloudflare upload", "opennextjs-cloudflare preview --remote",
+    "pnpm wrangler deploy",
+  ]) assert.ok(bash(cmd), cmd);
+  for (const cmd of [
+    "npx opennextjs-cloudflare build", "npx opennextjs-cloudflare preview", "wrangler dev",
+    "npx wrangler types", "wrangler --version", "opennextjs-cloudflare populateCache local",
+  ]) assert.equal(bash(cmd), null, cmd);
+});
+
+test("npm scripts that deploy to Cloudflare are blocked", () => {
+  const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-cf-`);
+  nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: {
+    preview: "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    deploy: "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+  } }));
+  const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
+  assert.ok(run("npm run deploy"));
+  assert.equal(run("npm run preview"), null);
+  assert.equal(run("npm run cf-typegen"), null);
+  nodeFs.rmSync(projectDir, { recursive: true, force: true });
 });
 
 test("recursive grep must exclude secret files", () => {
