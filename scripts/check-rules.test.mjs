@@ -191,6 +191,29 @@ test("more secret spellings are caught", () => {
   assert.deepEqual(errorRules("c.tsx", `"use client";\nconst { SUPABASE_SECRET_KEY } = process.env;\n`), ["no-server-env-in-client"]);
 });
 
+// Cases found by the code reviewer in round 2.
+test("words containing count (discount, account) are still money", () => {
+  const sql = "create table t (\n  discount_amount numeric(12,2),\n  account_total real,\n  sale_count integer,\n  item_qty numeric\n);\nalter table t enable row level security;\n";
+  assert.deepEqual(errorRules("m.sql", sql), ["money-integer-minor-units", "money-integer-minor-units"]);
+});
+
+test("SQL inside string literals is ignored, and a quoted body cannot fake search_path", () => {
+  assert.deepEqual(rules("m.sql", "comment on table public.t is 'old: create table x (y float)';\n"), []);
+  const quotedBody = "create function private.f() returns void language sql security definer as 'set search_path = '''' ; select 1';\n";
+  assert.deepEqual(errorRules("m.sql", quotedBody), ["definer-search-path"]);
+});
+
+test("security_invoker without a value, and recursive views", () => {
+  assert.deepEqual(rules("m.sql", "create view public.v with (security_invoker) as select 1;\n"), []);
+  assert.deepEqual(errorRules("m.sql", "create recursive view public.v (n) as select 1;\n"), ["view-security-invoker"]);
+});
+
+test("public keys are allowed and capitalised Input components are checked", () => {
+  assert.deepEqual(rules("a.ts", "process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY"), []);
+  assert.deepEqual(errorRules("p.tsx", `<Input type="file" capture />`), ["no-capture-attribute"]);
+  assert.deepEqual(rules("p.tsx", `<InputGroup capture="x" />`), []);
+});
+
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-rules-"));
   fs.mkdirSync(path.join(root, "supabase/migrations"), { recursive: true });

@@ -48,9 +48,25 @@ test("blocks every spelling of a push to main", () => {
     "git push --all origin",
     `bash -c "git push origin main"`,
   ]) assert.ok(bash(cmd), cmd);
-  assert.ok(bash("git checkout main && git push", "main"));
   assert.ok(bash("git push", "main"));
   assert.ok(bash("git push origin HEAD", "main"));
+});
+
+test("a branch switch earlier in the same command is taken into account", () => {
+  // The hook runs before the command, while still on the feature branch.
+  assert.ok(bash("git checkout main && git push"));
+  assert.ok(bash("git switch main && git merge claude/x && git push"));
+  assert.ok(bash("git checkout main && git push origin HEAD"));
+  assert.ok(bash("git checkout - && git push"));
+  assert.equal(bash("git checkout -b claude/new && git push -u origin claude/new"), null);
+  assert.equal(bash("git switch claude/other && git push", "main"), null);
+});
+
+test("wrappers and shell flag groups don't hide a push", () => {
+  assert.ok(bash(`bash -lc "git push origin main"`));
+  assert.ok(bash(`sh -ec 'git push --force origin x'`));
+  assert.ok(bash("sudo -u root git push origin main"));
+  assert.ok(bash("env FOO=1 git push origin main"));
 });
 
 test("allows normal feature-branch pushes, including names containing main", () => {
@@ -66,6 +82,7 @@ test("blocks skipping git hooks", () => {
   assert.ok(bash(`git commit -n -m "msg"`));
   assert.ok(bash(`git commit -nm "msg"`));
   assert.ok(bash("git push --no-verify origin feature"));
+  assert.ok(bash("git -c core.hooksPath=/dev/null commit -m x"));
 });
 
 test("text inside commit messages and heredocs is not treated as a command", () => {
@@ -88,13 +105,27 @@ test("blocks commands that change a hosted Supabase project", () => {
     "supabase functions deploy f",
     "supabase secrets set X=1",
     "supabase db dump --db-url postgres://x",
+    "supabase config push",
+    "supabase migration repair 2026 --status reverted",
+    "supabase storage rm ss:///receipts/x",
+    "supabase inspect db locks",
+    "supabase migration list",
+    "supabase gen types typescript",
+    "npm exec supabase db push",
+    "pnpm dlx supabase db push",
+    "yarn dlx supabase link",
+    "npx supabase@2 db push",
   ]) assert.ok(bash(cmd), cmd);
 });
 
 test("allows local Supabase work", () => {
-  for (const cmd of ["supabase start", "supabase db reset", "supabase test db", "supabase migration new add_events", "npx supabase status"]) {
-    assert.equal(bash(cmd), null, cmd);
-  }
+  for (const cmd of [
+    "supabase start", "supabase stop", "supabase status", "supabase --version",
+    "supabase db reset", "supabase db diff -f add_events", "supabase db lint",
+    "supabase test db", "supabase migration new add_events", "supabase migration up",
+    "supabase migration list --local", "supabase gen types typescript --local --schema public",
+    "supabase --workdir . start", "npx supabase status", "npm exec supabase test db",
+  ]) assert.equal(bash(cmd), null, cmd);
 });
 
 test("blocks reading, copying or staging secret files", () => {
@@ -109,6 +140,8 @@ test("blocks reading, copying or staging secret files", () => {
     "git add .env.local",
     `node -e "require('fs').readFileSync('.env.local')"`,
     `python3 -c "open('.env.local').read()"`,
+    `printf %s "$(<.env.local)"`,
+    "cat < .env.local",
   ]) assert.ok(bash(cmd), cmd);
 });
 

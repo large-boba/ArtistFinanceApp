@@ -65,6 +65,7 @@ const isSecretWord = (w) => SECRET_PATH.test(w) || globMatchesSecret(w);
 function checkGit(args, currentBranch) {
   let i = 0;
   while (i < args.length && args[i].startsWith("-")) {
+    if (args[i] === "-c" && /^core\.hookspath=/i.test(args[i + 1] ?? "")) return REASONS.noVerify;
     i += ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"].includes(args[i]) ? 2 : 1;
   }
   const sub = args[i];
@@ -106,35 +107,79 @@ function checkGit(args, currentBranch) {
   return null;
 }
 
+// Supabase commands are checked against a list of LOCAL-only commands. Many
+// other commands act on the linked hosted project by default, so anything not
+// listed here is blocked.
+const SUPABASE_LOCAL = new Set([
+  "start", "stop", "status", "init", "help", "completion",
+  "db reset", "db diff", "db lint", "db start",
+  "test db", "test new",
+  "migration new", "migration up", "migration squash",
+  "functions new", "functions serve",
+  "seed buckets",
+]);
+const SUPABASE_NEEDS_LOCAL_FLAG = new Set(["migration list", "gen types"]);
+const SUPABASE_VALUE_FLAGS = new Set(["--workdir", "--profile", "-o", "--output", "--network-id", "--dns-resolver"]);
+
 function checkSupabase(args) {
-  const joined = ` ${args.join(" ")} `;
-  if (/\s--(linked|project-ref|db-url)(\s|=)/.test(joined)) return REASONS.supabase;
-  // Global flags such as --workdir take values, so look for the subcommand
-  // words anywhere rather than only in first position.
-  const words = args.filter((a) => !a.startsWith("-"));
-  const has = (a, b) => words.some((w, i) => w === a && (b === undefined || words[i + 1] === b));
-  if (["link", "projects", "secrets", "branches", "orgs"].some((w) => has(w))) return REASONS.supabase;
-  if (has("db", "push") || has("functions", "deploy") || has("functions", "delete")) return REASONS.supabase;
-  return null;
+  if (args.some((a) => /^--(linked|project-ref|db-url)(=|$)/.test(a))) return REASONS.supabase;
+  const words = [];
+  for (let i = 0; i < args.length; i++) {
+    if (SUPABASE_VALUE_FLAGS.has(args[i])) { i++; continue; }
+    if (!args[i].startsWith("-")) words.push(args[i]);
+  }
+  if (words.length === 0) return null; // e.g. supabase --version
+  const one = words[0];
+  const two = words.slice(0, 2).join(" ");
+  if (SUPABASE_LOCAL.has(one) || SUPABASE_LOCAL.has(two)) return null;
+  if (SUPABASE_NEEDS_LOCAL_FLAG.has(two) && args.includes("--local")) return null;
+  return REASONS.supabase;
+}
+
+// `npx supabase`, `npm exec supabase`, `pnpm dlx supabase`, `yarn dlx supabase`...
+function packageRunnerTarget(name, args) {
+  const runners = new Set(["npx", "pnpx", "bunx"]);
+  const managers = new Set(["npm", "pnpm", "yarn", "bun"]);
+  let rest = null;
+  if (runners.has(name)) rest = args;
+  else if (managers.has(name) && ["exec", "dlx", "x"].includes(args[0])) rest = args.slice(1);
+  if (!rest) return null;
+  const idx = rest.findIndex((a) => !a.startsWith("-") && a !== "--");
+  if (idx === -1 || !/^supabase(@.*)?$/.test(rest[idx])) return null;
+  return rest.slice(idx + 1);
+}
+
+// Drop wrappers such as `sudo -u root`, `env X=1`, `time`, `nohup`.
+function unwrap(words) {
+  let w = words;
+  for (;;) {
+    while (w.length && /^\w+=/.test(w[0])) w = w.slice(1); // leading VAR=value
+    if (!w.length || !["sudo", "env", "time", "nohup", "exec", "command", "doas"].includes(w[0])) return w;
+    w = w.slice(1);
+    while (w.length && w[0].startsWith("-")) {
+      w = ["-u", "-g", "-C", "-p", "-U"].includes(w[0]) ? w.slice(2) : w.slice(1);
+    }
+  }
 }
 
 function checkWords(words, currentBranch, depth) {
-  let w = words;
-  while (w.length && /^\w+=/.test(w[0])) w = w.slice(1); // leading VAR=value
-  while (w.length && ["sudo", "env", "time", "nohup", "exec", "command"].includes(w[0])) w = w.slice(1);
+  const w = unwrap(words.map((x) => x.replace(/^\d*[<>]+/, "")).filter(Boolean));
   if (!w.length) return null;
   const [cmd, ...args] = w;
   const name = path.basename(cmd);
 
+  // `$(<.env.local)` reads a file without naming a command.
+  if (words.some((x) => /\$\(\s*<\s*\S*\.env(\.[\w-]+)?\.local/.test(x))) return REASONS.secret;
+
   if ((SHELLS.has(name) || name === "eval") && depth < 3) {
-    const script = name === "eval" ? args.join(" ") : args[args.indexOf("-c") + 1];
-    if (script && (name === "eval" || args.includes("-c"))) return evaluateCommand(script, currentBranch, depth + 1);
+    if (name === "eval") return evaluateCommand(args.join(" "), currentBranch, depth + 1);
+    const flag = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+    if (flag !== -1 && args[flag + 1]) return evaluateCommand(args[flag + 1], currentBranch, depth + 1);
   }
   if (name === "git") return checkGit(args, currentBranch);
   if (name === "supabase") return checkSupabase(args);
-  if (["npx", "pnpx", "bunx"].includes(name) && args.find((a) => !a.startsWith("-"))?.startsWith("supabase")) {
-    return checkSupabase(args.slice(args.findIndex((a) => a.startsWith("supabase")) + 1));
-  }
+  const viaRunner = packageRunnerTarget(name, args);
+  if (viaRunner) return checkSupabase(viaRunner);
   if (INTERPRETERS.has(name) && args.some((a) => /\.env(\.[\w-]+)?\.local\b/.test(a))) return REASONS.secret;
 
   const secretArgs = args.filter(isSecretWord);
@@ -150,10 +195,28 @@ function checkWords(words, currentBranch, depth) {
   return null;
 }
 
+// If a segment switches branch (`git checkout main && git push`), later
+// segments are judged on the branch they will actually run on.
+function switchedBranch(words) {
+  const w = unwrap(words);
+  if (path.basename(w[0] ?? "") !== "git") return undefined;
+  let i = 1;
+  while (i < w.length && w[i].startsWith("-")) i += ["-C", "-c"].includes(w[i]) ? 2 : 1;
+  if (!["checkout", "switch"].includes(w[i])) return undefined;
+  const rest = w.slice(i + 1);
+  const create = rest.findIndex((a) => ["-b", "-B", "-c", "-C", "--create", "--force-create"].includes(a));
+  if (create !== -1) return rest[create + 1];
+  if (rest.includes("-")) return null; // previous branch: unknown
+  return rest.find((a) => !a.startsWith("-"));
+}
+
 function evaluateCommand(command, currentBranch, depth = 0) {
+  let branch = currentBranch;
   for (const words of segments(command)) {
-    const reason = checkWords(words, currentBranch, depth);
+    const reason = checkWords(words, branch, depth);
     if (reason) return reason;
+    const next = switchedBranch(words);
+    if (next !== undefined) branch = () => (next === null ? "main" : next); // unknown: assume the worst
   }
   return null;
 }

@@ -23,14 +23,15 @@ const TIMESTAMP_TYPE = /^timestamp/;
 const NON_INTEGER_TYPE = /^(float|float4|float8|real|double precision|numeric|decimal|money)$/;
 const EXACT_DECIMAL_TYPE = /^(numeric|decimal)$/;
 const MONEY_NAME = /(amount|_minor$|^gross|^fees?$|_fees?$|^fees?_|total|tax_paid|tax_collected|price)/;
-const NOT_MONEY_NAME = /(percent|pct|bps|ratio|count|qty|quantity|_rate$|^rate$)/;
+const NOT_MONEY_NAME = /(^|_)(percent|pct|bps|ratio|count|qty|quantity)(_|$)|(^|_)rate$/;
 const RATE_NAME = /(^|_)rate$/;
 const DATE_NAME = /(^date$|_date$|_on$|_from$|_until$)/;
 const SECRET_NAME = /(SECRET|SERVICE_ROLE|PRIVATE|API_KEY|TOKEN|PASSWORD)/;
-const PUBLIC_KEY_NAME = /(PUBLISHABLE|ANON)_KEY$/;
+const PUBLIC_KEY_NAME = /(PUBLISHABLE|ANON|PUBLIC)_KEY$/;
 const COLUMN_ITEM_SKIP = /^(constraint|primary|unique|foreign|check|exclude|like)\b/;
 
 const looksSecret = (name) => SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
+// Keys designed to be public (e.g. web-push VAPID public keys) are fine.
 
 export function findingsForFile(filePath, text) {
   const ext = path.extname(filePath).toLowerCase();
@@ -50,12 +51,34 @@ function isIgnored(lines, line) {
   return here.includes("check-rules-ignore") || above.includes("check-rules-ignore");
 }
 
-// Blank out comments (keeping their length) so that indexes and line numbers
-// still match the original text.
+// Blank out comments and the contents of 'string literals' (keeping lengths
+// and quotes) so that indexes and line numbers still match the original text,
+// SQL quoted inside strings is ignored, and an empty '' stays visible.
 function blankSqlNoise(sql) {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/--[^\n]*/g, (m) => " ".repeat(m.length));
+  let out = "";
+  let i = 0;
+  const blank = (s) => s.replace(/[^\n]/g, " ");
+  while (i < sql.length) {
+    if (sql.startsWith("--", i)) {
+      const end = sql.indexOf("\n", i);
+      const stop = end === -1 ? sql.length : end;
+      out += blank(sql.slice(i, stop));
+      i = stop;
+    } else if (sql.startsWith("/*", i)) {
+      const end = sql.indexOf("*/", i + 2);
+      const stop = end === -1 ? sql.length : end + 2;
+      out += blank(sql.slice(i, stop));
+      i = stop;
+    } else if (sql[i] === "'") {
+      let j = i + 1;
+      while (j < sql.length && !(sql[j] === "'" && sql[j + 1] !== "'")) j += sql[j] === "'" ? 2 : 1;
+      out += "'" + blank(sql.slice(i + 1, j)) + (j < sql.length ? "'" : "");
+      i = j + 1;
+    } else {
+      out += sql[i++];
+    }
+  }
+  return out;
 }
 
 const lineOf = (text, index) => text.slice(0, index).split("\n").length;
@@ -172,14 +195,14 @@ function checkSql(raw) {
   }
 
   // 4. Views bypass RLS unless they run as the caller.
-  for (const m of outside.matchAll(/create\s+(?:or\s+replace\s+)?(materialized\s+)?view\s+(?:if\s+not\s+exists\s+)?([\w."]+)([\s\S]*?)\bas\b/g)) {
+  for (const m of outside.matchAll(/create\s+(?:or\s+replace\s+)?(?:(?:temp|temporary)\s+)?(?:recursive\s+)?(materialized\s+)?view\s+(?:if\s+not\s+exists\s+)?([\w."]+)([\s\S]*?)\bas\b/g)) {
     const name = normaliseName(m[2]);
     if (m[1]) {
       if (!name.startsWith("private.")) {
         err(m.index, "view-security-invoker",
           `materialized view ${name} ignores RLS; keep it out of exposed schemas (e.g. in private) (guide §5, §12)`);
       }
-    } else if (!/security_invoker\s*=\s*(true|on|1)/.test(m[3])) {
+    } else if (!/security_invoker\s*(=\s*'?(true|on|1)'?\s*)?[,)]/.test(m[3])) {
       err(m.index, "view-security-invoker",
         `view ${name} needs \`with (security_invoker = true)\` or it bypasses RLS and leaks other accounts' data (guide §5, §12)`);
     }
@@ -212,7 +235,7 @@ function checkCode(text) {
   const add = (index, severity, rule, message) =>
     findings.push({ line: lineOf(text, index), severity, rule, message });
 
-  for (const m of text.matchAll(/<input\b/g)) {
+  for (const m of text.matchAll(/<input\b/gi)) {
     const attrs = tagAttributes(text, m.index + m[0].length);
     if (/(^|\s)capture(\s*=|\s|\/|$)/.test(attrs)) {
       add(m.index, "error", "no-capture-attribute",
