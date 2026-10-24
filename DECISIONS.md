@@ -42,6 +42,11 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 ## Follow-ups noted (not decisions)
 
+- **Deploy only from Cloudflare's Git build** (T0.5 security review). The adapter copies `.env`/`.env*.local` values as plain text into the built worker, so a deploy from a machine with `.env.local` would publish secrets in the app's code. Hosted secrets go in the Cloudflare dashboard. Agents can't deploy at all.
+- **npm audit (T0.5):** 7 findings (2 moderate, 5 high) in build and local-preview tooling only: glob 10.x via `@node-minify` in the adapter (the advisory covers its CLI, which isn't used), and undici 7.x in miniflare (local preview only). Neither is in the deployed worker (checked by the security reviewer). **Accepted for now** rather than regenerating the whole lockfile with overrides. Revisit when wrangler or the adapter ship fixed versions, or by Stage 11 at the latest.
+- **Before real data (Stage 2+):** decide whether Cloudflare's `workers.dev` and per-version preview URLs stay public, or go behind Cloudflare Access. Today they show only the starter page.
+- `global_fetch_strictly_public` is kept, but it isn't SSRF protection. Routes that fetch URLs (AI, imports) need their own allow-lists.
+
 - `@types/node` is `^20` but the runtime is Node 24. Bump it in a later task (one change at a time).
 - npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
 - `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.

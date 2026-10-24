@@ -233,6 +233,21 @@ test("turning protections off is an error; using (true) is a warning", () => {
   assert.deepEqual(errorRules("m.sql", open), []);
 });
 
+// Cases from the T0.5 security review (Cloudflare hosting).
+test("wrangler vars must not hold secrets", () => {
+  const jsonc = `{\n  "name": "bentobudget",\n  "vars": {\n    "APP_ENV": "preview",\n    "SUPABASE_SECRET_KEY": "sb_secret_x"\n  }\n}\n`;
+  assert.deepEqual(errorRules("wrangler.jsonc", jsonc), ["no-secret-in-wrangler-vars"]);
+  const toml = `name = "bentobudget"\n[vars]\nAPP_ENV = "preview"\nANTHROPIC_API_KEY = "x"\n[assets]\ndirectory = ".open-next/assets"\n`;
+  assert.deepEqual(errorRules("wrangler.toml", toml), ["no-secret-in-wrangler-vars"]);
+  assert.deepEqual(rules("wrangler.jsonc", `{\n  "name": "x",\n  "assets": { "binding": "ASSETS" }\n}\n`), []);
+});
+
+test("example env files list names only", () => {
+  assert.deepEqual(errorRules(".env.example", "SUPABASE_SECRET_KEY=sb_secret_abc123\n"), ["no-secret-in-example"]);
+  assert.deepEqual(errorRules(".dev.vars.example", "ANTHROPIC_API_KEY=sk-ant-123\n"), ["no-secret-in-example"]);
+  assert.deepEqual(rules(".env.example", "SUPABASE_SECRET_KEY=\nANTHROPIC_API_KEY=<your key>\n# NEXTJS_ENV=development\nAPP_ENV=preview\n"), []);
+});
+
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-rules-"));
   fs.mkdirSync(path.join(root, "supabase/migrations"), { recursive: true });

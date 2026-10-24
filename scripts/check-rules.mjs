@@ -39,7 +39,8 @@ export function findingsForFile(filePath, text) {
   let findings = [];
   if (ext === ".sql") findings = checkSql(text);
   else if (CODE_EXT.has(ext)) findings = checkCode(text);
-  else if (path.basename(filePath).startsWith(".env")) findings = checkEnvFile(text);
+  else if (isEnvLike(filePath)) findings = checkEnvFile(text, filePath);
+  else if (isWranglerConfig(filePath)) findings = checkWranglerConfig(text);
   const lines = text.split("\n");
   return findings
     .filter((f) => !isIgnored(lines, f.line))
@@ -312,13 +313,48 @@ function checkCode(text) {
   return findings;
 }
 
-function checkEnvFile(text) {
+const isEnvLike = (p) => /^\.env/.test(path.basename(p)) || /^\.dev\.vars/.test(path.basename(p));
+const isWranglerConfig = (p) => /^wrangler\.(json|jsonc|toml)$/.test(path.basename(p));
+
+function checkEnvFile(text, filePath = "") {
   const findings = [];
+  const isExample = /\.example$/.test(filePath);
   text.split("\n").forEach((line, idx) => {
-    const name = line.replace(/^\s*export\s+/, "").split("=")[0].trim();
+    if (/^\s*#/.test(line)) return;
+    const [rawName, ...rest] = line.replace(/^\s*export\s+/, "").split("=");
+    const name = rawName.trim();
+    const value = rest.join("=").trim().replace(/^["']|["']$/g, "");
     if (name.startsWith("NEXT_PUBLIC_") && looksSecret(name)) {
       findings.push({ line: idx + 1, severity: "error", rule: "no-public-secret",
         message: `${name} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)` });
+    }
+    if (isExample && looksSecret(name) && value && !/^(<.*>|x+|changeme|your[-_].*|\.\.\.)$/i.test(value)) {
+      findings.push({ line: idx + 1, severity: "error", rule: "no-secret-in-example",
+        message: `${name} has a value in a committed example file; example files list names only (guide §5)` });
+    }
+  });
+  return findings;
+}
+
+// wrangler.json(c)/toml is committed, so its plain-text "vars" must never hold
+// secrets; those go in .dev.vars (local) or Cloudflare's encrypted secrets.
+function checkWranglerConfig(text) {
+  const findings = [];
+  const lines = text.split("\n");
+  let inTomlVars = false;
+  let jsonVarsDepth = 0;
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (/^\[/.test(trimmed)) inTomlVars = /^\[(env\.[\w-]+\.)?vars\]$/.test(trimmed);
+    if (/"vars"\s*:\s*\{/.test(line)) jsonVarsDepth = 1;
+    const key = (jsonVarsDepth > 0 && line.match(/^\s*"([A-Za-z0-9_]+)"\s*:/)?.[1]) ||
+      (inTomlVars && line.match(/^\s*([A-Za-z0-9_]+)\s*=/)?.[1]);
+    if (key && key !== "vars" && looksSecret(key)) {
+      findings.push({ line: idx + 1, severity: "error", rule: "no-secret-in-wrangler-vars",
+        message: `${key} looks like a secret but wrangler vars are committed in plain text; use .dev.vars locally and Cloudflare secrets when hosted` });
+    }
+    if (jsonVarsDepth > 0 && !/"vars"\s*:\s*\{/.test(line)) {
+      jsonVarsDepth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
     }
   });
   return findings;
@@ -340,8 +376,7 @@ export function checkRepo(root) {
   const findings = [];
   for (const file of walk(root, root)) {
     const ext = path.extname(file).toLowerCase();
-    const isEnv = path.basename(file).startsWith(".env");
-    if (ext !== ".sql" && !CODE_EXT.has(ext) && !isEnv) continue;
+    if (ext !== ".sql" && !CODE_EXT.has(ext) && !isEnvLike(file) && !isWranglerConfig(file)) continue;
     const rel = path.relative(root, file);
     findings.push(...findingsForFile(rel, fs.readFileSync(file, "utf8")));
   }

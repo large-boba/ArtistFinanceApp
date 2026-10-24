@@ -179,10 +179,13 @@ function checkVercel(args) {
 
 // Cloudflare hosting (DECISIONS.md, 2026-10-24): local build and preview
 // only. Everything else can touch the live account.
+// --remote, --remote=true, -r: run against the hosted account instead of locally.
+const isRemoteFlag = (a) => /^--remote(=(?!false$|0$).*)?$/.test(a) || a === "-r";
+
 function checkWrangler(args) {
   const words = args.filter((a) => !a.startsWith("-"));
   if (words.length === 0) return args.length && args.every((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : REASONS.cloudflare;
-  if (["dev", "types", "help", "whoami", "check"].includes(words[0])) return args.includes("--remote") ? REASONS.cloudflare : null;
+  if (["dev", "types", "help", "whoami", "check"].includes(words[0])) return args.some(isRemoteFlag) ? REASONS.cloudflare : null;
   return REASONS.cloudflare;
 }
 
@@ -190,7 +193,7 @@ function checkOpenNextCloudflare(args) {
   const words = args.filter((a) => !a.startsWith("-"));
   if (words.length === 0) return args.every((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : REASONS.cloudflare;
   if (words[0] === "build") return null;
-  if (words[0] === "preview") return args.includes("--remote") ? REASONS.cloudflare : null;
+  if (words[0] === "preview") return args.some(isRemoteFlag) ? REASONS.cloudflare : null;
   if (words[0] === "populateCache" && words[1] === "local") return null;
   return REASONS.cloudflare;
 }
@@ -259,6 +262,11 @@ function checkWords(rawWords, ctx, depth) {
   if (name === "vercel") return checkVercel(args);
   if (name === "wrangler") return checkWrangler(args);
   if (name === "opennextjs-cloudflare") return checkOpenNextCloudflare(args);
+  // `node node_modules/wrangler/bin/wrangler.js deploy` and the like.
+  if (INTERPRETERS.has(name) && args[0]) {
+    if (/(^|\/)wrangler\/(bin\/wrangler\.js|wrangler-dist\/cli\.js)$/.test(args[0])) return checkWrangler(args.slice(1));
+    if (/(^|\/)@opennextjs\/cloudflare\/dist\/cli\/index\.js$/.test(args[0])) return checkOpenNextCloudflare(args.slice(1));
+  }
   if (INTERPRETERS.has(name) && args.some((a) => SECRET_IN_TEXT.test(a))) return REASONS.secret;
 
   if (["grep", "egrep", "fgrep"].includes(name)) {

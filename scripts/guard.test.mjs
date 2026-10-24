@@ -189,7 +189,12 @@ test("Cloudflare is limited to local build and preview", () => {
     "wrangler login", "wrangler tail", "wrangler r2 bucket create receipts", "wrangler dev --remote",
     "npx opennextjs-cloudflare deploy", "opennextjs-cloudflare upload", "opennextjs-cloudflare preview --remote",
     "pnpm wrangler deploy",
+    "wrangler dev -r", "wrangler dev --remote=true",
+    "node node_modules/wrangler/bin/wrangler.js deploy",
+    "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy",
   ]) assert.ok(bash(cmd), cmd);
+  assert.equal(bash("wrangler dev --remote=false"), null);
+  assert.equal(bash("node node_modules/wrangler/bin/wrangler.js dev"), null);
   for (const cmd of [
     "npx opennextjs-cloudflare build", "npx opennextjs-cloudflare preview", "wrangler dev",
     "npx wrangler types", "wrangler --version", "opennextjs-cloudflare populateCache local",
