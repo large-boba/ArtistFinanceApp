@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Project rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rule checker and guard tests
+        run: node --test scripts/*.test.mjs
+      - name: Check the repository against the build guide's rules
+        run: node scripts/check-rules.mjs
+      # Stage 0 adds: npm ci, lint, typecheck, unit tests. Later stages add
+      # supabase test db (Stage 2+) and Playwright (when e2e tests exist).

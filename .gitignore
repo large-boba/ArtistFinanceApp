@@ -1,8 +1,14 @@
+# Secrets: never commit these. .env.example (names only) is committed.
+.env
+.env*.local
+
+# Dependencies and build output (Stage 0 merges in create-next-app's list)
 node_modules/
-build/
-dist/
+.next/
+out/
 coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+test-results/
+playwright-report/
+
+# Personal Claude Code settings
+.claude/settings.local.json

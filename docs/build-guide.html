@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173b35">
+  <title>Artist Finance App — Build Guide</title>
+  <style>
+    :root {
+      --ink: #172522;
+      --muted: #52645f;
+      --brand: #173b35;
+      --brand-soft: #e9f1ee;
+      --line: #d8e1dd;
+      --paper: #ffffff;
+      --canvas: #f4f7f5;
+      --accent: #b8692a;
+      --accent-soft: #fbf0e6;
+      --warning: #fff4df;
+      --warning-line: #edcf93;
+      --check: #eef3fb;
+      --check-line: #c6d4ea;
+      --code: #14231f;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; background: var(--canvas); color: var(--ink);
+      font: 16px/1.65 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: #176b5a; overflow-wrap: anywhere; }
+    .hero { background: var(--brand); color: #fff; padding: 56px 24px 48px; }
+    .hero-inner, main, footer { max-width: 1000px; margin: 0 auto; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; font-weight: 750; color: #c8ded5; }
+    h1 { line-height: 1.12; font-size: clamp(2.1rem, 5vw, 3.4rem); max-width: 780px; margin: 12px 0 16px; }
+    .hero p { max-width: 760px; color: #e0ebe6; font-size: 1.1rem; margin: 0; }
+    main { padding: 28px 16px 64px; }
+    nav, section, .callout, .diagram, .stage { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+    nav { padding: 20px 24px; margin-bottom: 22px; }
+    nav h2 { margin-top: 0; }
+    nav .part { font-weight: 750; color: var(--brand); margin: 14px 0 4px; font-size: .95rem; }
+    nav ul { columns: 2; padding-left: 20px; margin: 0; }
+    nav li { break-inside: avoid; margin: 3px 0; }
+    .part-title { margin: 40px 4px 6px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; font-size: .82rem; font-weight: 800; }
+    section { padding: 26px; margin: 18px 0; }
+    h2 { color: var(--brand); font-size: 1.6rem; line-height: 1.25; margin: 0 0 14px; }
+    h3 { color: var(--brand); font-size: 1.15rem; margin: 24px 0 8px; }
+    h4 { margin: 16px 0 6px; }
+    p { margin: 8px 0 14px; }
+    ul, ol { padding-left: 24px; }
+    li { margin: 6px 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: .9rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .tile { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fbfcfb; }
+    .tile strong { color: var(--brand); display: block; margin-bottom: 4px; }
+    .diagram { padding: 20px; display: grid; gap: 10px; text-align: center; margin: 12px 0; }
+    .diagram .node { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+    .diagram .primary { background: var(--brand-soft); border-color: #b9d0c6; }
+    .arrow { color: var(--muted); font-weight: 800; }
+    .callout { padding: 16px 20px; margin: 16px 0; }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout strong.label { display: block; color: var(--brand); margin-bottom: 4px; }
+    .callout.warning { background: var(--warning); border-color: var(--warning-line); }
+    .callout.why { background: var(--brand-soft); border-color: #b9d0c6; }
+    .callout.check { background: var(--check); border-color: var(--check-line); }
+    .callout.decide { background: var(--accent-soft); border-color: #ecc9a8; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .95rem; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--brand-soft); color: var(--brand); font-weight: 750; }
+    tr:last-child td { border-bottom: 0; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background: #edf2ef; border-radius: 4px; padding: 2px 5px; font-size: .9em; overflow-wrap: anywhere; }
+    pre { background: var(--code); color: #edf7f1; border-radius: 10px; padding: 16px 18px; overflow-x: auto; line-height: 1.5; font-size: .88rem; }
+    pre code { background: transparent; padding: 0; color: inherit; }
+    .stage { padding: 22px 24px; margin: 16px 0; }
+    .stage .tag { display: inline-block; color: var(--brand); background: var(--brand-soft); font-size: .78rem; font-weight: 800; border-radius: 100px; padding: 3px 10px; margin-bottom: 6px; }
+    .stage .tag.later { color: var(--accent); background: var(--accent-soft); }
+    .stage h3 { margin-top: 4px; font-size: 1.3rem; }
+    .stage h4 { color: var(--brand); font-size: .98rem; text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 4px; }
+    .done { border-top: 1px dashed var(--line); margin-top: 16px; padding-top: 12px; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { padding-left: 28px; position: relative; }
+    .checklist li::before { content: "□"; position: absolute; left: 0; color: var(--brand); font-size: 1.1rem; line-height: 1.5; }
+    .report { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #fbfcfb; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: .9rem; line-height: 1.7; overflow-x: auto; white-space: pre; }
+    dl.glossary dt { font-weight: 750; color: var(--brand); margin-top: 12px; }
+    dl.glossary dd { margin: 2px 0 0 0; }
+    footer { padding: 0 20px 40px; color: var(--muted); font-size: .9rem; }
+    @media (max-width: 650px) {
+      .hero { padding: 40px 16px 34px; }
+      nav ul { columns: 1; }
+      .grid { grid-template-columns: 1fr; }
+      section, .stage { padding: 18px; }
+      th, td { padding: 8px; }
+    }
+    @media print {
+      body { background: white; }
+      .hero { background: white; color: black; padding: 20px 0; }
+      .hero p, .eyebrow { color: #333; }
+      main { padding: 0; }
+      nav, section, .callout, .diagram, .stage { break-inside: avoid; }
+      a { color: black; text-decoration: underline; }
+    }
+  </style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Teaching guide · International (excluding EU and UK) · Version 5</div>
+    <h1>Build a Finance App for Artists</h1>
+    <p>A step-by-step learning guide for building a secure, installable web app that helps artists track expenses, income, events and profit. Each stage explains what you're learning, why it matters, what to decide and how to know you're done.</p>
+  </div>
+</header>
+
+<main>
+  <nav aria-label="Table of contents">
+    <h2>Contents</h2>
+    <div class="part">Part A · Orientation</div>
+    <ul>
+      <li><a href="#how">1. How to use this guide</a></li>
+      <li><a href="#what">2. What we're building</a></li>
+      <li><a href="#decisions">3. Decisions so far</a></li>
+      <li><a href="#architecture">4. The big picture</a></li>
+    </ul>
+    <div class="part">Part B · Design notes (the "why" behind each stage)</div>
+    <ul>
+      <li><a href="#accounts">5. Accounts, team-ready access and privacy</a></li>
+      <li><a href="#time">6. Countries, time zones and financial years</a></li>
+      <li><a href="#data">7. The data model</a></li>
+      <li><a href="#gst">8. Sales tax setting (GST, VAT)</a></li>
+      <li><a href="#currency">9. Multiple currencies</a></li>
+      <li><a href="#income">10. Income streams and cash sales</a></li>
+      <li><a href="#receipts">11. Receipts and original images</a></li>
+      <li><a href="#reports">12. Reports and exports</a></li>
+      <li><a href="#import">13. CSV import</a></li>
+      <li><a href="#future">14. Ready for Stripe and Square</a></li>
+      <li><a href="#pwa">15. The installable app (PWA)</a></li>
+      <li><a href="#privacy">16. Privacy and where data lives</a></li>
+    </ul>
+    <div class="part">Part C · Build stages</div>
+    <ul>
+      <li><a href="#stages">17. Stage-by-stage build</a></li>
+    </ul>
+    <div class="part">Part D · Reference</div>
+    <ul>
+      <li><a href="#costs">18. Running costs</a></li>
+      <li><a href="#testing">19. Testing checklist</a></li>
+      <li><a href="#glossary">20. Glossary</a></li>
+      <li><a href="#resources">21. Official resources</a></li>
+    </ul>
+  </nav>
+
+  <!-- ===================== PART A ===================== -->
+  <div class="part-title">Part A · Orientation</div>
+
+  <section id="how">
+    <h2>1. How to use this guide</h2>
+    <p>Think of this as a course, not a recipe. Part B explains how each piece of the app should work and why. Part C walks you through building it in stages, and each stage points back to the design notes it relies on.</p>
+    <p>Every stage follows the same pattern:</p>
+    <div class="grid">
+      <div class="tile"><strong>You'll learn</strong>The new concepts and skills this stage introduces.</div>
+      <div class="tile"><strong>Steps</strong>What to build, in a sensible order.</div>
+      <div class="tile"><strong>Think about</strong>Decisions you need to make, and the trade-offs.</div>
+      <div class="tile"><strong>Watch out</strong>Common mistakes that cost beginners the most time.</div>
+      <div class="tile"><strong>Check yourself</strong>Questions you should be able to answer before moving on.</div>
+      <div class="tile"><strong>Done when</strong>A testable finish line, so you know the stage really works.</div>
+    </div>
+    <h3>Habits that will save you</h3>
+    <ul>
+      <li><strong>One new thing at a time.</strong> If you add a new library, a new table and a new screen at once and something breaks, you won't know which caused it.</li>
+      <li><strong>Commit to Git every time something works.</strong> A commit is a save point you can return to.</li>
+      <li><strong>Keep a decisions log.</strong> Keep a simple text file in the project noting what you decided and why. Future-you will forget.</li>
+      <li><strong>Understand before you paste.</strong> When an AI assistant or tutorial gives you code, ask it to explain each part until you could rewrite it yourself. Code you don't understand is code you can't fix.</li>
+      <li><strong>Test on a real phone early.</strong> Artists will use this at markets, mostly on phones. A laptop browser hides many problems.</li>
+    </ul>
+  </section>
+
+  <section id="what">
+    <h2>2. What we're building</h2>
+    <p>An app that helps an artist answer three questions at any time: <em>What did I spend? What did I earn? Did it make money?</em> It can be broken down by event, financial year and income stream.</p>
+    <div class="grid">
+      <div class="tile"><strong>Core (first release)</strong>Private accounts for artists in any country · onboarding with country, time zone, home currency and sales-tax setting · expenses with receipt photos · income across seven income streams, including cash sales · foreign-currency amounts converted and locked · events and venues (including vendor shelves) · reports by financial year, event and stream · CSV and FY summary exports · CSV import.</div>
+      <div class="tile"><strong>Assisted entry</strong>Automatic reading of receipt photos into a draft expense, which the artist checks before saving.</div>
+      <div class="tile"><strong>Later additions</strong>Forward-to-email receipt inbox · Square and Stripe connections to pull sales automatically · optional offline queue for market days · helper logins with permissions chosen by the artist (the database is ready for this from day one).</div>
+      <div class="tile"><strong>Not the app's job</strong>Deciding what is tax-deductible, lodging tax, BAS or VAT returns, or giving tax advice in any country. The app records and organises; the artist and their accountant decide.</div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>3. Decisions so far</h2>
+    <p>Record new decisions here, or in your decisions log, as the project develops.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Topic</th><th>Decision</th><th>Where it's explained</th></tr></thead>
+        <tbody>
+          <tr><td>Countries</td><td>Artists in any country except EU member states and the UK can sign up at launch. Their country sets defaults for time zone, currency, financial year and tax wording, all editable.</td><td><a href="#time">§6</a></td></tr>
+          <tr><td>Accounts</td><td>Each artist's records belong to their own business account. Each person has their own login and sees only accounts they belong to.</td><td><a href="#accounts">§5</a></td></tr>
+          <tr><td>Team-ready</td><td>Not built now, but the database is designed so an artist could later invite a helper with their own login and permissions the artist chooses.</td><td><a href="#accounts">§5</a></td></tr>
+          <tr><td>Login</td><td>Email one-time code (OTP). No email links, because they break the installed iPhone app.</td><td><a href="#accounts">§5</a></td></tr>
+          <tr><td>Dates and time zones</td><td>Dates stored as calendar dates. Time zone auto-detected and confirmed at onboarding. Accuracy first, with as little typing as possible.</td><td><a href="#time">§6</a></td></tr>
+          <tr><td>Currencies</td><td>Each account has a home currency. Foreign amounts are converted at the rate for the transaction or receipt date, and the converted amount is locked.</td><td><a href="#currency">§9</a></td></tr>
+          <tr><td>Sales tax</td><td>Account-level setting covering GST, VAT and sales tax. Wording and suggested rates follow the country.</td><td><a href="#gst">§8</a></td></tr>
+          <tr><td>Costs</td><td>Three expense groups: production, event &amp; venue, and operating. Production is kept separate from event costs.</td><td><a href="#data">§7</a></td></tr>
+          <tr><td>Income streams</td><td>Sales at events, online sales, wholesale, commissions, vendor shelf rental, social media and subscription income. Artists can rename, add and archive them.</td><td><a href="#income">§10</a></td></tr>
+          <tr><td>Income</td><td>Manual income entry, including fast cash-sale entry.</td><td><a href="#income">§10</a></td></tr>
+          <tr><td>When income counts</td><td>When the money is received (cash basis). An invoice isn't income until it's paid.</td><td><a href="#income">§10</a></td></tr>
+          <tr><td>Privacy</td><td>One high standard for every user, modelled on Singapore's PDPA (the strictest of the laws that apply), plus local extras for Australia, the US and Malaysia.</td><td><a href="#privacy">§16</a></td></tr>
+          <tr><td>Receipt input</td><td>Camera <em>and</em> photo library (and PDF files).</td><td><a href="#receipts">§11</a></td></tr>
+          <tr><td>Originals</td><td>Original receipt files kept unaltered in private storage, with a separate backup copy.</td><td><a href="#receipts">§11</a></td></tr>
+          <tr><td>Exports</td><td>CSV of transactions and an FY summary. No receipt ZIP for now.</td><td><a href="#reports">§12</a></td></tr>
+          <tr><td>Import</td><td>CSV import with column mapping, preview and duplicate protection.</td><td><a href="#import">§13</a></td></tr>
+          <tr><td>Integrations</td><td>Not built yet. The data model is designed so Square and Stripe can be added later.</td><td><a href="#future">§14</a></td></tr>
+          <tr><td>Data storage</td><td>Central database (Supabase), with less data collected. Local-only storage rejected: records could be lost and key features wouldn't work.</td><td><a href="#privacy">§16</a></td></tr>
+          <tr><td>Email forwarding</td><td>Added after the core app is finished.</td><td><a href="#stages">Stage 12</a></td></tr>
+          <tr><td>AI</td><td>One vision model reads receipts and suggests a category. No separate classification service.</td><td><a href="#receipts">§11</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout decide">
+      <strong class="label">Still to decide</strong>
+      <ul>
+        <li>Which exchange-rate provider to use (<a href="#currency">§9</a>).</li>
+        <li>Can the home currency be changed once transactions exist? This guide recommends no (<a href="#currency">§9</a>).</li>
+        <li>Which Supabase region stores the data (<a href="#privacy">§16</a>).</li>
+        <li>English only at launch, or other languages too?</li>
+        <li>Should non-cash income, such as products gifted for a brand deal, be recordable (<a href="#income">§10</a>)?</li>
+        <li>Is the offline market-day queue needed for the first release? Ask a few artists.</li>
+        <li>The exact expense category list. Draft it with real artists.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>4. The big picture</h2>
+    <div class="diagram" aria-label="Application architecture">
+      <div class="node primary"><strong>The app on the artist's phone or computer</strong><br>Installable web app (PWA) · screens · camera and photo-library input</div>
+      <div class="arrow">↕ HTTPS</div>
+      <div class="node"><strong>Next.js + TypeScript</strong><br>Screens · server-side route handlers for validation, imports, AI calls, exports</div>
+      <div class="arrow">↕</div>
+      <div class="node primary"><strong>Supabase</strong><br>PostgreSQL database · login · Row Level Security · private file storage</div>
+      <div class="arrow">↕ server-side only</div>
+      <div class="node"><strong>Outside services</strong><br>Email delivery (login codes) · receipt-reading AI · exchange rates · backup storage · later: Square, Stripe, inbound email</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Piece</th><th>Choice</th><th>What it does for you</th></tr></thead>
+        <tbody>
+          <tr><td>Screens and server logic</td><td>Next.js + TypeScript</td><td>One project holds both the interface and the server code.</td></tr>
+          <tr><td>Styling</td><td>Tailwind CSS</td><td>Quick, consistent layouts that adapt from phone to desktop.</td></tr>
+          <tr><td>Database</td><td>Supabase PostgreSQL</td><td>Stores accounts, members, transactions, events, exchange rates, imports and receipt records.</td></tr>
+          <tr><td>Login</td><td>Supabase Auth (email OTP)</td><td>Sign-up and sign-in with a 6-digit code.</td></tr>
+          <tr><td>Login emails</td><td>A transactional email provider via custom SMTP</td><td>Delivers login codes reliably. Supabase's built-in sender is for testing only.</td></tr>
+          <tr><td>Files</td><td>Supabase Storage (private bucket)</td><td>Keeps receipt originals and previews.</td></tr>
+          <tr><td>Installable app</td><td>Web app manifest + service worker</td><td>Home-screen icon and full-screen app feel.</td></tr>
+          <tr><td>Hosting</td><td>Vercel (Pro plan once commercial)</td><td>Runs the Next.js app. The free Hobby plan is for non-commercial use only.</td></tr>
+          <tr><td>CSV reading</td><td>A well-tested parser library (e.g. Papa Parse)</td><td>Handles quotes, commas and encodings so you don't have to.</td></tr>
+          <tr><td>Receipt reading</td><td>A vision-capable AI model, chosen after testing</td><td>Turns a receipt photo into draft fields plus a suggested category.</td></tr>
+          <tr><td>Exchange rates</td><td>A rate provider, cached in your own database</td><td>Daily rates for converting foreign-currency amounts (<a href="#currency">§9</a>).</td></tr>
+          <tr><td>Source control</td><td>Git + GitHub</td><td>History, backups of your code and safe experimentation.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout why">
+      <strong class="label">Why put logic in route handlers</strong>
+      Next.js offers two ways to run server code: "server actions" and "route handlers" (API routes). Use route handlers, or Supabase Edge Functions, for anything important: imports, AI calls, exports and future integrations. They're ordinary web addresses, so a future native app, an email webhook or Square can all call the same code. This keeps your options open without extra work now.
+    </div>
+  </section>
+
+  <!-- ===================== PART B ===================== -->
+  <div class="part-title">Part B · Design notes</div>
+
+  <section id="accounts">
+    <h2>5. Accounts, team-ready access and privacy</h2>
+    <h3>People and businesses are different things</h3>
+    <p>The database separates two ideas:</p>
+    <ul>
+      <li>A <strong>user</strong> is a person with a login (an email address and one-time codes).</li>
+      <li>An <strong>account</strong> is an artist's business: its records, settings and receipts.</li>
+    </ul>
+    <p>An <strong>account member</strong> row connects the two. It says which users belong to which account and what each may do. Today every account has exactly one member: the artist, as owner. Because every rule already goes through membership, adding a helper later means adding a row, not redesigning the database.</p>
+    <div class="callout why">
+      <strong class="label">What the artist sees</strong>
+      None of this. When someone signs up, a database trigger creates their account and makes them its owner automatically. There's no "create a business" step; the app simply feels like their own private account.
+    </div>
+    <h3>How the privacy rule works</h3>
+    <p>Every business record carries an <code>account_id</code>, the business it belongs to, and a <code>created_by</code>, the person who entered it. The second one is useful for history now and for helpers later. The database checks every request: you can only read or change rows of an account you're a member of, and only in ways your permissions allow. This is called <strong>Row Level Security (RLS)</strong>.</p>
+    <p>Why in the database and not just the screens? Anyone can open browser tools and send requests directly to your database address. If the only protection is "the screen doesn't show it", the data isn't protected. RLS means even a hand-crafted request gets nothing.</p>
+<pre><code>-- One function answers: "may the current user do this, in this account?"
+create schema if not exists private;
+
+create function private.has_permission(target_account uuid, needed text)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.account_members m
+    where m.account_id = target_account
+      and m.user_id = (select auth.uid())
+      and m.status = 'active'
+      and (m.role = 'owner' or needed = any (m.permissions))
+  );
+$$;
+
+grant usage on schema private to authenticated;
+
+-- Every business table uses it in its policies
+alter table public.expenses enable row level security;
+
+create policy "Members with permission can read" on public.expenses
+  for select to authenticated
+  using ( private.has_permission(account_id, 'transactions.view') );
+
+create policy "Members with permission can add" on public.expenses
+  for insert to authenticated
+  with check (
+    private.has_permission(account_id, 'transactions.add')
+    and created_by = (select auth.uid())
+  );
+
+-- Repeat for update and delete, each with its own permission.</code></pre>
+    <div class="callout why">
+      <strong class="label">What "security definer" means here</strong>
+      The function runs with its creator's rights, so it can read the membership table even though that table has its own RLS. That avoids a policy that has to check itself in a loop. Two safety habits come with it: keep such functions in a schema the browser can't call directly (here, <code>private</code>), and always set <code>search_path</code>. This function is the most important lock in the app, so ask for it to be reviewed specifically.
+    </div>
+    <h3>The permission list: define it now, use it later</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Permission</th><th>Allows</th></tr></thead>
+        <tbody>
+          <tr><td><code>transactions.view</code></td><td>See income and expenses</td></tr>
+          <tr><td><code>transactions.add</code></td><td>Add income, cash sales and expenses, and upload receipts</td></tr>
+          <tr><td><code>transactions.edit</code></td><td>Edit or delete entries. Consider an "own entries only" version for helpers.</td></tr>
+          <tr><td><code>reports.view</code></td><td>See reports and profit</td></tr>
+          <tr><td><code>exports.download</code></td><td>Download CSV exports</td></tr>
+          <tr><td><code>events.manage</code></td><td>Create and edit events and venues</td></tr>
+          <tr><td><code>settings.manage</code></td><td>Change account settings: country, currency, tax, categories</td></tr>
+          <tr><td><code>members.manage</code></td><td>Invite, change and remove helpers</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Owners have every permission. A helper running a market stall might only get <code>transactions.add</code>: they can log sales and upload receipts, but can't see profit.</p>
+    <h3>Rules that keep the team model safe</h3>
+    <ul>
+      <li>An account always has at least one owner. The last owner can't be removed or downgraded.</li>
+      <li>Nobody can change their own role or permissions. Member changes go through a server route that checks <code>members.manage</code>.</li>
+      <li>Removing a member takes effect immediately, because RLS checks membership on every request.</li>
+      <li>Receipt files follow the same rule: storage paths start with the <code>account_id</code>, and storage policies call the same permission function.</li>
+      <li>Billing and deleting the account are owner-only actions.</li>
+    </ul>
+    <h3>Whose settings are they?</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Belongs to the account (shared by everyone in it)</th><th>Belongs to the person</th></tr></thead>
+        <tbody>
+          <tr><td>Country, time zone, home currency, financial-year start, sales-tax settings, income streams, categories, events and venues</td><td>Display name, preferred language and number format</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout decide">
+      <strong class="label">Why build this now if helpers may never happen?</strong>
+      It costs one extra table, one function and slightly longer policies. Adding it after launch would mean changing every table, policy, storage path and query while real customer data is live. Building it in now is cheap insurance.
+    </div>
+    <h3>Logging in with a code, not a link</h3>
+    <p>On iPhones, an app added to the Home Screen keeps its own separate cookies and storage from Safari. Login links and password-reset links in emails open in Safari, so the user ends up logged in to Safari, not the installed app. A 6-digit code avoids that: the user reads the code from their email and types it into whichever app they're in.</p>
+    <ul>
+      <li>Use Supabase's email OTP sign-in. It handles both new and returning users.</li>
+      <li>Set up a custom SMTP email provider before anyone other than you signs up. Supabase's built-in sender only delivers to your own team's addresses, at roughly two messages an hour.</li>
+      <li>"Sign in with Google" or passkeys can come later. Test them inside the installed iPhone app before offering them.</li>
+    </ul>
+    <h3>Other account essentials</h3>
+    <ul>
+      <li><strong>Settings:</strong> account settings for those with <code>settings.manage</code>; personal settings for everyone.</li>
+      <li><strong>Delete account:</strong> owner only. Removes data and files, with a clear warning that tax records must be kept for years (5 in Australia; other countries set their own periods).</li>
+      <li><strong>Download my data:</strong> your CSV exports cover this.</li>
+      <li><strong>Secrets:</strong> the Supabase "publishable" key is safe in the browser only because RLS protects every table. The "secret" or service-role key and all AI, email and exchange-rate keys stay on the server.</li>
+    </ul>
+  </section>
+
+  <section id="time">
+    <h2>6. Countries, time zones and financial years</h2>
+    <p>Artists from any country can sign up at launch. The aim for every date decision is <strong>accurate first, with the least possible effort for the artist</strong>. In practice that means good defaults the artist only has to confirm.</p>
+    <div class="callout why">
+      <strong class="label">The key idea: store a date, not a moment</strong>
+      A receipt says "1 July 2026". That's a <em>calendar date</em>, not a moment in time. Store it in a <code>date</code> column exactly as written, and it can never shift. If you store it as a timestamp, it gets converted to UTC. 9am on 1 July in Melbourne is still 30 June in UTC, so the receipt drops into the wrong financial year. Storing calendar dates removes most time-zone risk before you write any time-zone code.
+    </div>
+    <h3>Where time zones are actually needed</h3>
+    <ol>
+      <li><strong>The default date on new entries.</strong> Use the date on the artist's device right now. At an interstate or overseas event, the receipt in their hand is dated in local time, and so is their phone. It's always editable.</li>
+      <li><strong>Timestamps from outside systems</strong> (Square, Stripe, CSV files with times) are turned into calendar dates. Use the account's time zone, or the event's time zone when the sale belongs to an event held somewhere else.</li>
+      <li><strong>Server jobs and history views</strong>, such as "created at" times, and knowing when "today" is for scheduled tasks.</li>
+    </ol>
+    <p>Events and venues therefore get an optional time zone, defaulting to the account's. A Melbourne artist selling at a convention in Los Angeles then gets correct dates on that weekend's imported card sales.</p>
+    <h3>The onboarding flow</h3>
+    <ol>
+      <li><strong>Country:</strong> pre-selected from the browser's language and region (e.g. <code>en-NZ</code> → New Zealand). Everything below is defaulted from it.</li>
+      <li><strong>Time zone:</strong> auto-detected and shown for confirmation. For countries with several zones (Australia, the US, Canada), the dropdown lists only that country's zones, using a small country-to-zone list from the IANA time zone database.
+<pre><code>// Runs in the browser
+const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+// e.g. "Australia/Melbourne"</code></pre></li>
+      <li><strong>Home currency:</strong> defaulted from the country (Australia → AUD) and confirmed (<a href="#currency">§9</a>).</li>
+      <li><strong>Sales tax:</strong> the right question for the country, e.g. "Are you registered for GST?" or "Are you VAT-registered?" (<a href="#gst">§8</a>).</li>
+      <li><strong>Financial year:</strong> pre-filled from the country, editable.</li>
+      <li><strong>Income streams:</strong> the seven defaults, already ticked, editable later (<a href="#income">§10</a>).</li>
+    </ol>
+    <p>These are saved on the account (<a href="#accounts">§5</a>). Nobody gets into the app until onboarding is complete, but each step is a single tap when the defaults are right.</p>
+    <h3>Financial-year defaults</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Country</th><th>Default year</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Australia</td><td>1 July – 30 June</td><td></td></tr>
+          <tr><td>New Zealand</td><td>1 April – 31 March</td><td></td></tr>
+          <tr><td>India</td><td>1 April – 31 March</td><td></td></tr>
+          <tr><td>United States, Canada</td><td>1 January – 31 December</td><td></td></tr>
+          <tr><td>Singapore, Malaysia</td><td>1 January – 31 December</td><td>Individuals are assessed on calendar-year income.</td></tr>
+          <tr><td>Other countries</td><td>1 January – 31 December</td><td>Check before marketing there.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">These are starting defaults for individuals and sole traders. Some businesses use a different year, so the setting stays editable. Store both the start month <em>and</em> the start day. A few tax years start mid-month (the UK's starts on 6 April), and supporting that now costs nothing.</p>
+    <h3>Showing dates and amounts the local way</h3>
+    <ul>
+      <li><strong>Store one way, show the local way.</strong> Always store <code>2026-07-01</code>. Display it in the person's format: 1/7/2026 in Australia, 7/1/2026 in the US, 01/07/2026 in Malaysia. JavaScript's <code>Intl.DateTimeFormat</code> does this for you.</li>
+      <li><strong>Use the phone's own date picker</strong> instead of a typed date. It's faster and removes the 3/4 versus 4/3 confusion entirely.</li>
+      <li><strong>Accept the local decimal mark.</strong> Many countries type <code>12,50</code> rather than <code>12.50</code>. Read amounts using the person's number format, and show the interpreted value ("€12.50") so mistakes are obvious.</li>
+      <li><strong>Label financial years clearly:</strong> "FY 2026–27" when a year spans two calendar years, "2026" when it doesn't.</li>
+    </ul>
+    <h3>Helpers you'll write</h3>
+<pre><code>// The device's own date right now, as YYYY-MM-DD ("en-CA" formats dates this way)
+function todayOnDevice(): string {
+  return new Intl.DateTimeFormat("en-CA").format(new Date());
+}
+
+// A timestamp from another system, as a calendar date in a given time zone
+function localDate(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(instant);
+}
+
+// Which financial year a date belongs to (returns the year it starts in)
+function fyStartYear(dateISO: string, startMonth = 7, startDay = 1): number {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  const onOrAfterStart =
+    month &gt; startMonth || (month === startMonth &amp;&amp; day &gt;= startDay);
+  return onOrAfterStart ? year : year - 1;
+}
+// Australia (1 July):  "2026-06-30" → 2025   "2026-07-01" → 2026
+// A 6 April start:     "2026-04-05" → 2025   "2026-04-06" → 2026
+// US (1 January):      "2026-12-31" → 2026</code></pre>
+    <div class="callout warning">
+      <strong class="label">Watch out</strong>
+      <ul>
+        <li>Store time zones as IANA names like <code>Australia/Melbourne</code>, never as offsets like <code>+11:00</code>. Offsets change with daylight saving.</li>
+        <li>Never add or subtract hours yourself to handle daylight saving. Let <code>Intl</code> and the IANA database do it.</li>
+        <li>Don't turn a date string into a JavaScript <code>Date</code> just to display it. <code>new Date("2026-07-01")</code> means midnight UTC, which shows as 30 June in the Americas. Keep dates as strings until the moment you format them.</li>
+        <li>Changing the time zone in Settings should <em>not</em> change any existing transaction dates. If dates are stored as dates, it won't.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="data">
+    <h2>7. The data model</h2>
+    <p>This is the starting shape, enough to build on. Details like exact category names will be refined as you build. Every business table also has <code>id</code>, <code>account_id</code>, <code>created_by</code>, <code>created_at</code> and <code>updated_at</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Table</th><th>What it holds</th><th>Key columns</th></tr></thead>
+        <tbody>
+          <tr><td><code>accounts</code></td><td>One per artist business: the shared settings</td><td>name, country, time zone, home currency, FY start month and day, sales-tax settings (<a href="#gst">§8</a>)</td></tr>
+          <tr><td><code>account_members</code></td><td>Who belongs to which account, and what they may do</td><td>account, user, role (owner / member), permissions, status (active / invited / removed), invited by</td></tr>
+          <tr><td><code>profiles</code></td><td>One per person</td><td>display name, preferred language and number format, privacy policy version accepted (and when), marketing-email opt-in</td></tr>
+          <tr><td><code>events</code></td><td>Markets, conventions, exhibitions, workshops and vendor shelves</td><td>name, type (market, convention, exhibition, workshop, shelf rental, other), start date, end date (optional for an ongoing shelf), location, time zone and currency (optional, for events held elsewhere), usual income stream</td></tr>
+          <tr><td><code>income_streams</code></td><td>Seeded with the seven defaults (<a href="#income">§10</a>)</td><td>name, archived</td></tr>
+          <tr><td><code>expense_categories</code></td><td>Categories, each belonging to one <strong>group</strong></td><td>name, group (<code>production</code> / <code>event_venue</code> / <code>operating</code>), built-in or custom</td></tr>
+          <tr><td><code>expenses</code></td><td>Money out</td><td>date, supplier, category, event (optional), original currency and amount, home-currency amount, tax amounts, exchange-rate details (<a href="#currency">§9</a>), payment method, notes, receipt, source, external ID, import batch</td></tr>
+          <tr><td><code>income</code></td><td>Money in, including cash sales</td><td>date, stream, event (optional), original currency, gross, fees and tax amounts, home-currency amounts, exchange-rate details, payment method, description, refund-of (optional), source, external ID, import batch</td></tr>
+          <tr><td><code>fx_rates</code></td><td>Shared daily exchange rates, not tied to any account</td><td>date, from currency, to currency, rate, source</td></tr>
+          <tr><td><code>receipts</code></td><td>One row per uploaded file</td><td>storage path, preview path, original filename, file type, size, SHA-256 hash, extraction status, extracted data, deleted-at</td></tr>
+          <tr><td><code>import_batches</code></td><td>One row per CSV import</td><td>source name, filename, row counts, status, column mapping used</td></tr>
+          <tr><td><code>import_mappings</code></td><td>Saved column mappings for repeat imports</td><td>source name, mapping</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Expense groups: keeping production separate from event costs</h3>
+    <p>Every expense category belongs to exactly one group. This is what lets reports separate making things from selling them at an event or venue.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Group</th><th>Example categories</th><th>Linked to an event or venue?</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Production</strong></td><td>Printing, merch manufacturing, art materials, packaging, shipping of stock to you</td><td>No. Stock usually serves many events and online sales.</td></tr>
+          <tr><td><strong>Event &amp; venue</strong></td><td>Stall or table fees, vendor shelf rent, flights, accommodation, meals, local transport, display equipment hire, parking</td><td>Yes. The app prompts for one, but allows "not assigned yet".</td></tr>
+          <tr><td><strong>Operating</strong></td><td>Software, website, equipment, marketing, payment fees, insurance, phone</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout why">
+      <strong class="label">Why not spread production costs across events automatically?</strong>
+      A print run might be sold at three markets and online over a year. Any automatic split, whether by revenue, by date or evenly, is a guess that will look precise but mislead. Keep production costs whole and visible. If artists ask for it later, add an optional "what did my stock cost for this event" estimate as a separate figure.
+    </div>
+    <h3>Rules baked into the design</h3>
+    <ul>
+      <li><strong>Money is stored as whole minor units</strong> in integer columns: cents for dollars, pence for pounds. Not every currency has two decimal places (the yen has none, and a few currencies have three), so look up each currency's decimal places in ISO 4217 rather than assuming 2. A$110.00 is stored as <code>11000</code>; ¥1,100 as <code>1100</code>.</li>
+      <li><strong>Dates are <code>date</code> columns</strong>, not timestamps (<a href="#time">§6</a>).</li>
+      <li><strong>Every transaction stores both its original amount and its home-currency amount.</strong> Reports only ever add up home-currency amounts (<a href="#currency">§9</a>).</li>
+      <li><strong>Every transaction has a <code>source</code></strong> (<code>manual</code>, <code>receipt</code>, <code>csv</code>, later <code>square</code>, <code>stripe</code>, <code>email</code>) and an optional <code>external_id</code>. A unique rule on account + source + external ID makes re-imports harmless (<a href="#future">§14</a>).</li>
+      <li><strong>Categories come from a controlled list</strong>, not free text, so reports group cleanly.</li>
+      <li><strong>Deleting an event doesn't delete its transactions.</strong> They become "no event".</li>
+      <li><strong>Database changes are made through migrations</strong>, saved files that build the schema step by step and are committed to Git.</li>
+    </ul>
+  </section>
+
+  <section id="gst">
+    <h2>8. Sales tax setting (GST, VAT and sales tax)</h2>
+    <p>Countries tax sales differently, so the setting is built from two simple questions instead of one country-specific switch:</p>
+    <ol>
+      <li><strong>Do you charge tax on your sales?</strong> If yes, the tax portion of each sale belongs to the government, not the artist, so reports leave it out of income.</li>
+      <li><strong>Can you claim back the tax on your purchases?</strong> If yes, tax on receipts is tracked separately and reports show costs without it. If no, the tax is simply part of the cost.</li>
+    </ol>
+    <p>Onboarding asks in the country's own words and fills in both answers:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tax system</th><th>Onboarding asks</th><th>Charge on sales?</th><th>Claim on purchases?</th></tr></thead>
+        <tbody>
+          <tr><td>GST (e.g. Australia 10%, Singapore 9%, New Zealand 15%)</td><td>"Are you registered for GST?"</td><td>If registered</td><td>If registered</td></tr>
+          <tr><td>VAT (in countries that use it)</td><td>"Are you VAT-registered?"</td><td>If registered</td><td>If registered</td></tr>
+          <tr><td>Mixed (e.g. Canada GST/HST, rates vary by province)</td><td>Registration, plus province for the default rate</td><td>If registered</td><td>If registered</td></tr>
+          <tr><td>Sales tax (e.g. US sales tax; Malaysia's SST works similarly for this purpose, but check)</td><td>"Do you collect sales tax on any sales?"</td><td>If they collect it</td><td>No. Tax paid is part of the cost.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>How the answers change the app</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>No</th><th>Yes</th></tr></thead>
+        <tbody>
+          <tr><td>Expenses in reports (claim on purchases)</td><td>Full amount paid, tax included</td><td>Amount <em>excluding</em> tax. Tax tracked as "tax paid".</td></tr>
+          <tr><td>Income in reports (charge on sales)</td><td>Full amount received</td><td>Amount <em>excluding</em> tax. Tax tracked as "tax collected".</td></tr>
+          <tr><td>Tax fields on forms</td><td>Hidden or optional</td><td>Shown, with the tax on a sale suggested from the account's default rate and always editable.</td></tr>
+          <tr><td>Extra report</td><td>None</td><td>Tax collected vs tax paid for a period. A helpful figure, not a lodged BAS or VAT return.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Think about</h3>
+    <ul>
+      <li><strong>Store a default rate per account, never a hard-coded 1/11.</strong> The tax inside a tax-inclusive price is <code>total × rate ÷ (1 + rate)</code>, which gives 1/11 at 10%. Reduced and zero rates exist, so the rate is only a suggestion per entry.</li>
+      <li><strong>Always record the tax shown on a receipt</strong>, even when it can't be claimed. It costs nothing to store, and the data is ready if the artist registers later.</li>
+      <li><strong>People register partway through a year.</strong> Store a "registered from" date so reports treat each transaction according to its own date.</li>
+      <li><strong>Not every purchase includes tax</strong>, and tax on an overseas receipt usually can't be claimed at home. Default foreign-currency receipts to "not claimable" and let the artist change it.</li>
+      <li><strong>Use the country's word everywhere</strong>: GST, VAT or sales tax, in forms, reports and exports.</li>
+      <li><strong>Check rates and rules for each country you market to.</strong> The app records; it never decides what's claimable.</li>
+    </ul>
+  </section>
+
+  <section id="currency">
+    <h2>9. Multiple currencies</h2>
+    <p>An artist might take a commission from a US client, receive social-media income in US dollars or buy supplies from Japan. Each account has one <strong>home currency</strong>, and every report is in it. Foreign amounts are converted when they're entered, at the rate for the transaction or receipt date, and the result is locked.</p>
+    <h3>What each transaction stores</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Original currency and amount</td><td>USD 45.00</td></tr>
+          <tr><td>Home-currency amount</td><td>AUD 64.29</td></tr>
+          <tr><td>Exchange rate used</td><td>1.4286 AUD per USD</td></tr>
+          <tr><td>Rate date</td><td>2026-10-22</td></tr>
+          <tr><td>Rate source</td><td>Your rate provider, "Entered by artist" or "From Square"</td></tr>
+          <tr><td>How it was set</td><td>Automatic · artist entered the home amount · provided by the platform</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>For home-currency transactions, the original and home amounts are the same and the rate is 1.</p>
+    <h3>The locking rules</h3>
+    <ol>
+      <li><strong>Use the rate for the transaction date</strong>, meaning the receipt or sale date, not the day it was typed in. A receipt from 3 March entered on 20 March uses 3 March's rate.</li>
+      <li><strong>No rate published that day?</strong> Weekends, public holidays and "today, before rates are out" all happen. Use the most recent earlier rate and show its date ("Rate from Friday 17 October").</li>
+      <li><strong>Once saved, the home amount is fixed.</strong> New rates never change old transactions, so last year's reports still match what was exported last year.</li>
+      <li><strong>Edits are explicit.</strong> Changing the foreign amount recalculates with the same locked rate. Changing the date asks "Use the rate for the new date?"</li>
+      <li><strong>The real amount beats a reference rate.</strong> If the artist knows exactly what left or arrived in their bank, including the bank's conversion margin, let them type the home amount. The app stores it and works out the rate. Nothing is more accurate.</li>
+      <li><strong>Platforms know their own rates.</strong> Square, Stripe, PayPal and similar services usually report the converted amount they actually paid out. When importing or integrating, use their figure rather than looking up a reference rate.</li>
+    </ol>
+    <h3>Getting exchange rates</h3>
+    <ul>
+      <li>Keep a shared <code>fx_rates</code> table: date, from currency, to currency, rate, source. A scheduled server job fills it daily and fetches older dates on demand for back-dated receipts. The browser can read it but never write to it.</li>
+      <li><strong>Provider options:</strong> central banks publish free daily reference rates. The European Central Bank covers about 30 major currencies against the euro, and the Reserve Bank of Australia publishes AUD rates. Commercial rate services cover far more currencies and offer historical lookups, often with free tiers for small volumes. With artists in many countries, you'll need a provider that covers every currency you allow as a home currency.</li>
+      <li>Converting between two currencies the provider doesn't pair directly (e.g. NZD to JPY) goes through a common currency. That's fine as long as rates are stored with plenty of decimal places.</li>
+    </ul>
+    <h3>Getting the maths right</h3>
+    <ul>
+      <li>Store rates as exact decimals (Postgres <code>numeric</code>), never as JavaScript floating-point numbers.</li>
+      <li>Convert on the server or in the database, and round once, to the home currency's minor unit (<a href="#data">§7</a>).</li>
+      <li>Reports add up the stored home amounts. Never convert a total.</li>
+      <li>Convert tax and fees with the same rate as the amount they belong to.</li>
+    </ul>
+    <h3>Making it easy for the artist</h3>
+    <ul>
+      <li>The currency picker defaults to the home currency, or to the event's currency for an overseas event, so most entries never touch it. Recently used currencies appear first.</li>
+      <li>When a foreign currency is chosen, show the conversion live: "US$45.00 ≈ A$64.29 at 1.4286 (22 Oct)". It builds trust and catches typos.</li>
+      <li>On the receipt review screen, the AI reports the currency code it sees. A plain "$" is ambiguous, since Australia, New Zealand, Canada, the US and Singapore all use it. Default an unclear "$" to the home currency, and flag it when the supplier looks foreign.</li>
+    </ul>
+    <div class="callout decide">
+      <strong class="label">Recommendation: lock the home currency once there are transactions</strong>
+      If the home currency changed, every past home amount would still be in the old currency, and reports would mix the two. Let artists change it freely during onboarding and while the account is empty. After that, treat it as a support request, or as a deliberate "convert my history" tool built later.
+    </div>
+    <div class="callout warning">
+      <strong class="label">Watch out</strong>
+      Tax authorities may have views on which exchange rates are acceptable. Storing the rate, its date and its source with every transaction means any figure can be explained to an accountant. The app records the choice; it doesn't advise on it.
+    </div>
+  </section>
+
+  <section id="income">
+    <h2>10. Income streams and cash sales</h2>
+    <p>Income is recorded the same way whatever the source: an amount and currency, a date, an income stream, an optional event or venue, and a payment method (<code>cash</code>, <code>card</code>, <code>online</code>, <code>bank transfer</code>, <code>other</code>).</p>
+    <h3>The seven starting income streams</h3>
+    <p>Every new account starts with these. Artists can rename, add or archive streams. A stream that's been used is archived rather than deleted, so old reports still make sense.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stream</th><th>How the money usually arrives</th><th>Things to design for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Sales at events</strong></td><td>Cash and card at a stall</td><td>Quick-sale entry, linked to the event. The default stream for event sales.</td></tr>
+          <tr><td><strong>Online sales</strong></td><td>Payouts from Etsy, Shopify, the artist's own site</td><td>Platform fees recorded separately. Shipping charged to buyers is income; postage paid is a cost. CSV import presets per platform.</td></tr>
+          <tr><td><strong>Wholesale</strong></td><td>Invoices to shops, often paid 14–30 days later</td><td>Larger amounts. Counted when the shop pays, not when you invoice. An optional invoice number helps match payments.</td></tr>
+          <tr><td><strong>Commissions</strong></td><td>Deposits, then final payments</td><td>Record each payment as it arrives. An optional client or job reference ties them together.</td></tr>
+          <tr><td><strong>Vendor shelf rental</strong></td><td>The store collects sales and pays the artist, often monthly, sometimes keeping a commission</td><td>Set up each shelf as a venue: an event of type "shelf rental" with no end date. Rent goes in event &amp; venue costs, linked to the shelf. Record each payout as gross sales, with the store's commission as fees, using the store's sales report. The venue view then shows whether the shelf pays for itself.</td></tr>
+          <tr><td><strong>Social media</strong></td><td>Platform payouts, brand deals, sponsorships, affiliate income</td><td>Often paid in US dollars (<a href="#currency">§9</a>). Gifted products bring no cash, so decide whether they can be recorded.</td></tr>
+          <tr><td><strong>Subscription income</strong></td><td>Monthly memberships, e.g. Patreon or Ko-fi</td><td>Monthly payouts with platform fees, often in a foreign currency. CSV import presets.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout why">
+      <strong class="label">Decision: income counts when it's paid</strong>
+      Income is recorded on the date the money is received ("cash basis"), so the app always matches the bank. A wholesale invoice sent on 20 June and paid on 15 July counts on 15 July, which is in the next Australian financial year. Each commission deposit counts when it arrives. Unpaid invoices aren't tracked in the first release. How income is reported for tax is still for the artist and their accountant to decide.
+    </div>
+    <h3>Designing cash-sale entry for a busy stall</h3>
+    <ul>
+      <li><strong>A big "+ Sale" button</strong> on the home screen opens a number pad, not a long form.</li>
+      <li><strong>Smart defaults:</strong> date = today on the device; event = whichever event or venue is on today, if any; payment = cash; stream = the event's usual stream; currency = the event's currency for an overseas event, otherwise home. Most sales then become: type amount, tap save.</li>
+      <li><strong>Two styles, one table:</strong> some artists log every sale and others enter one total at the end of the day. Both are simply income rows, so support both without special code.</li>
+      <li><strong>A running total for the event</strong> on screen gives instant feedback ("Today: $640 from 23 sales").</li>
+      <li><strong>Easy undo and edit</strong>, because fat-finger errors happen when a queue is waiting.</li>
+      <li><strong>Helper-friendly:</strong> this is the screen a future helper with only <code>transactions.add</code> would use (<a href="#accounts">§5</a>), so keep it fully usable without access to reports.</li>
+    </ul>
+    <h3>Card and online sales</h3>
+    <ul>
+      <li>Record the <strong>gross</strong> sale amount and any <strong>fees</strong> separately, so fees show up as a cost instead of quietly shrinking revenue.</li>
+      <li><strong>Refunds</strong> are their own rows with a negative amount, linked to the original sale. Never edit the original sale's amount.</li>
+      <li><strong>Payouts aren't income.</strong> When Square or Stripe deposits money into the bank, that's a transfer of sales already recorded. Counting it again would double the income. Vendor shelf payouts are the exception: the store's payout <em>is</em> how those sales get recorded, because the artist has no other record of them.</li>
+    </ul>
+  </section>
+
+  <section id="receipts">
+    <h2>11. Receipts and original images</h2>
+    <h3>Getting the file: camera, photo library and PDFs</h3>
+<pre><code>&lt;input type="file" accept="image/*,application/pdf" multiple /&gt;</code></pre>
+    <p>Leave out the <code>capture</code> attribute. With <code>capture</code>, phones jump straight to the camera. Without it, iPhones and Android phones offer a menu: take a photo, choose from the photo library, or pick a file. <code>multiple</code> allows a batch of receipts at once.</p>
+    <h3>The best way to keep the original</h3>
+    <ol>
+      <li><strong>Upload the file exactly as received.</strong> Don't resize, compress or convert the stored original. Tax authorities such as the ATO accept digital copies only if they're a true and clear reproduction, and you never know which detail matters later.</li>
+      <li><strong>Make a separate preview</strong>, a smaller JPEG, for fast display and for sending to the AI. It can be made in the browser before upload or on the server. HEIC photos from iPhones are a good example: store the HEIC as-is, and make a JPEG preview because most non-Apple browsers can't show HEIC.</li>
+      <li><strong>Use a private bucket and a predictable path</strong> such as <code>receipts/{account_id}/{receipt_id}/original.heic</code>. Storage policies check that the first folder is an account the logged-in user belongs to, using the same permission function as the tables (<a href="#accounts">§5</a>).</li>
+      <li><strong>Never overwrite.</strong> Upload with overwrite turned off. "Replace photo" creates a new receipt record, and the old one is soft-deleted.</li>
+      <li><strong>Record a fingerprint.</strong> Save a SHA-256 hash of the file. If the same file is uploaded again, warn "You've already uploaded this receipt".</li>
+      <li><strong>Make deletion deliberate.</strong> Set <code>deleted_at</code> first and remove the file after a grace period. Remind the user that tax records must be kept for years: 5 in Australia, with other countries setting their own periods.</li>
+      <li><strong>Keep a second copy elsewhere.</strong> Supabase's database backups <em>don't include</em> files in Storage. Before launch, set up a scheduled job that copies new receipts to a separate storage provider with versioning turned on.</li>
+    </ol>
+    <div class="callout warning">
+      <strong class="label">Privacy detail</strong>
+      Phone photos often contain hidden location data (EXIF GPS). Keep the original intact, since it's the record, but strip metadata from previews, and never make originals publicly reachable. Show them only through short-lived signed links.
+    </div>
+    <h3>Reading the receipt automatically</h3>
+    <p>Use one vision-capable AI model call per receipt. It returns draft fields and a suggested category from your fixed list, all in a structured format. A separate categorisation service isn't needed.</p>
+    <ol>
+      <li>The file is uploaded and a <code>receipts</code> row is created with status <code>uploaded</code>.</li>
+      <li>A server route sends the preview to the AI. It asks for supplier, date, currency code, total, tax, the supplier's tax or business number if present, a line-item summary and a category chosen <em>only</em> from your list.</li>
+      <li>Your code checks the result: is the date a real date, do the amounts parse, is the tax not greater than the total, is the currency a real currency code, is the category on the list?</li>
+      <li>The artist sees a pre-filled form next to the photo, corrects anything wrong, confirms the currency, picks an event or venue if relevant and saves. Foreign amounts are converted and locked at that moment (<a href="#currency">§9</a>).</li>
+      <li>Nothing becomes an expense until the artist taps save.</li>
+    </ol>
+    <ul>
+      <li><strong>Always allow manual entry.</strong> If the AI is slow, down or wrong, the artist can still type it in.</li>
+      <li><strong>Measure before you scale.</strong> Track how often each field gets corrected and the cost per receipt. Collect 30–50 real, anonymised receipts as a test set and re-run it when you change models or prompts.</li>
+      <li><strong>Check data terms</strong> for whichever AI provider you choose: retention, whether data is used for training, and where it's processed. Mention the provider in your privacy policy.</li>
+    </ul>
+  </section>
+
+  <section id="reports">
+    <h2>12. Reports and exports</h2>
+    <h3>The main profit view</h3>
+    <p>Filterable by financial year (or a custom date range), event or venue, and income stream. All amounts are in the home currency (<a href="#currency">§9</a>). If the artist charges and claims back tax, amounts exclude it (<a href="#gst">§8</a>).</p>
+    <div class="report">Income                                 $12,400
+  less Selling fees (card/platform)      −$310
+Net sales                              $12,090
+  less Production costs                −$3,850
+Gross profit                            $8,240
+  less Event &amp; venue costs             −$2,100
+  less Operating costs                 −$1,450
+Net profit                              $4,690</div>
+    <h3>Other views</h3>
+    <ul>
+      <li><strong>By event or venue:</strong> income minus that event's or venue's event &amp; venue costs = its result. For vendor shelves, this shows whether the rent is covered. Add a clear note that production costs aren't included (<a href="#data">§7</a>).</li>
+      <li><strong>By income stream:</strong> income per stream, so the artist sees whether commissions or markets carry the business.</li>
+      <li><strong>By month:</strong> a simple chart of income vs costs, to show seasonal patterns.</li>
+      <li><strong>Needs attention:</strong> event &amp; venue costs with no event, foreign amounts still waiting for a rate, receipts awaiting review, imports with skipped rows.</li>
+    </ul>
+    <h3>Do the maths in the database</h3>
+    <p>Calculate totals with SQL (views or database functions), not by downloading every row and adding them up in the browser. It's faster, and the export and the screen use the same numbers.</p>
+    <h3>Exports</h3>
+    <ul>
+      <li><strong>Transactions CSV:</strong> every income and expense row for a chosen period, with event, stream, category, group, tax and source, plus the original currency and amount, the home-currency amount, and the rate, rate date and rate source.</li>
+      <li><strong>FY summary:</strong> the profit view above for one financial year, plus totals by category, event and stream. Start with CSV, and add a nicely formatted version later if artists ask.</li>
+    </ul>
+    <div class="callout warning">
+      <strong class="label">CSV export gotchas</strong>
+      <ul>
+        <li>Write amounts in the currency's normal form (<code>110.00</code>, or <code>1100</code> for yen), not minor units. Your accountant shouldn't have to divide by 100.</li>
+        <li><strong>Separators differ by country.</strong> In some countries Excel expects semicolons between columns and commas as decimal marks. Offer two choices: "Standard CSV" and "Excel (semicolon)".</li>
+        <li>Write dates as <code>2026-07-01</code>, which no spreadsheet misreads as American month/day.</li>
+        <li>Add a UTF-8 "byte order mark" at the start of the file so Excel shows accented names and symbols correctly.</li>
+        <li><strong>Formula injection:</strong> a supplier name starting with <code>=</code>, <code>+</code>, <code>-</code> or <code>@</code> can run as a formula when opened in Excel. Prefix such <em>text</em> cells with an apostrophe. Don't do this to number columns, or negative amounts would break.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="import">
+    <h2>13. CSV import</h2>
+    <p>Most selling platforms (Square, Stripe, Etsy, Shopify, PayPal, Patreon, Big Cartel) let artists download sales as CSV. A good import screen gives artists most of the value of direct integrations long before you build them. It's also a rehearsal for building those integrations.</p>
+    <h3>The import pipeline</h3>
+    <ol>
+      <li><strong>Upload:</strong> the file goes to the server. Set a size limit and accept only <code>.csv</code>.</li>
+      <li><strong>Parse:</strong> use a proper CSV library. Never split lines on commas yourself, because quoted fields contain commas.</li>
+      <li><strong>Map columns:</strong> the artist matches their columns to yours (date, amount, fees, description, ID…). Offer saved presets per source, such as "Square sales export", so next time it's one tap.</li>
+      <li><strong>Stage and validate:</strong> load rows into a temporary staging area, never straight into <code>income</code>. Check every row and mark problems.</li>
+      <li><strong>Preview:</strong> show the result ("142 sales, $8,320 total, 3 rows need attention, 12 already imported") before anything is saved.</li>
+      <li><strong>Commit:</strong> save valid rows in one go, all tagged with the <code>import_batch</code> ID.</li>
+      <li><strong>Undo:</strong> "Remove this import" deletes every row from that batch. This is a huge confidence-builder for users.</li>
+    </ol>
+    <h3>Structure considerations</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Problem</th><th>How to handle it</th></tr></thead>
+        <tbody>
+          <tr><td>Ambiguous dates (is <code>03/04/2026</code> 3 April or 4 March?)</td><td>Ask the user to confirm the format in the mapping step. Auto-detect only when a day value over 12 makes it certain.</td></tr>
+          <tr><td>Dates with times and time zones</td><td>Convert to the account's time zone, or the event's if it was held elsewhere, then keep only the calendar date (<a href="#time">§6</a>).</td></tr>
+          <tr><td>Amount formats</td><td>Strip currency symbols and thousands separators, respecting the file's decimal mark (<code>1.234,50</code> vs <code>1,234.50</code>; ask when unclear). Treat <code>(12.50)</code> as negative. Convert to minor units only after validating.</td></tr>
+          <tr><td>Currencies</td><td>Map a currency column if there is one; otherwise ask which currency the file is in. If the file includes the platform's own converted amount, use it as the home amount. Otherwise convert each row at its own date's rate (<a href="#currency">§9</a>).</td></tr>
+          <tr><td>Gross vs fees vs net</td><td>Map gross and fees separately. If only net is available, import net and flag that fees are missing.</td></tr>
+          <tr><td>Refunds</td><td>Import as negative income, linked to the original sale where the export gives its ID.</td></tr>
+          <tr><td>Payouts and transfers</td><td>Skip them. They aren't sales (<a href="#income">§10</a>).</td></tr>
+          <tr><td>Duplicates</td><td>Use the platform's transaction ID as <code>external_id</code>. If there's no ID, build a fingerprint from date + amount + description and warn about likely duplicates.</td></tr>
+          <tr><td>Assigning events</td><td>Suggest an event or venue when a sale's date falls within its dates. The artist confirms in the preview.</td></tr>
+          <tr><td>Assigning income streams</td><td>Default stream per import preset (e.g. Etsy → online sales, Patreon → subscription income), changeable per row.</td></tr>
+          <tr><td>Partial failures</td><td>Never import silently with gaps. Show which rows were skipped and why, and let the artist fix or skip them.</td></tr>
+          <tr><td>Customer details</td><td>Skip customer names, emails and addresses by default. Reports don't need them, and data you don't store can't leak (<a href="#privacy">§16</a>). Keep only the order or transaction ID.</td></tr>
+          <tr><td>Traceability</td><td>Keep the original row data with each imported record so you can explain any figure later.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">The same pipeline can import expenses later, such as a bank statement export, with the same safety features.</p>
+  </section>
+
+  <section id="future">
+    <h2>14. Ready for Stripe and Square, without building them yet</h2>
+    <p>You don't need to write any integration code now. You only need to avoid decisions that would block it later. The design above already does this:</p>
+    <ul class="checklist">
+      <li><code>source</code> and <code>external_id</code> on every transaction, with a unique rule, so re-syncing never duplicates.</li>
+      <li>Gross, fees and refunds stored separately, matching how payment platforms report sales.</li>
+      <li>Original and home-currency amounts with a recorded rate source, so a platform's own conversion can be stored as is.</li>
+      <li>Account-based ownership, so a connection belongs to the business, not to whichever person connected it.</li>
+      <li>Time-zone conversion helpers already written for CSV import.</li>
+      <li>Important logic in server route handlers that external services can call (<a href="#architecture">§4</a>).</li>
+      <li>The CSV import pipeline (stage → validate → commit by batch), which integrations can reuse.</li>
+    </ul>
+    <h3>What the integrations will involve later</h3>
+    <ul>
+      <li><strong>Square:</strong> the artist approves access through Square's OAuth screen with read-only permissions. Your server then fetches payments and listens for webhooks.</li>
+      <li><strong>Stripe:</strong> reading another business's existing Stripe account is more restricted. Stripe's read-only access is limited to apps registered as Stripe Extensions or Apps. Expect a separate registration and review process, which is a good reason to do Square first.</li>
+      <li><strong>Countries:</strong> Square and Stripe operate in different sets of countries. Check where your artists are before choosing which to build first.</li>
+      <li><strong>Both:</strong> an <code>integrations</code> table for encrypted tokens and sync progress, a "Disconnect" button, webhook signature checks and sync jobs that are safe to retry.</li>
+    </ul>
+  </section>
+
+  <section id="pwa">
+    <h2>15. The installable app (PWA)</h2>
+    <p>A Progressive Web App is a website that can be installed with an icon and opens full-screen like an app. One codebase serves iPhone, Android and desktop.</p>
+    <h3>What's involved</h3>
+    <ul>
+      <li>A <strong>web app manifest</strong>: name, icons, colours and "standalone" display.</li>
+      <li>A <strong>service worker</strong>: a small script that can cache the app's own files so it loads fast. Use Next.js's PWA guide or a maintained library, and cache only the app's own static files at first. Don't cache financial data.</li>
+      <li><strong>An update strategy</strong> so a new deployment doesn't leave users stuck on an old, broken version.</li>
+    </ul>
+    <h3>iPhone specifics</h3>
+    <ul>
+      <li>iPhones never show an automatic "Install app" prompt. Show your own short instructions: Share → Add to Home Screen.</li>
+      <li>The installed app has separate storage from Safari, which is why login uses codes (<a href="#accounts">§5</a>). A user who installs the app logs in once more inside it.</li>
+      <li>Test the camera and photo-library input inside the <em>installed</em> app, not just in Safari.</li>
+    </ul>
+    <h3>Offline, scoped small</h3>
+    <p>Market halls often have poor signal. Full offline sync is complex, but a narrow version is very achievable: <strong>save receipt photos and cash sales on the phone, then upload when back online</strong>. Store pending items in the browser's IndexedDB, give each a unique ID so a retry can't create duplicates, and delete them only after the server confirms. Safari doesn't support background sync, so retry when the app is opened. Show clearly what's still waiting to upload. This is an optional stage (<a href="#stages">Stage 10</a>); decide after talking to artists.</p>
+  </section>
+  <section id="privacy">
+    <h2>16. Privacy and where data lives</h2>
+    <p class="muted small">Checked 23 October 2026. This is a planning overview, not legal advice. Have a privacy lawyer review your policy, terms and data flows before launch.</p>
+    <div class="callout why">
+      <strong class="label">The strategy: one high standard for everyone, plus local extras</strong>
+      Singapore's PDPA is the strictest of the laws that apply to you, and it applies from day one. If the app meets it, plus some widely accepted good practice, for every user, the other regions mostly need small additions. One set of rules is also far easier to build, test and explain.
+    </div>
+    <h3>Does each law apply to you?</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Region</th><th>Applies to this app?</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Singapore</strong><br>PDPA</td><td>Yes, in principle. It covers organisations collecting personal data in Singapore wherever they're based.</td><td>Requires a data protection officer and fast breach reporting.</td></tr>
+          <tr><td><strong>Australia</strong><br>Privacy Act and Australian Privacy Principles</td><td>Probably not at first. Businesses with annual turnover of A$3 million or less are largely exempt, apart from some exceptions (e.g. those that trade in personal information).</td><td>Removing the exemption was agreed in principle in 2023, but it wasn't in the 2026 reform draft and has no start date. You can opt in voluntarily. Meeting the baseline now makes any future change cheap.</td></tr>
+          <tr><td><strong>Malaysia</strong><br>PDPA (amended 2024)</td><td>Possibly not. It covers commercial dealings by businesses established in Malaysia, or using equipment in Malaysia to process data. A foreign app with servers elsewhere may fall outside it, but "equipment" isn't clearly defined.</td><td>Get advice before marketing there. Complying costs little once the baseline is in place.</td></tr>
+          <tr><td><strong>United States</strong><br>State laws, FTC</td><td>State privacy laws: unlikely at first. Some rules apply to every business.</td><td>No federal privacy law. Around 20 or more states have their own laws, most applying only above about 100,000 residents of that state; a few (e.g. Texas) use a small-business exception instead. All states have breach notification laws, the FTC can act on misleading privacy or security claims, and California requires a privacy policy on commercial sites used by its residents.</td></tr>
+          <tr><td><strong>Other countries</strong></td><td>Check each one before marketing there.</td><td>Many countries have privacy laws that reach foreign apps serving their residents.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Keeping the EU and UK out</h3>
+    <p>The GDPR applies when you <em>offer</em> the app to people in the EU or UK, so excluding them means not targeting them:</p>
+    <ul>
+      <li>Leave EU member states and the UK out of the sign-up country list.</li>
+      <li>Don't market there, and don't price your subscription in euros or pounds. (Artists can still record purchases in those currencies.)</li>
+      <li>Say in your terms that the service isn't offered in the EU or UK.</li>
+    </ul>
+    <p>Someone could still sign up by choosing another country. Ask your lawyer whether these steps are enough for your situation.</p>
+    <h3>Two kinds of personal data in this app</h3>
+    <ul>
+      <li><strong>About your users</strong> (artists and future helpers): name, email, sign-in records, settings. You decide what happens to it, which makes you the <strong>controller</strong>.</li>
+      <li><strong>About other people inside artists' records</strong>: customer names in sales exports, commission clients, suppliers who are sole traders. The artist decides about this data and your app holds it for them, which makes you a <strong>processor</strong> (Singapore's term is "data intermediary"). Your terms of service should include a data processing agreement covering it.</li>
+    </ul>
+    <div class="callout decide">
+      <strong class="label">Design principle: collect less</strong>
+      The app doesn't need customer names, emails or addresses to calculate profit. Skip them by default in CSV imports (<a href="#import">§13</a>), keep receipt previews free of photo location data (<a href="#receipts">§11</a>), and never write financial details into logs. Every piece of personal data you don't store is one you can't leak, and one that needs no rights requests or transfer paperwork.
+    </div>
+    <h3>The global baseline</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Requirement</th><th>What it involves</th><th>Where it shows up in the build</th></tr></thead>
+        <tbody>
+          <tr><td>1. Data map</td><td>A written record of what personal data you hold, why, where it's stored, which providers process it and how long you keep it.</td><td>A page in your decisions log, updated whenever you add a provider or a field.</td></tr>
+          <tr><td>2. Privacy policy and sign-up notice</td><td>A plain-language policy: what you collect, why, which providers receive it and in which countries, how long you keep it, people's rights and how to contact you. Show a short notice with a link at sign-up.</td><td>Onboarding. Record which policy version each person accepted, and when.</td></tr>
+          <tr><td>3. Consent</td><td>Running the app is part of your contract with the user. Marketing emails need a separate opt-in that isn't pre-ticked. Use only essential cookies.</td><td>A marketing opt-in field. No tracking cookies, so no cookie banner.</td></tr>
+          <tr><td>4. Provider agreements</td><td>Accept data processing agreements with Supabase, Vercel, your email provider, AI provider and backup storage. Confirm the AI provider doesn't train on receipts or keep them longer than needed. Singapore expects data sent overseas to stay comparably protected, and these agreements are how you show that.</td><td>A provider list in your data map.</td></tr>
+          <tr><td>5. User rights</td><td>Access and correction. Aim to answer within 30 days.</td><td>CSV exports (access), edit screens (correction), account deletion. Requests for receipt files can be handled by hand at first.</td></tr>
+          <tr><td>6. Retention and deletion</td><td>Delete data you no longer need. For example, purge a deleted account's data and files within 30 days and let backups expire on schedule. Remind users that keeping tax records is their responsibility.</td><td>A scheduled purge job and the deletion flow in <a href="#accounts">§5</a>.</td></tr>
+          <tr><td>7. Security</td><td>Row Level Security, encryption in transit and at rest, two-factor sign-in on admin accounts, least privilege, logs without financial details, tested backups.</td><td>Mostly already in Stages 3 and 11.</td></tr>
+          <tr><td>8. Breach response plan</td><td>A one-page plan for detecting, containing, assessing, recording and notifying. Singapore sets the pace: notice within 3 calendar days of assessing a breach as notifiable (likely significant harm, or 500+ people). Malaysia requires notice as soon as practicable; Australia (if covered) requires assessment within 30 days; US states vary.</td><td>A document with contact details, rehearsed once before launch.</td></tr>
+          <tr><td>9. Data location</td><td>Choose where the database lives, disclose it, and note where each provider processes data.</td><td>The region decision in Stage 2.</td></tr>
+          <tr><td>10. Minimum age</td><td>This is a business tool for adults. A minimum age of 18 in your terms keeps you clear of children's privacy rules.</td><td>Terms of service and sign-up.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Local extras on top of the baseline</h3>
+    <ul>
+      <li><strong>Singapore:</strong> appoint a data protection officer (this can be you) and publish their business contact details. Marketing messages must follow Singapore's Spam Control Act and, for calls and texts, its Do Not Call rules.</li>
+      <li><strong>Malaysia, if it applies:</strong> appoint a data protection officer and notify the Commissioner, report breaches, support data portability, follow the cross-border transfer guidelines, and provide privacy notices in both Malay and English.</li>
+      <li><strong>Australia:</strong> if you're covered or opt in, follow the Australian Privacy Principles and the Notifiable Data Breaches scheme. The Spam Act applies to marketing emails whatever your size.</li>
+      <li><strong>United States:</strong> keep the privacy policy accurate, since misleading claims are what the FTC acts on. Meet state breach-notice rules, and recheck state thresholds each year as you grow.</li>
+    </ul>
+    <h3>Could the data live somewhere other than your database?</h3>
+    <p>Storing data elsewhere moves some responsibility off you, but each option adds a different risk. For a tax-records app, the biggest risk is an artist losing five years of records.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Option</th><th>What it takes off you</th><th>What it costs the artist, and you</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Only on the artist's device</strong> (browser storage in the installed app)</td><td>You hold almost nothing, so there's little to breach and few rights requests.</td><td>A lost, broken or reset phone means every record is gone. The browser can also clear stored data when the phone runs short of space or the app goes unused; apps can ask for "persistent" storage, but it's granted at the browser's discretion. No laptop access at tax time, no helpers, and no Square or Stripe connections, since those need a server. Receipt reading still sends images through your server to the AI.</td></tr>
+          <tr><td><strong>In the artist's own cloud drive</strong> (e.g. their Google Drive)</td><td>Records sit in an account the artist controls. Google's per-file access scope is classed as non-sensitive, so it avoids the heavy security assessment that broad Drive access needs.</td><td>Google users only, as iCloud is hard to reach from a web app. Reports get slow, because every calculation must download the data first. Helpers need Drive sharing, integrations still need a server, and you depend on Google's terms.</td></tr>
+          <tr><td><strong>Your database, but encrypted so only the artist can read it</strong> (end-to-end encryption)</td><td>A breach exposes only unreadable data.</td><td>A forgotten key means lost data. Your server can't run reports, read receipts, run imports or sync with Square, because it can't read anything. Sharing with helpers means sharing keys. This is advanced cryptography, not a beginner project.</td></tr>
+          <tr><td><strong>Your database, collecting less</strong> (this guide's design)</td><td>Less data to protect. Managed providers handle much of the infrastructure security.</td><td>You keep the baseline duties above, and the app keeps every planned feature.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout decide">
+      <strong class="label">Recommendation: keep the central database, and reduce what's in it</strong>
+      With the EU and UK excluded, the remaining duties are mostly documents and habits. Local-only storage would swap that for a worse problem: artists losing tax records, plus losing multi-device access, helpers and integrations. If artists later ask to keep receipts in their own storage, a "save receipt copies to my Google Drive" option can be added alongside the database without changing the design.
+    </div>
+    <h3>How much work is this?</h3>
+    <p>Mostly documents and habits rather than code. The build additions are small: policy-version and marketing-consent fields, a complete account-deletion purge, imports that drop customer details by default, and a log of any admin access to user data. The ongoing costs are a lawyer's review before launch and time to answer requests.</p>
+  </section>
+
+  <!-- ===================== PART C ===================== -->
+  <div class="part-title">Part C · Build stages</div>
+
+  <section id="stages">
+    <h2>17. Stage-by-stage build</h2>
+    <p>Work through these in order. Each stage leaves you with something that works. Spend as long as you need on each; the "Check yourself" questions matter more than speed.</p>
+
+    <div class="stage">
+      <span class="tag">Stage 0</span>
+      <h3>Set up your workshop</h3>
+      <h4>You'll learn</h4>
+      <p>What each tool does: Node.js runs JavaScript on your computer, npm installs libraries, Git saves history, GitHub stores it online, and a code editor is where you work.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Install a current LTS version of Node.js, Git and Visual Studio Code.</li>
+        <li>Create a GitHub repository and a <code>DECISIONS.md</code> file.</li>
+        <li>Run <code>npx create-next-app@latest</code>, choosing TypeScript, App Router and Tailwind.</li>
+        <li>Run <code>npm run dev</code>, open the local address, change some text and watch it update.</li>
+        <li>Make your first commit and push it to GitHub.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>Never commit a file named <code>.env.local</code>. Check it's listed in <code>.gitignore</code> before you add any keys.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>What's the difference between your code on your computer, in Git and on GitHub? How would you undo a bad change?</div>
+      <p class="done"><strong>Done when:</strong> the starter app runs locally and the first commit is on GitHub.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 1</span>
+      <h3>Build the screens with pretend data</h3>
+      <h4>You'll learn</h4>
+      <p>Components, props, state, forms, lists and mobile-first layout. No database yet, so you can focus purely on how the app feels.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Sketch the screens on paper first: Home (with "+ Expense" and "+ Sale"), Transactions, Events, Reports, Settings.</li>
+        <li>Build a bottom navigation bar that works with a thumb on a phone.</li>
+        <li>Build the expense form and the quick-sale number pad, storing entries in temporary state.</li>
+        <li>Show a list of entries and a running total.</li>
+      </ol>
+      <h4>A small exercise: turning typed amounts into cents</h4>
+<pre><code>const amountPattern = /^\d+(\.\d{1,2})?$/;   // "110", "110.5", "110.50"
+
+function toCents(input: string): number | null {
+  const clean = input.trim();
+  if (!amountPattern.test(clean)) return null;
+  const [whole, fraction = ""] = clean.split(".");
+  return Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
+}
+// toCents("110.5") → 11050</code></pre>
+      <p>Try extending it: what should happen with <code>$110</code>, <code>1,100.00</code> or <code>0</code>? Decide, then write the rule.</p>
+      <p>This version assumes two decimal places and a full stop as the decimal mark. In Stage 4 you'll generalise it: the number of decimal places comes from the currency (<a href="#data">§7</a>) and the decimal mark from the person's number format (<a href="#time">§6</a>).</p>
+      <h4>Think about</h4>
+      <p>What are the three or four actions an artist does most? Those need to be one tap from Home. Everything else can live deeper.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>Why do entries vanish when you refresh? Where does "state" live, and what would make it last?</div>
+      <p class="done"><strong>Done when:</strong> you can add pretend expenses and sales comfortably on a real phone, and you can explain every file you wrote.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 2</span>
+      <h3>Accounts and onboarding</h3>
+      <p class="muted small">Read first: <a href="#accounts">§5</a>, <a href="#time">§6</a>, <a href="#gst">§8</a>, <a href="#currency">§9</a></p>
+      <h4>You'll learn</h4>
+      <p>How login sessions work, the difference between browser and server code, environment variables and protecting pages.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Create a Supabase project for development. Choose the region closest to most of your expected users, and note the choice in your decisions log, since moving later is hard.</li>
+        <li>Follow Supabase's current Next.js server-side guide to set up the browser and server clients.</li>
+        <li>Build email OTP sign-in: enter email → enter 6-digit code → logged in.</li>
+        <li>Create <code>accounts</code>, <code>account_members</code> and <code>profiles</code> with RLS, plus the sign-up trigger that creates an account and an owner membership for every new user. Simple owner-only policies are fine for now; Stage 3 replaces them with the permission function.</li>
+        <li>Build the onboarding flow, with every step defaulted from the country: country, time zone, home currency, sales tax, financial year and income streams.</li>
+        <li>Send logged-in users whose account isn't set up to onboarding. Send logged-out users to sign-in.</li>
+        <li>Build a basic Settings page to change those choices. Lock the home currency once transactions exist (<a href="#currency">§9</a>).</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>During development, Supabase's built-in email sender only reaches your own address, at a very low rate. That's fine for now. Add custom SMTP in Stage 11.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>Why does the login use a code instead of a link? Why are time zone and currency stored on the account rather than the person?</div>
+      <p class="done"><strong>Done when:</strong> you can sign up, complete onboarding, sign out and back in, and protected pages can't be reached while logged out.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 3</span>
+      <h3>The data model and privacy rules</h3>
+      <p class="muted small">Read first: <a href="#data">§7</a>, <a href="#accounts">§5</a></p>
+      <h4>You'll learn</h4>
+      <p>Tables, columns, data types, relationships (foreign keys), migrations, Row Level Security and security definer functions.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Install the Supabase CLI and create your first migration file.</li>
+        <li>Create the permission function from §5, and switch the Stage 2 tables' policies over to it.</li>
+        <li>Create <code>events</code>, <code>income_streams</code>, <code>expense_categories</code>, <code>expenses</code>, <code>income</code> and <code>fx_rates</code>, with <code>date</code> columns for dates, integer minor units for money and exact decimals for rates.</li>
+        <li>Turn on RLS for every table, with policies that use the permission function. <code>fx_rates</code> is readable by any logged-in user and writable only by the server.</li>
+        <li>Seed the built-in expense categories with their groups.</li>
+        <li>Create two test accounts and try to read the other account's data by changing a request by hand. It must fail.</li>
+        <li>Test the team design without building any screens: in the database, add a second user to your account as a member with only <code>transactions.add</code>. Signed in as that user, adding a sale should work, while viewing reports, editing others' entries, changing settings or changing their own permissions should all fail.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>A table with RLS turned <em>off</em> is readable by anyone with your publishable key. Make "enable RLS" part of every table's migration, not a later step.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>What exactly stops User B reading User A's expenses if User B edits the request in their browser? What stops a helper giving themselves more permissions?</div>
+      <p class="done"><strong>Done when:</strong> the schema is built entirely from committed migrations, and both the two-account test and the helper test pass for every table.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 4</span>
+      <h3>Recording money in and out</h3>
+      <p class="muted small">Read first: <a href="#data">§7</a>, <a href="#gst">§8</a>, <a href="#currency">§9</a>, <a href="#income">§10</a></p>
+      <h4>You'll learn</h4>
+      <p>Server-side validation, creating, reading, updating and deleting records (CRUD), loading and error states.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Connect the Stage 1 expense form to the database through a route handler that validates input (e.g. with Zod).</li>
+        <li>Make the category picker group categories by production, event &amp; venue, and operating. When an event &amp; venue category is picked, prompt for an event or venue.</li>
+        <li>Build events and venues, including shelf rentals with no end date: create, edit, list.</li>
+        <li>Build income entry, then the quick cash-sale flow with today's event pre-selected.</li>
+        <li>Show or hide tax fields based on the account's sales-tax settings.</li>
+        <li>Add the currency picker, a server route that finds the rate for a date (<a href="#currency">§9</a>), the live conversion preview and the "I know the exact home amount" option.</li>
+        <li>Build the transactions list with edit and delete, and empty, loading and error states.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>Never trust the account, the person creating the entry, the exchange rate or the tax treatment as sent from the browser. Work them out on the server or in the database.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>A sale is entered at 11:30pm in Perth: which date is saved? A US$200 commission paid on a Sunday is entered on Wednesday: which rate is used, and what's stored?</div>
+      <p class="done"><strong>Done when:</strong> expenses, income, cash sales and events persist correctly, respect privacy rules, and are fast to enter on a phone.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 5</span>
+      <h3>Reports and exports</h3>
+      <p class="muted small">Read first: <a href="#reports">§12</a></p>
+      <h4>You'll learn</h4>
+      <p>SQL aggregation (<code>sum</code>, <code>group by</code>), database views, filtering, and generating files for download.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Write the FY calculation as a database function so every report agrees.</li>
+        <li>Build the profit view, then by-event and by-stream views, with FY and date-range filters.</li>
+        <li>Build the transactions CSV export and the FY summary export.</li>
+        <li>Create a small set of test data with known answers, including 30 June and 1 July transactions, and check every total by hand.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>Reports must follow the tax settings consistently and only ever add up home-currency amounts. Run your test data through each tax setting, and include foreign-currency entries and a mid-month year start such as 6 April.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>Why aren't production costs subtracted in the per-event result?</div>
+      <p class="done"><strong>Done when:</strong> on-screen totals and exported files match your hand-checked test data, and exports open cleanly in Excel and Google Sheets.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 6</span>
+      <h3>Make it installable</h3>
+      <p class="muted small">Read first: <a href="#pwa">§15</a></p>
+      <h4>You'll learn</h4>
+      <p>Manifests, service workers, caching and how app updates reach users.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Add the manifest and icons. Design the icon at 512×512.</li>
+        <li>Add a service worker that caches only the app's own files.</li>
+        <li>Deploy to a preview address and install the app on an iPhone and an Android phone.</li>
+        <li>Add an "Install this app" help screen for iPhone users.</li>
+        <li>Deploy a small change and confirm installed copies pick it up.</li>
+      </ol>
+      <div class="callout check"><strong class="label">Check yourself</strong>What does the service worker cache, and why shouldn't it cache transactions?</div>
+      <p class="done"><strong>Done when:</strong> the app installs and runs full-screen on both phone types, and updates arrive without reinstalling.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 7</span>
+      <h3>Receipt photos</h3>
+      <p class="muted small">Read first: <a href="#receipts">§11</a></p>
+      <h4>You'll learn</h4>
+      <p>File uploads, storage buckets and their policies, signed links and image previews.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Create a private <code>receipts</code> bucket with account-folder policies that use the permission function.</li>
+        <li>Add the file input (camera, library and PDF; multiple files).</li>
+        <li>Upload originals untouched, create previews, and save the <code>receipts</code> row with hash and metadata.</li>
+        <li>Attach a receipt to an expense, entered manually for now, and view it through a signed link.</li>
+        <li>Add duplicate-file warnings and soft delete.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>Test uploads from an iPhone's photo library (HEIC) and camera, and from a PDF, inside the installed app.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>Could another user open one of your receipts if they guessed its path? Why not?</div>
+      <p class="done"><strong>Done when:</strong> receipts upload from camera, library and files, originals are unchanged byte for byte, and only account members with permission can view them.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 8</span>
+      <h3>Reading receipts automatically</h3>
+      <p class="muted small">Read first: <a href="#receipts">§11</a></p>
+      <h4>You'll learn</h4>
+      <p>Calling an AI API from the server, structured outputs, validating untrusted data and designing a review screen.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Collect 30–50 real receipts (anonymised) with the correct answers written down.</li>
+        <li>Write a server route that sends a preview to the AI and asks for structured fields plus a category from your list.</li>
+        <li>Validate the response, then show the side-by-side review form.</li>
+        <li>Track extraction status, errors and which fields users corrected.</li>
+        <li>Run your test set, note accuracy and cost per receipt, and adjust.</li>
+      </ol>
+      <h4>Watch out</h4>
+      <p>Keep the AI key on the server only. Add a per-user daily limit so a bug or abuse can't run up a large bill.</p>
+      <div class="callout check"><strong class="label">Check yourself</strong>What happens if the AI service is down when an artist uploads a receipt?</div>
+      <p class="done"><strong>Done when:</strong> most receipts need little or no correction, failures fall back to manual entry, and nothing is saved without the artist confirming.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 9</span>
+      <h3>CSV import</h3>
+      <p class="muted small">Read first: <a href="#import">§13</a></p>
+      <h4>You'll learn</h4>
+      <p>Parsing files, data cleaning, staging tables, transactions (all-or-nothing saves) and idempotency.</p>
+      <h4>Steps</h4>
+      <ol>
+        <li>Download real sales exports from Square, Etsy, Stripe, Shopify or Patreon test accounts to practise on, including one in a foreign currency.</li>
+        <li>Build upload → parse → column mapping (with saved presets) → staged preview → commit → undo.</li>
+        <li>Handle dates, amounts, currencies, refunds, payouts and duplicates as described in §13.</li>
+        <li>Import the same file twice. The second import should add nothing.</li>
+      </ol>
+      <div class="callout check"><strong class="label">Check yourself</strong>How does the app know a row was already imported when the file has no transaction IDs?</div>
+      <p class="done"><strong>Done when:</strong> a real export imports correctly, re-importing creates no duplicates, and any import can be undone.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag later">Stage 10 · Optional</span>
+      <h3>Offline queue for market days</h3>
+      <p class="muted small">Read first: <a href="#pwa">§15</a></p>
+      <p>Build this only if artists say signal at markets is a real problem. Queue receipt photos and cash sales on the phone with unique IDs, upload when back online, retry when the app opens, and show what's pending. Test in airplane mode, after closing the app and with a half-finished upload.</p>
+      <p class="done"><strong>Done when:</strong> sales and photos captured offline appear exactly once after reconnecting.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Stage 11</span>
+      <h3>Getting ready for real users</h3>
+      <h4>Steps</h4>
+      <ol>
+        <li>Move hosting to paid plans before charging anyone (<a href="#costs">§18</a>). Keep a separate free Supabase project for development.</li>
+        <li>Set up custom SMTP so login codes reach anyone, and send a test to Gmail, Outlook and iCloud addresses.</li>
+        <li>Set up the scheduled off-site copy of receipt files, and practise restoring both the database and a receipt.</li>
+        <li>Add error monitoring that doesn't record receipt contents or amounts.</li>
+        <li>Work through <a href="#privacy">§16</a>: data map, privacy policy and terms (with a data processing agreement), provider agreements, breach response plan and a Singapore data protection officer. Confirm the sign-up country list excludes the EU and UK. Then have a privacy lawyer review it all.</li>
+        <li>Check the tax wording, default rates and financial-year defaults for each country you'll market to.</li>
+        <li>Confirm your exchange-rate provider covers every home currency you allow, and that its terms permit commercial use.</li>
+        <li>Arrange a security review of RLS, storage policies and route handlers.</li>
+        <li>Run the full <a href="#testing">testing checklist</a> with a few friendly artists.</li>
+      </ol>
+      <p class="done"><strong>Done when:</strong> you can recover from a failure, explain how data is protected, and new users can sign up without your help.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag later">Stage 12 · After launch</span>
+      <h3>Forward-to-email receipt inbox</h3>
+      <p>Each artist gets a private address (e.g. <code>receipts+k7f2q@yourdomain</code>). An inbound-email service receives the message and calls one of your route handlers, which checks the sender is a verified address for that artist. Attachments then go through the same receipt pipeline as uploads, into the review queue. Plan for spam, size limits and invoices sent as links rather than attachments.</p>
+    </div>
+
+    <div class="stage">
+      <span class="tag later">Stage 13 · When artists ask</span>
+      <h3>Square, then Stripe</h3>
+      <p>Follow <a href="#future">§14</a>. Start with Square (read-only OAuth), reuse the import pipeline and <code>external_id</code> rules, verify webhooks, and add Disconnect. Approach Stripe once you've confirmed the Extension or App registration path.</p>
+    </div>
+  </section>
+
+  <!-- ===================== PART D ===================== -->
+  <div class="part-title">Part D · Reference</div>
+
+  <section id="costs">
+    <h2>18. Running costs</h2>
+    <p>Prices checked 22 October 2026. Both services bill in US dollars, so Australian prices move with the exchange rate (about A$1.43 per US$1 on that date). Vercel's prices exclude taxes such as GST.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Service</th><th>While learning and building</th><th>Once you have paying users</th></tr></thead>
+        <tbody>
+          <tr><td>Vercel</td><td><strong>Hobby, free.</strong> Personal, non-commercial use only.</td><td><strong>Pro, US$20/month per developer seat</strong> (≈ A$29), including US$20 of monthly usage credit. Pay as you go above that.</td></tr>
+          <tr><td>Supabase</td><td><strong>Free:</strong> 500 MB database, 1 GB file storage, 5 GB egress, no automatic backups, paused after a week of inactivity, maximum 2 projects.</td><td><strong>Pro, from US$25/month</strong> (≈ A$36), including US$10 compute credit, 8 GB database, 100 GB file storage, 250 GB egress, daily backups kept 7 days, never paused. Extra storage about US$0.02 per GB per month.</td></tr>
+          <tr><td>Login email (SMTP)</td><td>Not needed</td><td>Several providers have free tiers suitable for low volume. Check current limits.</td></tr>
+          <tr><td>Receipt-reading AI</td><td>A few dollars while testing</td><td>Usage-based per receipt. Measure your own cost per receipt in Stage 8 before setting prices.</td></tr>
+          <tr><td>Exchange rates</td><td>Free central-bank rates are enough for testing</td><td>Free or low cost at small volumes; paid plans for wide currency coverage and historical lookups. Check commercial-use terms.</td></tr>
+          <tr><td>Receipt backup copy</td><td>Not needed</td><td>Low: object storage is typically cents per GB per month.</td></tr>
+          <tr><td>Domain name</td><td>Optional</td><td>Annual fee, varies by domain ending.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Rough baseline at launch:</strong> about US$45/month (≈ A$64) for Vercel Pro plus Supabase Pro, plus GST where it applies, email, AI and backup costs. These scale with usage.</p>
+    <h3>Will storage get expensive?</h3>
+    <p>Suppose an active artist uploads 300 receipts a year at about 3 MB each. That's roughly 1 GB per artist per year, so Supabase Pro's 100 GB covers around 100 artist-years of originals. After that, extra storage costs cents per GB. Storage is unlikely to be your biggest cost; AI processing and your own support time probably will be.</p>
+    <div class="callout why">
+      <strong class="label">Pricing your app</strong>
+      Before choosing a subscription price, estimate cost per artist per month: hosting share, AI cost per receipt × receipts per month, storage, email, payment-processing fees on your own subscriptions, and support time. Re-check after your first 20 real users.
+    </div>
+  </section>
+
+  <section id="testing">
+    <h2>19. Testing checklist</h2>
+    <h3>Money and dates</h3>
+    <ul class="checklist">
+      <li>Transactions on 30 June and 1 July land in the correct financial years.</li>
+      <li>A calendar-year account (e.g. US or Singapore) and a mid-month start (e.g. 6 April) put boundary dates in the right years.</li>
+      <li>Dates display in each person's local format but are stored as <code>YYYY-MM-DD</code>.</li>
+      <li>A late-night entry in Perth and an early-morning entry in Sydney get the right local date.</li>
+      <li>Changing the time zone in Settings doesn't change existing dates.</li>
+      <li>Reports are correct under each tax setting, against hand-checked test data.</li>
+      <li>Refunds reduce income, payouts are never counted as income, and fees appear as costs.</li>
+      <li>Event results exclude production costs and say so.</li>
+    </ul>
+    <h3>Currencies</h3>
+    <ul class="checklist">
+      <li>A weekend-dated foreign receipt uses the previous published rate and shows which date it came from.</li>
+      <li>Saved home amounts don't change when new rates arrive.</li>
+      <li>An artist-entered home amount is kept exactly, with the rate worked out from it.</li>
+      <li>Yen (no decimals) and a three-decimal currency store and display correctly.</li>
+      <li><code>12,50</code> typed with a European number format is read as 12.50.</li>
+      <li>Report and export totals match hand-checked home-currency totals.</li>
+    </ul>
+    <h3>Privacy and security</h3>
+    <ul class="checklist">
+      <li>Two-account test passes for every table, every route handler and every stored file.</li>
+      <li>A test helper with only "add sales" can add sales, but can't see reports, other entries or settings, or change their own permissions.</li>
+      <li>Removing a member cuts off their access immediately.</li>
+      <li>No secret keys in browser code, Git history or logs.</li>
+      <li>Login works inside the installed iPhone app using the emailed code.</li>
+      <li>Database and receipt-backup restores have been practised.</li>
+    </ul>
+    <h3>Privacy</h3>
+    <ul class="checklist">
+      <li>Deleting an account removes its data and files within the stated period, apart from backups that expire on schedule.</li>
+      <li>A user's exports contain all the personal data the app holds about them.</li>
+      <li>The accepted policy version, and marketing opt-in, are recorded for every user.</li>
+      <li>CSV imports drop customer names, emails and addresses unless the artist deliberately maps them.</li>
+      <li>The breach response plan has been rehearsed once.</li>
+    </ul>
+    <h3>Receipts and imports</h3>
+    <ul class="checklist">
+      <li>Camera, photo library (including HEIC) and PDF all work on iPhone and Android, inside the installed app.</li>
+      <li>Stored originals are byte-for-byte identical to what was uploaded.</li>
+      <li>Nothing from the AI is saved without the artist confirming. Manual entry works when the AI fails.</li>
+      <li>Importing the same CSV twice adds nothing. Undoing an import removes exactly that batch.</li>
+      <li>Exported CSVs open correctly in Excel and Google Sheets, and text starting with <code>=</code> doesn't run as a formula.</li>
+    </ul>
+    <h3>Everyday use</h3>
+    <ul class="checklist">
+      <li>A cash sale can be logged in a few seconds with one hand.</li>
+      <li>Buttons are large enough to tap, text is readable outdoors, and the app works with a screen reader and keyboard.</li>
+      <li>New deployments reach installed apps without reinstalling.</li>
+    </ul>
+  </section>
+
+  <section id="glossary">
+    <h2>20. Glossary</h2>
+    <dl class="glossary">
+      <dt>Account and account member</dt><dd>An account is an artist's business and its records. A member is a person allowed into it, with a role and permissions.</dd>
+      <dt>Browser vs server code</dt><dd>Browser code runs on the user's device and can be inspected by anyone. Server code runs on your hosting and can safely hold secrets.</dd>
+      <dt>Calendar date vs timestamp</dt><dd>"1 July 2026" vs an exact instant like 1 July 2026 09:00 in Melbourne. Receipts and sales are recorded as calendar dates.</dd>
+      <dt>Controller and processor</dt><dd>The controller decides why and how personal data is used. A processor handles it on the controller's behalf. You're the controller for your users' details, and a processor for the customer details inside artists' records.</dd>
+      <dt>CRUD</dt><dd>Create, read, update, delete: the four basic things you do with records.</dd>
+      <dt>Data processing agreement (DPA)</dt><dd>A contract setting out how a processor may handle personal data for a controller. You accept one from each provider and offer one to your users.</dd>
+      <dt>Environment variables</dt><dd>Settings and keys stored outside your code, e.g. in <code>.env.local</code> locally or in hosting settings.</dd>
+      <dt>Home currency</dt><dd>The currency an account reports in. Every foreign amount is converted into it.</dd>
+      <dt>IANA time zone</dt><dd>A standard name like <code>Australia/Melbourne</code> that knows that region's daylight-saving rules.</dd>
+      <dt>Idempotent</dt><dd>Safe to repeat. Running an import or sync twice gives the same result as running it once.</dd>
+      <dt>Locked rate</dt><dd>The exchange rate saved with a transaction when it's entered. Later rate changes never alter it.</dd>
+      <dt>Migration</dt><dd>A saved, versioned file describing a change to your database structure.</dd>
+      <dt>Minor units</dt><dd>A currency's smallest unit, such as cents or pence. Money is stored as whole minor units to avoid rounding errors.</dd>
+      <dt>OAuth</dt><dd>The "Allow this app to access your account" approval flow used by Square, Stripe and Google.</dd>
+      <dt>OTP</dt><dd>One-time passcode: the 6-digit code emailed to the user at login.</dd>
+      <dt>PWA</dt><dd>Progressive Web App: a website that can be installed and behaves like an app.</dd>
+      <dt>Route handler</dt><dd>A server-side web address in your Next.js app that receives a request and returns a response.</dd>
+      <dt>RLS (Row Level Security)</dt><dd>Database rules that decide which rows each logged-in user can see or change.</dd>
+      <dt>Security definer function</dt><dd>A database function that runs with its creator's rights. Used carefully, it lets RLS policies check membership safely.</dd>
+      <dt>Service worker</dt><dd>A background script that can cache app files and make the app load quickly or partly offline.</dd>
+      <dt>Signed URL</dt><dd>A link to a private file that works for a short time only.</dd>
+      <dt>Staging table</dt><dd>A holding area where imported rows are checked before they become real records.</dd>
+      <dt>Webhook</dt><dd>A message another service sends to your server when something happens, e.g. a new Square payment.</dd>
+    </dl>
+  </section>
+
+  <section id="resources">
+    <h2>21. Official resources</h2>
+    <ul>
+      <li><a href="https://nextjs.org/docs/app/getting-started/installation">Next.js: Installation</a></li>
+      <li><a href="https://nextjs.org/docs/app/building-your-application/routing/route-handlers">Next.js: Route Handlers</a></li>
+      <li><a href="https://nextjs.org/docs/app/guides/progressive-web-apps">Next.js: Progressive Web Apps</a></li>
+      <li><a href="https://supabase.com/docs/guides/auth/server-side/nextjs">Supabase: Auth with Next.js (server-side)</a></li>
+      <li><a href="https://supabase.com/docs/guides/auth/auth-email-passwordless">Supabase: Passwordless email login (OTP)</a></li>
+      <li><a href="https://supabase.com/docs/guides/auth/auth-smtp">Supabase: Custom SMTP</a></li>
+      <li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security">Supabase: Row Level Security</a></li>
+      <li><a href="https://supabase.com/docs/guides/storage/security/access-control">Supabase: Storage access control</a></li>
+      <li><a href="https://supabase.com/docs/guides/platform/backups">Supabase: Backups</a></li>
+      <li><a href="https://supabase.com/pricing">Supabase: Pricing</a> · <a href="https://vercel.com/pricing">Vercel: Pricing</a></li>
+      <li><a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps">MDN: Progressive Web Apps</a></li>
+      <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file">MDN: File input</a></li>
+      <li><a href="https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/record-keeping-for-business">ATO: Record keeping for business</a></li>
+      <li><a href="https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/registering-for-gst">ATO: Registering for GST</a></li>
+      <li><a href="https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html">European Central Bank: Euro reference exchange rates</a> · <a href="https://www.rba.gov.au/statistics/frequency/exchange-rates.html">RBA: Exchange rates</a></li>
+      <li><a href="https://www.iso.org/iso-4217-currency-codes.html">ISO 4217: Currency codes</a> · <a href="https://www.iana.org/time-zones">IANA: Time zone database</a></li>
+      <li><a href="https://www.oaic.gov.au/privacy/australian-privacy-principles">OAIC: Australian Privacy Principles</a> · <a href="https://www.pdpc.gov.sg/">Singapore PDPC</a> · <a href="https://www.pdp.gov.my/">Malaysia Personal Data Protection Department</a></li>
+      <li><a href="https://www.ftc.gov/business-guidance/privacy-security">US FTC: Privacy and security guidance</a></li>
+      <li><a href="https://webkit.org/blog/14403/updates-to-storage-policy/">WebKit: Storage policy</a> · <a href="https://developers.google.com/workspace/drive/api/guides/api-specific-auth">Google: Drive API scopes</a></li>
+      <li><a href="https://www.oaic.gov.au/privacy/privacy-guidance-for-organisations-and-government-agencies/organisations/small-business">OAIC: Small business and privacy</a></li>
+      <li><a href="https://developer.squareup.com/docs/oauth-api/overview">Square: OAuth overview</a> · <a href="https://docs.stripe.com/connect/oauth-changes-for-standard-platforms">Stripe: OAuth access rules</a></li>
+    </ul>
+    <p class="muted small">Prices, plan limits, APIs and legal requirements change. Check the current official pages before each stage, especially before launch.</p>
+  </section>
+</main>
+<footer>
+  <p>Artist Finance App — Build Guide · Version 5 · 23 October 2026 · For planning and learning; not legal, tax, accounting or security advice.</p>
+</footer>
+</body>
+</html>
