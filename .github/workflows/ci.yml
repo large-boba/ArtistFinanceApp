@@ -7,18 +7,37 @@ on:
 permissions:
   contents: read
 
+# Both jobs read the Node version from .nvmrc, so there is one place to change it.
+# No secrets are needed by any step.
+
 jobs:
   rules:
     name: Project rules
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
       - name: Rule checker and guard tests
         run: node --test scripts/*.test.mjs
       - name: Check the repository against the build guide's rules
         run: node scripts/check-rules.mjs
-      # Stage 0 adds: npm ci, lint, typecheck, unit tests. Later stages add
-      # supabase test db (Stage 2+) and Playwright (when e2e tests exist).
+
+  app:
+    name: App (lint, typecheck, rules, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies from package-lock.json
+        run: npm ci
+      - name: Lint, typecheck, rule checks and their tests
+        run: npm run check
+      - name: Production build
+        run: npm run build
+      # Later stages add: unit tests (Stage 1), supabase test db (Stage 2+)
+      # and Playwright (when e2e tests exist).
