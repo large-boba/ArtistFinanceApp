@@ -1,6 +1,0 @@
-{
-  "name": "Bento Budget",
-  "description": "An AI-powered budget tracker that extracts data from receipt photos and provides a visual dashboard of your spending.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": []
-}
