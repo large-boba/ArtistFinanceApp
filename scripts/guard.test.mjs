@@ -230,6 +230,7 @@ test("extra words after a script name and scoped package names are checked (T0.5
   const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-cf3-`);
   nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: {
     preview: "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    deploy: "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
   } }));
   const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
@@ -239,7 +240,11 @@ test("extra words after a script name and scoped package names are checked (T0.5
     "npx @opennextjs/cloudflare deploy", "npx -y @opennextjs/cloudflare@latest preview --remote",
     "bunx @opennextjs/cloudflare deploy", "pnpm dlx @opennextjs/cloudflare deploy",
     "npm exec @opennextjs/cloudflare deploy", "npx -c 'wrangler deploy'", "npm exec -c 'wrangler deploy'",
+    // Options with values before the subcommand, and --call= (final security check).
+    `npm --prefix ${projectDir} run deploy`, "npm -C . run deploy", "pnpm --dir . deploy",
+    "pnpm --filter web deploy", `npx --call="wrangler deploy"`, `npm exec --call="wrangler deploy"`,
   ]) assert.ok(run(cmd), cmd);
+  assert.equal(run(`npm --prefix ${projectDir} run preview`), null);
   for (const cmd of [
     "npm run preview", "pnpm preview", "npx @opennextjs/cloudflare build",
     "npx -p wrangler wrangler dev", "npx --yes wrangler@4 types", "npm exec -- wrangler dev",

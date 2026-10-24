@@ -20,9 +20,9 @@ What each tool does:
 | 2 | `.env.local` is ignored by Git before any keys exist | `git check-ignore -v .env.local` shows `.gitignore:3` |
 | 3 | CI runs lint, typecheck, rule checks and build on every push, and is green | CI run #14 on `f3f3dfb`: success |
 | 4 | The owner has run the app locally, changed some text and seen it update | NEEDS OWNER |
-| 5 | The first app commit is on GitHub | `54bc667` pushed to the working branch (reaches `main` when the owner merges PR #1) |
+| 5 | The first app commit is on GitHub | `54bc667`, merged to `main` in PR #1 |
 | 6 | `main` is protected on GitHub: PR plus green CI required, no force pushes (team addition, not in the guide) | NEEDS OWNER |
-| 7 | The app builds for Cloudflare and runs in a local Cloudflare preview; CI checks the Cloudflare build (owner-requested addition) | |
+| 7 | The app builds for Cloudflare and runs in a local Cloudflare preview; CI checks the Cloudflare build (owner-requested addition) | T0.5: preview returned 200; CI Cloudflare step green |
 | 8 | The owner can open the app at a Cloudflare preview URL | NEEDS OWNER |
 
 ## Task cards
@@ -79,7 +79,7 @@ Steps for the owner:
 Done when: the owner confirms it worked.
 Evidence:
 
-### T0.5 — Host on Cloudflare: adapter, config and local preview   Status: building
+### T0.5 — Host on Cloudflare: adapter, config and local preview   Status: done
 Owner agent: backend-engineer   Tests: none. Hosting configuration; proven by the Cloudflare build, the local preview and CI   Security review: yes. It touches secrets handling (`.dev.vars`) and deploy configuration
 Guide: §4 (architecture; hosting replaced per `DECISIONS.md` 2026-10-24), §15 (PWA comes later, so don't add caching now), §17 Stage 0/6
 Why now: the owner wants to preview the app on Cloudflare. In the guide, a hosted preview first appears in Stage 6. The owner has brought hosting forward; this card doesn't bring forward any other Stage 6 work (manifest, service worker).
@@ -115,9 +115,18 @@ Done when:
 - `npm run build` (plain Next.js) still passes;
 - CI is green with the new step;
 - `git status` shows no build output or secrets.
-Evidence:
+Evidence: commits `b6297ec`, `6a8b3cc` (builder) and `8977204`, `9efd734`, `4a9009f` plus the final guard commit (the lead's guardrails).
+- Lead re-run: `npm run check` exit 0 (check-rules 0 errors, 60/60 guardrail tests).
+- Builder evidence: `opennextjs-cloudflare build` succeeded; the local preview returned 200 with the starter page at localhost:8787; `npm run build` passed.
+- CI: green on every T0.5 commit, including the new Cloudflare build step (runs #19, #21, #23).
+- Code review: round 1 found 1 blocking issue (generated `cloudflare-env.d.ts` broke `check`), now fixed and confirmed in the re-review.
+- Security review:
+  - approved T0.5;
+  - its hardening notes were taken: deploy only from Cloudflare's Git build, and an accurate comment for `global_fetch_strictly_public`;
+  - three verification rounds on the lead's guardrails closed several more bypasses: extra script arguments, scoped package names, `wrangler2`, `node <path>`, `--prefix`, `--call=`;
+  - npm audit findings were accepted and recorded in `DECISIONS.md`.
 
-### T0.6 — Owner connects the repo to Cloudflare            Status: todo
+### T0.6 — Owner connects the repo to Cloudflare            Status: waiting on owner (steps sent 2026-10-24)
 Owner agent: **owner** (the lead prepares the steps after T0.5 is accepted)
 Outcome: Cloudflare builds the app from GitHub and gives a preview URL the owner can open on their phone.
 Done when: the owner opens the app at its Cloudflare URL.

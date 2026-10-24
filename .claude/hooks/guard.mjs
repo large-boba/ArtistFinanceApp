@@ -227,12 +227,22 @@ const shellJoin = (words) => words.map((w) => (/[\s"'$`;&|<>()]/.test(w) ? `'${w
 // npm/pnpm/yarn/bun: `run <script>` (and pnpm/yarn/bun `<script>`), or
 // `exec`/`dlx`/`x <bin>`. Returns words to check, or null. Words typed after
 // the script name are appended to the script, as the package manager does.
+// Options that take a value before the subcommand, e.g. `npm --prefix <dir> run x`.
+const PM_VALUE_OPTS = new Set(["--prefix", "-C", "--dir", "--cwd", "-w", "--workspace", "--filter", "-F", "--userconfig"]);
+
 function resolvePackageManager(name, args, ctx) {
   const rest = args.filter((a) => a !== "--");
-  const first = rest.find((a) => !a.startsWith("-"));
-  if (!first) return null;
-  const after = rest.slice(rest.indexOf(first) + 1);
+  let firstIdx = -1;
+  for (let i = 0; i < rest.length; i++) {
+    if (PM_VALUE_OPTS.has(rest[i])) { i++; continue; }
+    if (!rest[i].startsWith("-")) { firstIdx = i; break; }
+  }
+  if (firstIdx === -1) return null;
+  const first = rest[firstIdx];
+  const after = rest.slice(firstIdx + 1);
   if (["exec", "dlx", "x"].includes(first)) {
+    const callEq = after.find((a) => a.startsWith("--call="));
+    if (callEq) return { script: callEq.slice("--call=".length) };
     const call = after.findIndex((a) => a === "-c" || a === "--call");
     if (call !== -1 && after[call + 1]) return { script: after[call + 1] };
     const words = [];
@@ -279,6 +289,8 @@ function checkWords(rawWords, ctx, depth) {
     }
     if (RUNNERS.has(name)) {
       // `npx -c 'wrangler deploy'` runs a whole command line.
+      const callEq = args.find((a) => a.startsWith("--call="));
+      if (callEq) return evaluateCommand(callEq.slice("--call=".length), ctx, depth + 1);
       const call = args.findIndex((a) => a === "-c" || a === "--call");
       if (call !== -1 && args[call + 1]) return evaluateCommand(args[call + 1], ctx, depth + 1);
       let idx = -1;

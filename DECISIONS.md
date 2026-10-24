@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 0 — Set up your workshop (in progress, see `docs/stages/stage-00.md`)
 - **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
-- **In progress:** T0.5 Cloudflare hosting setup → backend-engineer. T0.1 and T0.2 are done; T0.3 and T0.4 need the owner.
+- **In progress:** T0.1, T0.2 and T0.5 are done. Waiting on the owner for T0.3 (run locally), T0.4 (protect main) and T0.6 (connect Cloudflare). PR #1 merged; Stage 0 follow-up work is in PR #2.
 - **Blocked:** —
 
 ## Decided
