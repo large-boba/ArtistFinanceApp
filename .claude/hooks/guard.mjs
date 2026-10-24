@@ -212,19 +212,45 @@ function readPackageScripts(projectDir) {
   }
 }
 
+// A package name as typed to npx/dlx -> the command it runs. Strips only a
+// version suffix (so `@opennextjs/cloudflare@latest` keeps its scope) and maps
+// packages whose command name differs from the package name.
+const PACKAGE_BINS = { "@opennextjs/cloudflare": "opennextjs-cloudflare" };
+function binName(word) {
+  const pkg = word.replace(/(?<=.)@[^/]*$/, "");
+  return PACKAGE_BINS[pkg] ?? pkg;
+}
+
+// Quote words when rebuilding a command line, so they stay single words.
+const shellJoin = (words) => words.map((w) => (/[\s"'$`;&|<>()]/.test(w) ? `'${w.replace(/'/g, "'\\''")}'` : w)).join(" ");
+
 // npm/pnpm/yarn/bun: `run <script>` (and pnpm/yarn/bun `<script>`), or
-// `exec`/`dlx`/`x <bin>`. Returns words to check, or null.
+// `exec`/`dlx`/`x <bin>`. Returns words to check, or null. Words typed after
+// the script name are appended to the script, as the package manager does.
 function resolvePackageManager(name, args, ctx) {
   const rest = args.filter((a) => a !== "--");
   const first = rest.find((a) => !a.startsWith("-"));
   if (!first) return null;
   const after = rest.slice(rest.indexOf(first) + 1);
-  if (["exec", "dlx", "x"].includes(first)) return { words: after.filter((a) => !a.startsWith("-") || after.indexOf(a) > 0) };
+  if (["exec", "dlx", "x"].includes(first)) {
+    const call = after.findIndex((a) => a === "-c" || a === "--call");
+    if (call !== -1 && after[call + 1]) return { script: after[call + 1] };
+    const words = [];
+    for (let i = 0; i < after.length; i++) {
+      if (["-p", "--package"].includes(after[i])) { i++; continue; }
+      if (words.length === 0 && after[i].startsWith("-")) continue; // runner's own flags
+      words.push(after[i]);
+    }
+    return { words };
+  }
   const scripts = readPackageScripts(ctx.projectDir);
   let scriptName = null;
   if (["run", "run-script"].includes(first)) scriptName = after.find((a) => !a.startsWith("-"));
   else if (name !== "npm" && scripts[first] !== undefined) scriptName = first;
-  if (scriptName && scripts[scriptName] !== undefined) return { script: scripts[scriptName] };
+  if (scriptName && scripts[scriptName] !== undefined) {
+    const extra = args.slice(args.indexOf(scriptName) + 1).filter((a) => a !== "--");
+    return { script: extra.length ? `${scripts[scriptName]} ${shellJoin(extra)}` : scripts[scriptName] };
+  }
   if (name !== "npm" && first === "supabase") return { words: after.length ? ["supabase", ...after] : ["supabase"] };
   if (name !== "npm" && ["vercel", "gh", "git", "wrangler", "wrangler2", "opennextjs-cloudflare"].includes(first)) return { words: [first, ...after] };
   return null;
@@ -252,14 +278,22 @@ function checkWords(rawWords, ctx, depth) {
       if (flag !== -1 && args[flag + 1]) return evaluateCommand(args[flag + 1], ctx, depth + 1);
     }
     if (RUNNERS.has(name)) {
-      const idx = args.findIndex((a) => !a.startsWith("-"));
-      if (idx !== -1) return checkWords([args[idx].replace(/@.*$/, ""), ...args.slice(idx + 1).filter((a) => a !== "--")], ctx, depth + 1);
+      // `npx -c 'wrangler deploy'` runs a whole command line.
+      const call = args.findIndex((a) => a === "-c" || a === "--call");
+      if (call !== -1 && args[call + 1]) return evaluateCommand(args[call + 1], ctx, depth + 1);
+      let idx = -1;
+      for (let i = 0; i < args.length; i++) {
+        if (["-p", "--package"].includes(args[i])) { i++; continue; } // the package to install, not the command
+        if (args[i] === "--") continue;
+        if (!args[i].startsWith("-")) { idx = i; break; }
+      }
+      if (idx !== -1) return checkWords([binName(args[idx]), ...args.slice(idx + 1).filter((a) => a !== "--")], ctx, depth + 1);
       return null;
     }
     if (PACKAGE_MANAGERS.has(name)) {
       const target = resolvePackageManager(name, args, ctx);
       if (target?.script !== undefined) return evaluateCommand(target.script, ctx, depth + 1);
-      if (target?.words?.length) return checkWords([target.words[0].replace(/@.*$/, ""), ...target.words.slice(1)], ctx, depth + 1);
+      if (target?.words?.length) return checkWords([binName(target.words[0]), ...target.words.slice(1)], ctx, depth + 1);
     }
   }
   if (name === "git") return checkGit(args, ctx.branch);

@@ -31,7 +31,10 @@ const SECRET_NAME = /(SECRET|SERVICE_ROLE|PRIVATE|API_KEY|TOKEN|PASSWORD)/;
 const PUBLIC_KEY_NAME = /(PUBLISHABLE|ANON|PUBLIC)_KEY$/;
 const COLUMN_ITEM_SKIP = /^(constraint|primary|unique|foreign|check|exclude|like)\b/;
 
-const looksSecret = (name) => SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
+const looksSecret = (rawName) => {
+  const name = rawName.toUpperCase();
+  return SECRET_NAME.test(name) || (/KEY$/.test(name) && !PUBLIC_KEY_NAME.test(name));
+};
 // Keys designed to be public (e.g. web-push VAPID public keys) are fine.
 
 export function findingsForFile(filePath, text) {
@@ -353,13 +356,13 @@ function checkWranglerConfig(text, filePath = "wrangler.jsonc") {
     let offset = 0;
     for (const line of text.split("\n")) {
       const code = line.replace(/\s+#.*$/, "").trim();
-      if (code.startsWith("[")) inVarsTable = /^\[(env\.[\w.-]+\.)?vars\]$/.test(code);
+      if (code.startsWith("[")) inVarsTable = /^\[\s*(env\.[\w.-]+\.)?vars\s*\]$/.test(code.replace(/\s*\.\s*/g, "."));
       else if (inVarsTable) {
-        const m = code.match(/^"?([A-Za-z0-9_]+)"?\s*=/);
+        const m = code.match(/^["']?([A-Za-z0-9_]+)["']?\s*=/);
         if (m) flag(m[1], offset);
       }
       const inline = code.match(/^vars\s*=\s*\{(.*)\}/);
-      if (inline) for (const k of inline[1].matchAll(/"?([A-Za-z0-9_]+)"?\s*=/g)) flag(k[1], offset);
+      if (inline) for (const k of inline[1].matchAll(/["']?([A-Za-z0-9_]+)["']?\s*=/g)) flag(k[1], offset);
       offset += line.length + 1;
     }
     return findings;

@@ -226,6 +226,27 @@ test("npm scripts that deploy to Cloudflare are blocked", () => {
   nodeFs.rmSync(projectDir, { recursive: true, force: true });
 });
 
+test("extra words after a script name and scoped package names are checked (T0.5 review round 3)", () => {
+  const projectDir = nodeFs.mkdtempSync(`${os.tmpdir()}/guard-cf3-`);
+  nodeFs.writeFileSync(`${projectDir}/package.json`, JSON.stringify({ scripts: {
+    preview: "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+  } }));
+  const run = (command) => evaluate({ tool_name: "Bash", tool_input: { command } }, { currentBranch: () => "claude/x", projectDir });
+  for (const cmd of [
+    "npm run preview -- --remote", "npm run preview -- -r", "pnpm preview --remote",
+    "yarn run preview --remote", "bun run preview --remote", "npm run cf-typegen -- --remote",
+    "npx @opennextjs/cloudflare deploy", "npx -y @opennextjs/cloudflare@latest preview --remote",
+    "bunx @opennextjs/cloudflare deploy", "pnpm dlx @opennextjs/cloudflare deploy",
+    "npm exec @opennextjs/cloudflare deploy", "npx -c 'wrangler deploy'", "npm exec -c 'wrangler deploy'",
+  ]) assert.ok(run(cmd), cmd);
+  for (const cmd of [
+    "npm run preview", "pnpm preview", "npx @opennextjs/cloudflare build",
+    "npx -p wrangler wrangler dev", "npx --yes wrangler@4 types", "npm exec -- wrangler dev",
+  ]) assert.equal(run(cmd), null, cmd);
+  nodeFs.rmSync(projectDir, { recursive: true, force: true });
+});
+
 test("recursive grep must exclude secret files", () => {
   assert.ok(bash("grep -rn SERVICE_ROLE ."));
   assert.ok(bash("grep --recursive KEY ."));

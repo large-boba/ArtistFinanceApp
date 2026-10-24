@@ -256,6 +256,11 @@ test("wrangler vars are checked however they're laid out (review round 2)", () =
   assert.deepEqual(errorRules("wrangler.jsonc", `{ "env": { "preview": { "vars": { "PRIVATE_KEY": "x" } } } }`), ["no-secret-in-wrangler-vars"]);
 });
 
+test("lowercase and quoted secret names in wrangler vars are checked", () => {
+  assert.deepEqual(errorRules("wrangler.jsonc", `{ "vars": { "secret_token": "x" } }`), ["no-secret-in-wrangler-vars"]);
+  assert.deepEqual(errorRules("wrangler.toml", `[ vars ]\n'API_TOKEN' = "x"\n`), ["no-secret-in-wrangler-vars"]);
+});
+
 test("TOML vars with comments and inline tables are checked", () => {
   assert.deepEqual(errorRules("wrangler.toml", `[vars] # settings\nAPI_TOKEN = "x"\n`), ["no-secret-in-wrangler-vars"]);
   assert.deepEqual(errorRules("wrangler.toml", `name = "x"\nvars = { API_TOKEN = "x", APP_ENV = "y" }\n`), ["no-secret-in-wrangler-vars"]);
