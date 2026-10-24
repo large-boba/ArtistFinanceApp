@@ -12,6 +12,7 @@ A finance app for artists: an installable web app (PWA) for tracking expenses, i
 - Don't edit tests written by `test-engineer` to make your code pass. Report a disputed test to the lead.
 - Before reporting, run `npm run check` (before Stage 0 adds it: `node scripts/check-rules.mjs && node --test scripts/*.test.mjs`). Paste real output. Say plainly when a check couldn't run.
 - Explain what your code does in plain English. The owner is learning as they build.
+- **Next.js 16 differs from older versions.** Before writing Next.js code, read the matching guide in `node_modules/next/dist/docs/` (see `AGENTS.md`). The cloud container can't always reach nextjs.org, and the bundled docs match the installed version exactly.
 
 ## Rules that are easy to get wrong
 

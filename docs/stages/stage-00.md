@@ -25,7 +25,7 @@ What each tool does:
 
 ## Task cards
 
-### T0.1 — Scaffold the Next.js app                      Status: building
+### T0.1 — Scaffold the Next.js app                      Status: done
 Owner agent: frontend-engineer   Tests: none. This is generated scaffolding; it's verified by build, lint and the rule checks   Security review: no. No auth, data or secrets yet
 Guide: §17 Stage 0 step 3, §4
 Outcome: A fresh Next.js app in the repo root, created with the current `create-next-app`. Options: TypeScript, ESLint, Tailwind CSS, App Router, `src/` directory, import alias `@/*`, npm.
@@ -33,13 +33,24 @@ Context: The repo already holds `CLAUDE.md`, `DECISIONS.md`, `.gitignore`, `docs
 Rules that apply: one new thing at a time (no extra libraries); never commit `.env*.local`; `scripts/check-rules.mjs` must pass.
 Out of scope: Vitest, Supabase, Zod, any screens beyond the starter page, PWA files.
 Done when: `npm run build` succeeds; `npm run lint` passes; `node scripts/check-rules.mjs` passes; `git check-ignore -v .env.local` shows it's ignored; the installed Next.js, React, TypeScript and Tailwind versions are listed in the report so the lead can record them in `DECISIONS.md`.
-Evidence:
+Evidence: commit `54bc667`. The lead re-ran every check:
+- `npm run lint` exits 0;
+- `npm run build` reports "Compiled successfully" and the routes `/` and `/_not-found` are static;
+- `check-rules` reports 0 errors and 0 warnings;
+- the guardrail tests are 52/52;
+- `.env.local` is ignored (`.gitignore:3`) and `.env.example` is not.
 
-### T0.2 — One command for all checks, and CI to run it   Status: todo
+The code reviewer approved with no blocking findings. Optional follow-ups:
+- the typecheck needs `next typegen` first (moved into T0.2);
+- `AGENTS.md` is now referenced from `CLAUDE.md`;
+- the README was replaced;
+- the page title is left for Stage 1.
+
+### T0.2 — One command for all checks, and CI to run it   Status: building
 Owner agent: backend-engineer   Tests: none. Tooling configuration; proven by running it and by CI   Security review: no
 Guide: §1 (habits), §17 Stage 0
 Outcome: These scripts in `package.json`:
-- `typecheck` runs `tsc --noEmit`;
+- `typecheck` runs `next typegen && tsc --noEmit`. On a fresh checkout, a plain `tsc --noEmit` fails with "Cannot find name 'LayoutProps'", because Next generates those types (T0.1 review);
 - `rules` runs `node scripts/check-rules.mjs && node --test scripts/*.test.mjs`;
 - `check` runs `npm run lint && npm run typecheck && npm run rules`.
 
