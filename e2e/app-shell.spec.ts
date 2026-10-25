@@ -76,7 +76,8 @@
 //     phone (390 px wide), with the root font size at 150% and at 200%, on
 //     every page: all five nav links are fully on screen horizontally
 //     (0 ≤ left, right ≤ 390, within 1 px), each is still at least 44×44 px,
-//     each can be tapped and opens its page, and the page doesn't scroll
+//     each can be tapped and opens its page (scrolled to first when the nav
+//     isn't pinned, see 15), and the page doesn't scroll
 //     sideways (scrollWidth ≤ clientWidth). The tests set
 //     `document.documentElement.style.fontSize`, the way a browser text-size
 //     setting scales everything sized in rem. Labels may wrap, shrink to an
@@ -90,20 +91,42 @@
 //     can scroll them up), are fully on screen and end at or above the nav's
 //     top edge. Both are still at least 44×44 px and inside 0–390 px.
 //
-// 15. Short and landscape screens (WCAG 2.4.11 Focus not obscured; lead's
-//     design decision after the T1.3 re-review). Tested in the phone project
-//     at 320×568, 568×320, 390×844 and 844×390, each at 100% and 200% text:
-//     - On a screen 700 CSS px tall or less, the nav is NOT sticky or fixed
-//       (neither it nor any ancestor has computed position sticky/fixed). It
-//       sits in the normal page flow after <main>, so it never covers
-//       content. Scrolled to the very bottom, the nav is the last thing on
-//       the page and all of <main>'s content ends above it.
-//     - On taller screens it stays sticky at the bottom (the earlier tests at
-//       390×844 still apply), and the page must scroll a focused element
-//       clear of it (e.g. with scroll-padding-bottom).
+// 15. When the nav is pinned (WCAG 2.4.11 Focus not obscured; lead's
+//     decision for T1.3b, replacing T1.3's "700 px tall or less → static"
+//     rule). Tested in the phone project at 320×568, 568×320, 390×844,
+//     844×390, 390×664 (an iPhone's visible height in a Safari tab),
+//     375×667, 390×700 and 390×701, each at 100% and 200% text:
+//     - The 25% rule. Let H be the nav's own measured height (its border
+//       box, getBoundingClientRect().height, which is the same pinned or
+//       not) and V the visible screen height (window.innerHeight).
+//       If H ≤ 25% of V, the nav is sticky at the bottom of the screen: the
+//       nav or an ancestor has computed position sticky (or fixed), and its
+//       bottom edge stays on the bottom of the screen while a long page
+//       scrolls. Exactly 25% still counts as sticky.
+//       If H > 25% of V, the nav is NOT pinned: neither it nor any ancestor
+//       has computed position sticky or fixed. It sits in the normal page
+//       flow after <main>, so scrolled to the very bottom the nav is the
+//       last thing on the page and all of <main>'s content ends above it.
+//     - The rule follows the MEASURED height, live: if the nav grows or
+//       shrinks after the page loads (bigger text, or any style change), or
+//       only the screen height changes (rotation, a browser toolbar), the
+//       pinning is re-decided. The tests change the nav's size at runtime
+//       with an inline style to prove it.
+//     - Hand-worked expected outcomes for the main cases are written next to
+//       PINNING_CASES below. With T1.3's nav: every case at 100% text is
+//       sticky, and every case at 200% text is static.
+//     - Whenever the nav is sticky, the computed scroll-padding-bottom on
+//       <html> is at least the nav's height (0.01 px allowed for number
+//       formatting), so the browser scrolls a focused element clear of it.
+//       There must be no screen height where the nav is sticky without it
+//       (T1.3 had a gap between 700 and 701 px; Chromium can't be given a
+//       fractional viewport, so the tests check 700 and 701 each side).
+//     - The nav publishes its border-box height as the CSS variable --nav-h
+//       on <html>, and it updates when only the nav's padding changes (the
+//       content box alone would miss that).
 //     - Either way, pressing Tab through every focusable element in <main>
-//       leaves each one fully on screen and not overlapped by the nav at all.
-//       Nav links are exempt.
+//       leaves each one fully on screen and not overlapped by the nav at all,
+//       including on a long page. Nav links are exempt.
 //     - At 320 px wide and 200% text, no page scrolls sideways
 //       (scrollWidth ≤ clientWidth), and each page's h1 text stays inside
 //       0–320 px (long words like "Transactions" must wrap, not overflow or
@@ -689,7 +712,12 @@ test.describe("on a phone, the navigation still works with bigger text", () => {
         test.skip(testInfo.project.name !== "phone", "phone-layout claim");
         for (const tab of SCREENS) {
           await openWithTextSize(page, screen.path, size);
-          // A finger can only tap what's on screen.
+          // A finger can only tap what's on screen. At 200% the nav is taller
+          // than 25% of the 844 px screen (257 px = 30.5%), so under the
+          // T1.3b rule it isn't pinned and sits after the page content: a
+          // person scrolls down to it first. (A pinned nav is already on
+          // screen, so this scroll changes nothing for it.)
+          await navLink(page, tab.name).scrollIntoViewIfNeeded();
           await expect(navLink(page, tab.name), `"${tab.name}" is fully on screen`).toBeInViewport({
             ratio: 1,
           });
@@ -766,26 +794,197 @@ test.describe("on a phone, the navigation still works with bigger text", () => {
   }
 });
 
-// ---------- 15. short and landscape screens (WCAG 2.4.11) ----------
+// ---------- 15. when the nav is pinned: the 25% rule (WCAG 2.4.11) ----------
 
-const SHORT_SCREEN_MAX_HEIGHT_PX = 700;
+// The nav stays sticky unless its measured height is MORE than this share of
+// the visible screen height (lead's decision, T1.3b).
+const NAV_SHARE_LIMIT = 0.25;
+// Allowed difference when a pixel value comes back as a CSS string, e.g. a
+// height of 64.76190185 px written out as "64.7619px".
+const CSS_NUMBER_TOLERANCE_PX = 0.01;
+
 const SCREEN_SIZES = [
   { width: 320, height: 568 },
   { width: 568, height: 320 },
   { width: 390, height: 844 },
   { width: 844, height: 390 },
+  { width: 390, height: 664 },
+  { width: 375, height: 667 },
 ] as const;
 // Known answers again: 100% is 16 px, 200% is 32 px.
 const FOCUS_TEXT_SIZES = [
   { percent: 100, rootPx: "16px" },
   { percent: 200, rootPx: "32px" },
 ] as const;
+const TEXT_100 = FOCUS_TEXT_SIZES[0];
+const TEXT_200 = FOCUS_TEXT_SIZES[1];
+
+type Pinning = "sticky" | "static";
+
+// Hand-worked expected outcomes of the 25% rule, for T1.3's nav. These are
+// fixed known answers: the tests below don't recompute them.
+//
+// At 100% text (root 16 px): each tab is at least 4rem = 64 px tall (its icon
+// 24 px + 2 px gap + a 16 px label line = 42 px fits inside), all five tabs
+// fit on one row at every width here, and the nav adds a 1 px top border.
+// The home-bar padding, env(safe-area-inset-bottom), is 0 in Chromium.
+// So the nav is 64 + 1 = 65 px tall, and 25% of the screen is height ÷ 4.
+//   390×844: 65 / 844 =  7.7%  (limit 211 px)    → sticky
+//   390×664: 65 / 664 =  9.8%  (limit 166 px)    → sticky  (T1.3 had static)
+//   375×667: 65 / 667 =  9.7%  (limit 166.75 px) → sticky  (T1.3 had static)
+//   320×568: 65 / 568 = 11.4%  (limit 142 px)    → sticky  (T1.3 had static)
+//   844×390: 65 / 390 = 16.7%  (limit 97.5 px)   → sticky  (T1.3 had static)
+//   568×320: 65 / 320 = 20.3%  (limit 80 px)     → sticky  (T1.3 had static)
+//   390×700: 65 / 700 =  9.3%  (limit 175 px)    → sticky  (T1.3 had static)
+//   390×701: 65 / 701 =  9.3%  (limit 175.25 px) → sticky
+//
+// At 200% text (root 32 px): each row of tabs is 4rem = 128 px, so even one
+// row plus the border is 129 px. Labels are 0.75rem = 24 px text below 640 px
+// wide, so the tabs wrap:
+//   320 wide: 3 rows (Home+Transactions / Events+Reports / Settings)
+//             → 3 × 128 + 1 = 385 px
+//   375, 390 and 568 wide: 2 rows → 2 × 128 + 1 = 257 px
+//   844 wide: at 640 px and wider the labels are 0.875rem, and all five fit
+//             on 1 row → 129 px
+//   320×568: 385 / 568 = 67.8% → static
+//   568×320: 257 / 320 = 80.3% → static (even 1 row would be 40.3%)
+//   390×844: 257 / 844 = 30.5% → static (T1.3 had sticky)
+//   844×390: 129 / 390 = 33.1% → static
+//   390×664: 257 / 664 = 38.7% → static
+//   375×667: 257 / 667 = 38.5% → static
+//   390×700: 257 / 700 = 36.7% → static
+//   390×701: 257 / 701 = 36.7% → static (T1.3 had sticky)
+const PINNING_CASES: readonly {
+  width: number;
+  height: number;
+  size: TextSize;
+  expected: Pinning;
+}[] = [
+  { width: 390, height: 844, size: TEXT_100, expected: "sticky" },
+  { width: 390, height: 664, size: TEXT_100, expected: "sticky" },
+  { width: 375, height: 667, size: TEXT_100, expected: "sticky" },
+  { width: 320, height: 568, size: TEXT_100, expected: "sticky" },
+  { width: 844, height: 390, size: TEXT_100, expected: "sticky" },
+  { width: 568, height: 320, size: TEXT_100, expected: "sticky" },
+  { width: 390, height: 700, size: TEXT_100, expected: "sticky" },
+  { width: 390, height: 701, size: TEXT_100, expected: "sticky" },
+  { width: 320, height: 568, size: TEXT_200, expected: "static" },
+  { width: 568, height: 320, size: TEXT_200, expected: "static" },
+  { width: 390, height: 844, size: TEXT_200, expected: "static" },
+  { width: 844, height: 390, size: TEXT_200, expected: "static" },
+  { width: 390, height: 664, size: TEXT_200, expected: "static" },
+  { width: 375, height: 667, size: TEXT_200, expected: "static" },
+  { width: 390, height: 700, size: TEXT_200, expected: "static" },
+  { width: 390, height: 701, size: TEXT_200, expected: "static" },
+];
 
 /** Waits for the browser to finish layout and any scroll from focusing. */
 function nextFrame(page: Page): Promise<unknown> {
   return page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
+}
+
+/** The nav and each of its ancestors up to <html>, as "tag: position". */
+function navAndAncestorPositions(page: Page): Promise<string[]> {
+  return mainNav(page).evaluate((nav) => {
+    const found: string[] = [];
+    for (let el: Element | null = nav; el; el = el.parentElement) {
+      found.push(`${el.tagName.toLowerCase()}: ${getComputedStyle(el).position}`);
+    }
+    return found;
+  });
+}
+
+/** "sticky" if the nav or any ancestor is sticky or fixed, else "static". */
+async function navPinning(page: Page): Promise<Pinning> {
+  const positions = await navAndAncestorPositions(page);
+  return positions.some((p) => p.endsWith(": sticky") || p.endsWith(": fixed"))
+    ? "sticky"
+    : "static";
+}
+
+/** The nav's own border-box height and the visible screen height, in px. */
+async function navAndScreenHeight(page: Page) {
+  await nextFrame(page);
+  return mainNav(page).evaluate((nav) => ({
+    navHeight: nav.getBoundingClientRect().height,
+    screenHeight: window.innerHeight,
+  }));
+}
+
+function describeShare(m: { navHeight: number; screenHeight: number }): string {
+  return `nav ${m.navHeight} px of a ${m.screenHeight} px screen = ${((m.navHeight / m.screenHeight) * 100).toFixed(1)}%`;
+}
+
+/**
+ * Asserts the nav's pinning. The nav may decide after a frame or two (it
+ * measures itself), so this waits for the expected state, then checks it is
+ * still the same two frames later, so a state that flips back can't pass.
+ */
+async function expectNavPinning(page: Page, expected: Pinning, context: string): Promise<void> {
+  await nextFrame(page);
+  await expect
+    .poll(() => navPinning(page), { message: `nav pinning: ${context}` })
+    .toBe(expected);
+  await nextFrame(page);
+  await nextFrame(page);
+  const positions = await navAndAncestorPositions(page);
+  expect(
+    await navPinning(page),
+    `nav pinning, still, two frames later: ${context}; positions: ${positions.join(", ")}`,
+  ).toBe(expected);
+}
+
+/** Reads --nav-h from <html> as a number of px (NaN if it isn't set). */
+function publishedNavHeight(page: Page): Promise<number> {
+  return page.evaluate(() =>
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")),
+  );
+}
+
+/** Reads the computed scroll-padding-bottom of <html>, raw and as px. */
+function rootScrollPaddingBottom(page: Page) {
+  return page.evaluate(() => {
+    const raw = getComputedStyle(document.documentElement).scrollPaddingBottom;
+    return { raw, px: parseFloat(raw) };
+  });
+}
+
+/** Sets an inline style on the nav, as if its CSS had changed at runtime. */
+function styleNav(page: Page, property: "paddingBottom" | "minHeight", value: string) {
+  return mainNav(page).evaluate(
+    (nav, [p, v]) => {
+      (nav as HTMLElement).style[p as "paddingBottom" | "minHeight"] = v;
+    },
+    [property, value] as const,
+  );
+}
+
+/** Makes <main> long: 3000 px of filler with a marker 1500 px down. */
+async function makeMainLong(page: Page): Promise<void> {
+  await page.getByRole("main").evaluate((main) => {
+    const filler = document.createElement("div");
+    filler.style.cssText = "height:3000px;flex:none;position:relative";
+    const marker = document.createElement("div");
+    marker.setAttribute("data-testid", "long-page-middle");
+    marker.style.cssText = "position:absolute;top:1500px;height:10px;width:10px";
+    filler.appendChild(marker);
+    main.appendChild(filler);
+  });
+}
+
+/** Adds 30 buttons to the end of <main>, so Tab must scroll past the nav. */
+async function addFillerButtons(page: Page): Promise<void> {
+  await page.getByRole("main").evaluate((main) => {
+    for (let i = 1; i <= 30; i++) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `Filler ${i}`;
+      button.style.cssText = "display:block;height:3rem;margin:1rem 0";
+      main.appendChild(button);
+    }
+  });
 }
 
 /**
@@ -852,11 +1051,9 @@ async function expectTabKeepsMainFocusClearOfNav(page: Page): Promise<void> {
   expect(reached.size, "focusable elements in <main> reached by Tab").toBe(count);
 }
 
-test.describe("on a phone, the navigation never hides content on short or landscape screens", () => {
+test.describe("on a phone, the navigation never hides focused content", () => {
   for (const viewport of SCREEN_SIZES) {
     const sizeLabel = `${viewport.width}×${viewport.height}`;
-    const isShort = viewport.height <= SHORT_SCREEN_MAX_HEIGHT_PX;
-
     for (const size of FOCUS_TEXT_SIZES) {
       for (const screen of SCREENS) {
         test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, Tab never leaves a focused element in <main> hidden or under the nav`, async ({
@@ -868,94 +1065,55 @@ test.describe("on a phone, the navigation never hides content on short or landsc
 
           await expectTabKeepsMainFocusClearOfNav(page);
         });
-
-        if (isShort) {
-          test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, the nav isn't sticky or fixed`, async ({
-            page,
-          }, testInfo) => {
-            test.skip(testInfo.project.name !== "phone", "phone-layout claim");
-            await page.setViewportSize(viewport);
-            await openWithTextSize(page, screen.path, size);
-            const positions = await mainNav(page).evaluate((nav) => {
-              const found: string[] = [];
-              for (let el: Element | null = nav; el; el = el.parentElement) {
-                found.push(`${el.tagName.toLowerCase()}: ${getComputedStyle(el).position}`);
-              }
-              return found;
-            });
-            const pinned = positions.filter((p) => p.endsWith(": sticky") || p.endsWith(": fixed"));
-            expect(pinned, `positions of the nav and its ancestors: ${positions.join(", ")}`).toEqual([]);
-          });
-
-          test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, scrolling reaches the end of the page with the nav last`, async ({
-            page,
-          }, testInfo) => {
-            test.skip(testInfo.project.name !== "phone", "phone-layout claim");
-            await page.setViewportSize(viewport);
-            await openWithTextSize(page, screen.path, size);
-            await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-            await nextFrame(page);
-            const m = await page.evaluate(() => {
-              const nav = document.querySelector('nav[aria-label="Main"]')!.getBoundingClientRect();
-              const main = document.querySelector("main")!;
-              let contentBottom = -Infinity;
-              for (const el of Array.from(main.querySelectorAll("*"))) {
-                const r = el.getBoundingClientRect();
-                if (r.width > 0 && r.height > 0) contentBottom = Math.max(contentBottom, r.bottom);
-              }
-              return {
-                navTop: nav.top,
-                navBottom: nav.bottom,
-                contentBottom,
-                viewportHeight: window.innerHeight,
-              };
-            });
-            expect(
-              Math.abs(m.navBottom - m.viewportHeight),
-              "scrolled to the end, the nav's bottom is the bottom of the screen (px gap)",
-            ).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
-            expect(m.contentBottom, "main has rendered content").toBeGreaterThan(-Infinity);
-            expect(
-              m.contentBottom,
-              `end of <main>'s content (px) vs the nav's top at ${m.navTop.toFixed(1)}`,
-            ).toBeLessThanOrEqual(m.navTop + EDGE_TOLERANCE_PX);
-          });
-        }
       }
     }
   }
 
-  // The tall screen keeps a sticky nav, so make a page long enough that Tab
-  // must scroll focus past it: 30 extra buttons at the end of <main>.
-  for (const size of FOCUS_TEXT_SIZES) {
-    test(`on a phone at 390×844 and ${size.percent}% text, Tab through a long page scrolls each focused element clear of the sticky nav`, async ({
-      page,
-    }, testInfo) => {
-      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
-      await page.setViewportSize({ width: 390, height: 844 });
-      await openWithTextSize(page, "/", size);
-      await page.getByRole("main").evaluate((main) => {
-        for (let i = 1; i <= 30; i++) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = `Filler ${i}`;
-          button.style.cssText = "display:block;height:3rem;margin:1rem 0";
-          main.appendChild(button);
-        }
+  // A page long enough that Tab must scroll focus past the nav: 30 extra
+  // buttons at the end of <main>. At 100% the nav is sticky on all four of
+  // these screens, so the page has to scroll each button clear of it.
+  const longPageSizes = [
+    { width: 390, height: 844 },
+    { width: 390, height: 664 },
+    { width: 375, height: 667 },
+    { width: 568, height: 320 },
+  ] as const;
+  for (const viewport of longPageSizes) {
+    for (const size of FOCUS_TEXT_SIZES) {
+      test(`on a phone at ${viewport.width}×${viewport.height} and ${size.percent}% text, Tab through a long page keeps each focused element clear of the nav`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await page.setViewportSize(viewport);
+        await openWithTextSize(page, "/", size);
+        await addFillerButtons(page);
+        await expectTabKeepsMainFocusClearOfNav(page);
       });
-      await expectTabKeepsMainFocusClearOfNav(page);
-    });
+    }
   }
 
+  // The nav grows by 40 px of padding after load (65 → 105 px at 390×844,
+  // 105 / 844 = 12.4%, so it stays sticky). The scroll padding must grow too.
+  test("on a phone at 390×844, Tab through a long page keeps focus clear of the nav after only the nav's padding grows", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await addFillerButtons(page);
+    await styleNav(page, "paddingBottom", "40px");
+    await expectNavPinning(page, "sticky", "390×844 at 100% with 40 px extra padding (105 / 844 = 12.4%)");
+    await expectTabKeepsMainFocusClearOfNav(page);
+  });
+
   const narrow = { width: 320, height: 568 } as const;
-  const big = FOCUS_TEXT_SIZES[1];
   for (const screen of SCREENS) {
     test(`on a phone at 320×568 and 200% text on ${screen.name}, the page doesn't scroll sideways`, async ({
       page,
     }, testInfo) => {
       test.skip(testInfo.project.name !== "phone", "phone-layout claim");
       await page.setViewportSize(narrow);
-      await openWithTextSize(page, screen.path, big);
+      await openWithTextSize(page, screen.path, TEXT_200);
       const { scrollWidth, clientWidth } = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth,
@@ -969,7 +1127,7 @@ test.describe("on a phone, the navigation never hides content on short or landsc
     }, testInfo) => {
       test.skip(testInfo.project.name !== "phone", "phone-layout claim");
       await page.setViewportSize(narrow);
-      await openWithTextSize(page, screen.path, big);
+      await openWithTextSize(page, screen.path, TEXT_200);
       const h1 = page.getByRole("heading", { level: 1 });
       await expect(h1).toHaveCount(1);
       // Measure the text itself, so text that spills out of (or is clipped
@@ -984,6 +1142,249 @@ test.describe("on a phone, the navigation never hides content on short or landsc
       expect(text.right, "h1 text right edge (px)").toBeLessThanOrEqual(narrow.width + EDGE_TOLERANCE_PX);
     });
   }
+});
+
+test.describe("on a phone, the navigation is pinned unless it's taller than 25% of the screen", () => {
+  for (const c of PINNING_CASES) {
+    const label = `${c.width}×${c.height} and ${c.size.percent}% text`;
+
+    // Known answers, worked by hand above PINNING_CASES.
+    for (const screen of SCREENS) {
+      test(`on a phone at ${label} on ${screen.name}, the nav is ${c.expected === "sticky" ? "sticky" : "not sticky or fixed"}`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await page.setViewportSize({ width: c.width, height: c.height });
+        await openWithTextSize(page, screen.path, c.size);
+        const m = await navAndScreenHeight(page);
+        await expectNavPinning(page, c.expected, `${label} on ${screen.name}: ${describeShare(m)}`);
+      });
+    }
+
+    // The rule itself, against the height measured in the browser. This
+    // catches a nav that matches the table above for the wrong reason.
+    test(`on a phone at ${label}, on every screen the nav is sticky exactly when its measured height is at most 25% of the screen`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await page.setViewportSize({ width: c.width, height: c.height });
+      for (const screen of SCREENS) {
+        await openWithTextSize(page, screen.path, c.size);
+        const m = await navAndScreenHeight(page);
+        expect(m.screenHeight, "visible screen height (px)").toBe(c.height);
+        const byRule: Pinning = m.navHeight > NAV_SHARE_LIMIT * m.screenHeight ? "static" : "sticky";
+        await expectNavPinning(page, byRule, `${label} on ${screen.name}: ${describeShare(m)}`);
+      }
+    });
+
+    if (c.expected === "sticky") {
+      test(`on a phone at ${label}, on every screen the sticky nav's bottom edge stays on the bottom of the screen while a long page scrolls`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await page.setViewportSize({ width: c.width, height: c.height });
+        for (const screen of SCREENS) {
+          await openWithTextSize(page, screen.path, c.size);
+          await makeMainLong(page);
+          const marker = page.getByTestId("long-page-middle");
+          expect((await box(marker)).y, `${screen.name}: the marker starts below the screen`).toBeGreaterThan(c.height);
+          for (const moment of ["at the top of the page", "scrolled halfway down"]) {
+            if (moment === "scrolled halfway down") {
+              await marker.evaluate((el) => el.scrollIntoView({ block: "center" }));
+              await nextFrame(page);
+              const mk = await box(marker);
+              expect(mk.y, `${screen.name}: the marker scrolled onto the screen`).toBeLessThan(c.height);
+            }
+            const b = await box(mainNav(page));
+            expect(
+              Math.abs(b.y + b.height - c.height),
+              `${screen.name} ${moment}: gap between the nav's bottom and the screen's bottom (px)`,
+            ).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+          }
+        }
+      });
+
+      // T1.3's gap: at a height between 700 and 701 px, the nav was sticky
+      // with no scroll padding. Any sticky nav must come with enough padding.
+      test(`on a phone at ${label}, the sticky nav has scroll-padding-bottom on <html> at least its own height`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await page.setViewportSize({ width: c.width, height: c.height });
+        await openWithTextSize(page, "/", c.size);
+        await expectNavPinning(page, "sticky", label);
+        const m = await navAndScreenHeight(page);
+        const padding = await rootScrollPaddingBottom(page);
+        expect(
+          padding.px,
+          `scroll-padding-bottom "${padding.raw}" vs the nav's height ${m.navHeight} px`,
+        ).toBeGreaterThanOrEqual(m.navHeight - CSS_NUMBER_TOLERANCE_PX);
+      });
+    } else {
+      for (const screen of SCREENS) {
+        test(`on a phone at ${label} on ${screen.name}, scrolling reaches the end of the page with the nav last`, async ({
+          page,
+        }, testInfo) => {
+          test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+          await page.setViewportSize({ width: c.width, height: c.height });
+          await openWithTextSize(page, screen.path, c.size);
+          await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+          await nextFrame(page);
+          const m = await page.evaluate(() => {
+            const nav = document.querySelector('nav[aria-label="Main"]')!.getBoundingClientRect();
+            const main = document.querySelector("main")!;
+            let contentBottom = -Infinity;
+            for (const el of Array.from(main.querySelectorAll("*"))) {
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) contentBottom = Math.max(contentBottom, r.bottom);
+            }
+            return {
+              navTop: nav.top,
+              navBottom: nav.bottom,
+              contentBottom,
+              viewportHeight: window.innerHeight,
+            };
+          });
+          expect(
+            Math.abs(m.navBottom - m.viewportHeight),
+            "scrolled to the end, the nav's bottom is the bottom of the screen (px gap)",
+          ).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+          expect(m.contentBottom, "main has rendered content").toBeGreaterThan(-Infinity);
+          expect(
+            m.contentBottom,
+            `end of <main>'s content (px) vs the nav's top at ${m.navTop.toFixed(1)}`,
+          ).toBeLessThanOrEqual(m.navTop + EDGE_TOLERANCE_PX);
+        });
+      }
+    }
+  }
+
+  // The boundary, with the nav's height set exactly at runtime (min-height
+  // on its border box; its content is only 65 px at 100% text). 25% of 844 px
+  // is 844 ÷ 4 = 211 px exactly.
+  //   211 / 844 = 25.000% → not MORE than 25% → sticky
+  //   212 / 844 = 25.118% → static
+  // These also prove the rule follows the measured height, not the screen
+  // size or the text size: the screen and text stay the same throughout.
+  test("on a phone at 390×844, a nav grown to exactly 25% of the screen (211 px) is still sticky", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await styleNav(page, "minHeight", "211px");
+    await expect.poll(async () => (await navAndScreenHeight(page)).navHeight, { message: "nav height (px)" }).toBe(211);
+    await expectNavPinning(page, "sticky", "211 / 844 = 25.000%");
+  });
+
+  test("on a phone at 390×844, a nav grown to 1 px over 25% of the screen (212 px) is not sticky or fixed", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await expectNavPinning(page, "sticky", "65 / 844 = 7.7% before growing");
+    await styleNav(page, "minHeight", "212px");
+    await expect.poll(async () => (await navAndScreenHeight(page)).navHeight, { message: "nav height (px)" }).toBe(212);
+    await expectNavPinning(page, "static", "212 / 844 = 25.118%");
+  });
+
+  test("on a phone at 390×844, a nav that grew over 25% and shrinks back to 211 px is sticky again", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await styleNav(page, "minHeight", "212px");
+    await expectNavPinning(page, "static", "212 / 844 = 25.118%");
+    await styleNav(page, "minHeight", "211px");
+    await expect.poll(async () => (await navAndScreenHeight(page)).navHeight, { message: "nav height (px)" }).toBe(211);
+    await expectNavPinning(page, "sticky", "211 / 844 = 25.000%");
+  });
+
+  // Only the screen height changes; the nav's own size doesn't, so watching
+  // the nav alone isn't enough. A 200 px nav (min-height):
+  //   200 / 844 = 23.7% → sticky
+  //   200 / 780 = 25.6% → static
+  test("on a phone, when only the screen height changes, the nav's pinning is re-decided (200 px nav: 390×844 sticky, 390×780 static, 390×844 sticky)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await styleNav(page, "minHeight", "200px");
+    await expect.poll(async () => (await navAndScreenHeight(page)).navHeight, { message: "nav height (px)" }).toBe(200);
+    await expectNavPinning(page, "sticky", "200 / 844 = 23.7%");
+
+    await page.setViewportSize({ width: 390, height: 780 });
+    expect(await navAndScreenHeight(page), "only the screen height changed").toEqual({
+      navHeight: 200,
+      screenHeight: 780,
+    });
+    await expectNavPinning(page, "static", "200 / 780 = 25.6%");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNavPinning(page, "sticky", "200 / 844 = 23.7% again");
+  });
+
+  // The boundary case keeps its scroll padding too: a 211 px sticky nav needs
+  // at least 211 px of scroll-padding-bottom.
+  test("on a phone at 390×844, a nav grown to exactly 25% (211 px) has scroll-padding-bottom on <html> of at least 211 px", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await styleNav(page, "minHeight", "211px");
+    await expectNavPinning(page, "sticky", "211 / 844 = 25.000%");
+    await expect
+      .poll(async () => (await rootScrollPaddingBottom(page)).px, {
+        message: "scroll-padding-bottom on <html> (px)",
+      })
+      .toBeGreaterThanOrEqual(211 - CSS_NUMBER_TOLERANCE_PX);
+  });
+});
+
+test.describe("on a phone, the nav publishes its measured height as --nav-h", () => {
+  // Review note on T1.3: observing only the content box misses a change in
+  // padding. Known answer: the nav grows by exactly the 40 px of padding
+  // added (its bottom padding is env(safe-area-inset-bottom) = 0 in
+  // Chromium), e.g. 65 → 105 px at 100% text.
+  test("on a phone at 390×844, adding 40 px of bottom padding to the nav grows it by exactly 40 px and --nav-h follows its new border-box height", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    const before = await navAndScreenHeight(page);
+    await expect
+      .poll(() => publishedNavHeight(page), { message: "--nav-h before the change (px)" })
+      .toBeCloseTo(before.navHeight, 2);
+
+    await styleNav(page, "paddingBottom", "40px");
+    const after = await navAndScreenHeight(page);
+    expect(after.navHeight - before.navHeight, "growth of the nav's border box (px)").toBeCloseTo(40, 2);
+    await expect
+      .poll(() => publishedNavHeight(page), { message: `--nav-h after the change vs the nav's ${after.navHeight} px` })
+      .toBeCloseTo(after.navHeight, 2);
+  });
+
+  test("on a phone at 390×844, after only the nav's padding grows by 40 px, scroll-padding-bottom on <html> is at least the nav's new height", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWithTextSize(page, "/", TEXT_100);
+    await styleNav(page, "paddingBottom", "40px");
+    // 105 / 844 = 12.4%, so the nav is still sticky.
+    await expectNavPinning(page, "sticky", "105 / 844 = 12.4%");
+    const after = await navAndScreenHeight(page);
+    await expect
+      .poll(async () => (await rootScrollPaddingBottom(page)).px, {
+        message: `scroll-padding-bottom on <html> (px) vs the nav's ${after.navHeight} px`,
+      })
+      .toBeGreaterThanOrEqual(after.navHeight - CSS_NUMBER_TOLERANCE_PX);
+  });
 });
 
 // ---------- 12. no uncaught errors, end to end ----------

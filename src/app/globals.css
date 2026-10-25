@@ -18,13 +18,14 @@
   }
 }
 
-/* On screens taller than 700px the nav is sticky. When the keyboard moves focus
-   to a control, keep it clear of the nav by the nav's real height (BottomNav
-   writes --nav-h). On shorter screens the nav is not sticky, so no padding. */
-@media (min-height: 701px) {
-  html {
-    scroll-padding-bottom: var(--nav-h, 5rem);
-  }
+/* While the nav is pinned to the bottom, keep a focused control clear of it by
+   the nav's real height (BottomNav writes --nav-h and sets data-nav-pinned on
+   <html>). When the nav is too tall it sits in the page flow instead, and any
+   padding would push the top of the page out of reach, so there is none.
+   Before BottomNav has measured, the nav is assumed pinned, and the fallback
+   is its normal height: 4rem plus the 1px border plus the home-bar padding. */
+html:not([data-nav-pinned="false"]) {
+  scroll-padding-bottom: var(--nav-h, calc(4rem + 1px + env(safe-area-inset-bottom)));
 }
 
 body {

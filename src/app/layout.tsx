@@ -36,9 +36,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-dvh flex-col">
         {/* The one <main> per page. It grows to fill the screen, which pushes
             the nav to the bottom on short pages. The nav comes after <main>
-            and is sticky, so it takes its own real height in the page: the
+            and is part of the page flow, so it takes its own real height: the
             last line of content is never hidden behind it, whatever the text
-            size. (The nav is 4rem tall plus a 1px top border; its 4px
+            size. It sticks to the bottom of the screen unless it is taller
+            than 25% of the window (see BottomNav), in which case it simply
+            sits after the content. (The nav is 4rem tall plus a 1px top border; its 4px
             highlight bar is inside that 4rem. Big text can make it taller.) */}
         <main className="mx-auto w-full max-w-2xl flex-1 pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-6 pl-[max(1rem,env(safe-area-inset-left))]">
           {children}

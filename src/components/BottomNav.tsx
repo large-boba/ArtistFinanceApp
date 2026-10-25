@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // Each tab: where it goes, its label, and a small picture. The pictures are
 // aria-hidden so a screen reader says just "Home", not "Home, icon".
@@ -40,43 +40,67 @@ const TABS: { href: string; label: string; icon: ReactNode }[] = [
   },
 ];
 
+// The nav is pinned only while it is no taller than this share of the window.
+const NAV_MAX_SHARE = 0.25;
+
 export default function BottomNav() {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
+  // Is the nav pinned (sticky) to the bottom of the screen? The server and the
+  // first paint say "yes", because most phones at normal text size have room.
+  // Right after the page loads the effect below measures the nav and corrects
+  // this if the nav turns out to be too tall. Starting from the same value on
+  // the server and in the browser also means React sees no mismatch.
+  const [pinned, setPinned] = useState(true);
 
-  // Measure the nav's real height (it grows when the text is enlarged) and
-  // publish it as the CSS variable --nav-h on <html>. globals.css uses it as
-  // scroll-padding-bottom, so when a keyboard user tabs to a control the page
-  // scrolls it clear of the sticky nav instead of leaving it hidden behind.
+  // The rule: let H be the nav's own height (border box) and V the height of
+  // the window (window.innerHeight, not visualViewport, so pinching to zoom
+  // never un-pins the nav). If H is at most 25% of V the nav is pinned. If it
+  // is taller than that, it would cover too much of the screen, so it sits
+  // in the normal page flow after <main> instead and scrolls with the page.
+  // The nav's height changes with text size, and the window's height changes
+  // with rotation or a browser toolbar, so we re-decide on both.
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
     const root = document.documentElement;
-    const publish = () =>
-      root.style.setProperty("--nav-h", `${nav.getBoundingClientRect().height}px`);
-    publish();
-    const observer = new ResizeObserver(publish);
-    observer.observe(nav);
-    // Clean up when the nav goes away: stop watching and remove the variable.
+    const decide = () => {
+      const height = nav.getBoundingClientRect().height;
+      // --nav-h is the nav's real height. globals.css uses it as
+      // scroll-padding-bottom while the nav is pinned.
+      root.style.setProperty("--nav-h", `${height}px`);
+      const isPinned = height <= NAV_MAX_SHARE * window.innerHeight;
+      // globals.css only adds the scroll padding unless this says "false".
+      root.dataset.navPinned = String(isPinned);
+      setPinned(isPinned);
+    };
+    // The observer calls decide() once as soon as it starts watching, and again
+    // whenever the nav's border box changes size (padding counts, too).
+    const observer = new ResizeObserver(decide);
+    observer.observe(nav, { box: "border-box" });
+    window.addEventListener("resize", decide);
+    // Clean up when the nav goes away: stop listening and tidy <html>.
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", decide);
       root.style.removeProperty("--nav-h");
+      delete root.dataset.navPinned;
     };
   }, []);
 
   return (
-    // "sticky bottom-0": the nav is the last thing in the page, and it sticks
-    // to the bottom edge of the screen while the page scrolls. Because it is
-    // part of the page flow (not floating on top), the page always leaves room
-    // for its real height, even when big text makes it taller. The bottom
-    // padding keeps the tabs clear of the iPhone home bar.
-    // On a screen 700px tall or less (small phones, or any phone on its side)
-    // a sticky nav would cover too much, so there it is not sticky: it sits
-    // after the page content and scrolls with it.
+    // Pinned: "sticky bottom-0" keeps the nav on the bottom edge of the screen
+    // while the page scrolls. It is still part of the page flow (not floating
+    // on top), so the page always leaves room for its real height. Not pinned:
+    // "static" puts it after the page content. The bottom padding keeps the
+    // tabs clear of the iPhone home bar.
     <nav
       ref={navRef}
       aria-label="Main"
-      className="sticky bottom-0 z-10 border-t border-zinc-300 bg-white pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] [@media(max-height:700px)]:static dark:border-zinc-700 dark:bg-zinc-900"
+      className={
+        (pinned ? "sticky bottom-0 " : "static ") +
+        "z-10 border-t border-zinc-300 bg-white pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] dark:border-zinc-700 dark:bg-zinc-900"
+      }
     >
       {/* flex-wrap: with normal text all five tabs share one row. With very
           large text (WCAG 1.4.4) they wrap onto a second row instead of
