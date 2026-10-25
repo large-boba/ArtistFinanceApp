@@ -75,6 +75,7 @@ To be filled in as providers and fields are added: what personal data, why, wher
   - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
 
   Owner to turn on GitHub branch protection for `main` (T0.4).
+- 2026-10-25 — Cloudflare worker renamed from `bentobudget` to `artistfinanceapp` (owner request) in `wrangler.jsonc`, to match the Cloudflare project and the repo name.
 - 2026-10-24 — **Hosting changed from Vercel to Cloudflare** (owner's decision). Guard and deny list extended: agents can't deploy, change secrets or use remote Cloudflare commands. `.dev.vars` is treated as a secrets file. Task T0.5 added to Stage 0.
 - 2026-10-24 — Round 2 (code-reviewer and security-reviewer) fixed:
   - Supabase commands now use a local-only allowlist; Vercel is limited to dev and build.
