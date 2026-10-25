@@ -47,5 +47,5 @@ jobs:
         run: npx opennextjs-cloudflare build
         env:
           WRANGLER_SEND_METRICS: "false"
-      # Later stages add: unit tests (Stage 1), supabase test db (Stage 2+)
-      # and Playwright (when e2e tests exist).
+      # Unit tests (Vitest) run inside `npm run check`. Later stages add:
+      # Playwright (T1.2) and supabase test db (Stage 2+).

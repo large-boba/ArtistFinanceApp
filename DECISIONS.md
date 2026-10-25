@@ -39,7 +39,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
 | Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
 | Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |
-| Test stack | Vitest (unit), pgTAP via `supabase test db` (database/RLS), Playwright (end-to-end). Tests are written before code by the test engineer. | §19 |
+| Test stack | Vitest **4.1** (unit; Vitest 5 needs `@types/node` 22+, which is a pending follow-up), pgTAP via `supabase test db` (database/RLS), Playwright (end-to-end). Tests are written before code by the test engineer. | §19 |
 | Guardrails | `scripts/check-rules.mjs` (rule checks, in a hook and CI), `.claude/hooks/guard.mjs` (blocks unsafe actions), CI on every push. | §5–§13 |
 
 ## Follow-ups noted (not decisions)
@@ -49,7 +49,8 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 - **Before real data (Stage 2+):** decide whether Cloudflare's `workers.dev` and per-version preview URLs stay public, or go behind Cloudflare Access. Today they show only the starter page.
 - `global_fetch_strictly_public` is kept, but it isn't SSRF protection. Routes that fetch URLs (AI, imports) need their own allow-lists.
 
-- `@types/node` is `^20` but the runtime is Node 24. Bump it in a later task (one change at a time).
+- The lockfile is written with **npm 11**, which ships with Node 24 (CI, `.nvmrc`). npm 10.9.4 crashed adding Vitest (an npm 10 bug with Vite 8's optional peers). `npm ci` still works on npm 10.
+- `@types/node` is `^20` but the runtime is Node 24. Bumping it also unblocks Vitest 5. Bump it in a later task (one change at a time).
 - npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
 - `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.
 
