@@ -218,6 +218,14 @@ Outcome:
 Done when:
 - The Playwright tests pass: a sale is logged in a few taps at phone size, undo works, and invalid amounts are blocked.
 - A one-handed layout: the pad sits in the bottom half of the screen.
+Lead decisions (2026-10-25), from the test engineer's questions:
+- The pad is at `/sale`; the header decisions Q1–Q11 in `e2e/quick-sale.spec.ts` are approved.
+- Payment resets to Cash after each save, while the event choice stays.
+- Undo has no time limit and stays until the next save or leaving the pad (WCAG 2.2.1).
+- An empty amount shows "$".
+- "." on an empty amount gives "0.", and a digit after a lone "0" replaces it.
+- The pad's running total counts all of today's sales, matching Home. Per-event totals come in Stage 4.
+
 Evidence:
 
 ### T1.9 — Owner tries it on a real phone                   Status: todo
