@@ -138,7 +138,7 @@ Evidence: commit `087d4e1`; CI run #42 green.
 Owner agent: frontend-engineer   Tests: test-engineer (Vitest for the store logic and the date helper)   Security review: no
 Guide: §6 (store a date, not a moment; `todayOnDevice`), §7 (shape), §10 (income fields).
 Outcome:
-- An in-memory store (React context plus a reducer) for pretend entries, which is lost on refresh on purpose. It handles:
+- The pure state logic for pretend entries: a reducer, with types and selectors, which is lost on refresh on purpose. The React context provider that holds it moved to **T1.6**, its first user (lead, 2026-10-25). It handles:
   - **expenses:** date `YYYY-MM-DD`, supplier, amountCents, category, group, optional event and notes;
   - **sales:** date, amountCents, payment method (default cash), optional event;
   - add, edit and delete for both.
@@ -150,6 +150,7 @@ Done when: the test engineer's tests pass for adding, editing and deleting entri
 Evidence:
 
 ### T1.6 — Entries list and running total                  Status: todo
+Also (moved from T1.5): the React context provider (`useReducer(entriesReducer, pretendEvents(todayOnDevice()).map(e => e.id), createEntriesState)`) in the root layout, with ids from `crypto.randomUUID()`.
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 4, §10 (a running total for the event).
 Outcome:
