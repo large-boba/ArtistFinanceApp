@@ -220,7 +220,7 @@ Evidence:
   - Test gaps (for the test engineer, later): the chosen event and the notes aren't proven to be stored (Stage 4 event views can cover the event); focus to Date when the date is bad; the "Go key" test name.
 - **For T1.9:** on a phone set to a comma-decimal region, the decimal keypad may have no "." key until Stage 4 adds comma decimals. Note this in the phone-check steps.
 
-### T1.8 — Quick-sale number pad                            Status: review
+### T1.8 — Quick-sale number pad                            Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §10 (designing cash-sale entry for a busy stall).
 Outcome:
@@ -239,6 +239,20 @@ Lead decisions (2026-10-25), from the test engineer's questions:
 - An empty amount shows "$".
 - "." on an empty amount gives "0.", and a digit after a lone "0" replaces it.
 - The pad's running total counts all of today's sales, matching Home. Per-event totals come in Stage 4.
+
+Review round 1 (code-reviewer: CHANGES REQUIRED). Fixes, tests first:
+- **B1:** the pad's running total must use the device's date at render time, not the date when the pad opened. A sale saved after midnight must show in "Today: …" at once.
+- **B2:** saving the same amount twice in a row must still be announced: each save replaces the text inside the `role="status"` region, while the region stays mounted.
+- **Optional, taken:**
+  - (a) `todaySalesText` moves to `src/lib/entries.ts` with a unit test (it was a plain function inside a client component file);
+  - (b) the `--nav-h` fallback in the pad matches globals.css, including the home-bar inset;
+  - (c) after Undo, focus goes to the amount display;
+  - (d) a reach check at 390×664 (an iPhone Safari tab, as in T1.3b): all keys and Save are fully on screen above the nav without scrolling.
+- **Test gaps closed:**
+  - a real same-moment double click on Save;
+  - Undo removes the pad's own sale, not "the newest entry";
+  - typing digits while the Event select is focused leaves the amount alone.
+- **Logged, not taken:** a digit cap on amounts. "No business maximum yet" is on record in DECISIONS.md, so the cap is the owner's call.
 
 Evidence:
 
