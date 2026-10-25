@@ -1,7 +1,7 @@
 # Stage 1 — Build the screens with pretend data
 
 **Status:** in progress (opened 2026-10-25; stage start commit `67cee8c`)
-**Guide:** §17 Stage 1. Also §6 (showing dates and amounts), §7 (expense groups), §10 (cash-sale design).
+**Guide:** §17 Stage 1. Also §6 (showing dates and amounts), §7 (expense groups), §10 (income streams). **Re-planned on 2026-10-25** after the owner's change of direction: see DECISIONS.md, "What the app is for" and the rows after it.
 
 ## You'll learn
 
@@ -22,12 +22,13 @@ Components, props, state, forms, lists and mobile-first layout. There's no datab
 
 | # | Claim | Evidence |
 |---|---|---|
-| 1 | Home, Transactions, Events, Reports and Settings screens exist, reachable from a thumb-friendly bottom navigation bar | |
-| 2 | Pretend expenses can be added through the expense form (temporary state only) | |
-| 3 | Pretend sales can be added through the quick-sale number pad | |
-| 4 | A list of entries and a running total are shown | |
-| 5 | All of the above is comfortable on a real phone | NEEDS OWNER |
-| 6 | The owner can explain every file written in this stage | NEEDS OWNER |
+| 1 | Home, Events, Expenses, Income and Settings screens exist, reachable from a thumb-friendly bottom navigation bar (owner's tabs, 2026-10-25) | |
+| 2 | Pretend expenses can be added through the expense form (temporary state only), tagged with an event or income stream where the rules allow | |
+| 3 | Pretend income can be added: event takings per day as cash + card, other streams as one amount and a payment method | |
+| 4 | A "+" button on Home and every summary page offers Income or Expense, pre-filled from the page it's on | |
+| 5 | Event pages show takings by day, event & venue costs, the optional "Other costs" figure and the result; stream pages show income, tagged costs and the result | |
+| 6 | All of the above is comfortable on a real phone | NEEDS OWNER |
+| 7 | The owner can explain every file written in this stage | NEEDS OWNER |
 
 ## Task cards
 
@@ -220,47 +221,120 @@ Evidence:
   - Test gaps (for the test engineer, later): the chosen event and the notes aren't proven to be stored (Stage 4 event views can cover the event); focus to Date when the date is bad; the "Go key" test name.
 - **For T1.9:** on a phone set to a comma-decimal region, the decimal keypad may have no "." key until Stage 4 adds comma decimals. Note this in the phone-check steps.
 
-### T1.8 — Quick-sale number pad                            Status: tests
+### T1.8 — Remove the quick-sale pad                       Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (update the specs that mention "+ Sale"; prove /sale is gone)   Security review: no
+Guide: DECISIONS.md "What the app is for" and "Quick-sale pad" (these replace §10's cash-sale design and §17 Stage 1's "quick-sale number pad").
+Outcome: the pad (`src/app/sale/`, `src/components/QuickSale.tsx`, `e2e/quick-sale.spec.ts`) and Home's "+ Sale" button are deleted. Nothing else changes yet: the sale entries in the store stay until T1.10 replaces them.
+Out of scope: the new navigation, income forms and the "+" button (later cards).
+Done when: `/sale` returns 404; Home has no "+ Sale"; the full Playwright suite passes; `npm run check` exits 0.
+History: the original pad card (built in 671a37a, review round 1 found 2 blocking issues) was cancelled when the owner changed direction. Its tests-first fix round was paused mid-build and kept only as a local stash and patch.
+Evidence:
+
+### T1.10 — Income model: streams, event takings, stream tags, "Other costs"   Status: todo
+Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no (pure functions, pretend data)
+Guide: §10 (seven default streams; cash basis; "Two styles, one table"), §7 (groups; production costs unlinked), §6, DECISIONS.md rows from "What the app is for" to "Event 'Other costs'".
+Outcome: `src/lib/entries.ts` and `src/lib/pretend-data.ts` model what the new screens need:
+- **Pretend data:**
+  - the 7 default income streams, with stable ids, in pretend data;
+  - pretend events: at least one multi-day event that has already finished (e.g. 3 days ending recently) and an ongoing shelf rental, with dates relative to today.
+- **Entries:**
+  - "sale" entries become **income** entries: date, stream, amount, payment method, optional event (only for the "Sales at events" stream; may be "not assigned yet"), notes;
+  - one action adds an event day's takings as **two income rows** (cash and card, both always saved, $0 allowed).
+- **Expenses:** an optional **stream tag**, allowed only for event & venue and operating costs. Production costs never carry an event or a stream.
+- **Events:** one optional "Other costs" figure per event (amount and short note), which can be set, changed or cleared.
+- **Selectors:**
+  - by event: takings per day (cash, card, total), event & venue costs, other costs, the result before and after other costs;
+  - by stream: income, tagged costs, result;
+  - totals for a date range (for Home).
+
+  Money is added up only in these selectors.
+Rules that apply: dates are YYYY-MM-DD strings; money is integer cents; "Other costs" is never part of overall totals; nothing trusts a total typed in, everything is added up from rows.
+Out of scope: screens; the database (Stage 2+).
+Done when: the Vitest tests pass with hand-worked totals (including the owner's example: 1,000 + 2,000 + 1,500 = $4,500 takings; table $500 + hotel $299 + food $200 = $999 event costs; result $3,501; with $600 other costs, $2,901); `npm run check` exits 0.
+Evidence:
+
+### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright; update app-shell and entries-list specs)   Security review: no
+Guide: §17 Stage 1 step 2; DECISIONS.md "Navigation". Keeps T1.3/T1.3b's rules: 44px targets, pinned only when ≤25% of the screen height, works at 200% text.
+Outcome: the five tabs in that order. Expenses and Income are simple pages for now (filled in by T1.16 and T1.17). Transactions and Reports leave the nav and their routes are removed; the entries list moves under Expenses and Income in later cards.
+Done when: the updated Playwright tests pass at phone and desktop size; `npm run check` exits 0.
+Evidence:
+
+### T1.12 — Income form                                     Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §10 (designing cash-sale entry for a busy stall).
+Guide: §10, §6; DECISIONS.md "Event takings".
+Outcome: `/income/new`, built in the same style as the expense form:
+- date and stream fields;
+- for **Sales at events**: event, **Cash** and **Card** amounts (both required, 0 allowed) and a live total;
+- for other streams: one amount and a payment method;
+- notes.
+
+It reads pre-fill values from the page address (event, stream). Saving adds the rows and goes back to where you came from.
+Done when: the Playwright tests pass (valid saves for both shapes, rejected amounts, pre-fill, labels and keyboard); `npm run check` exits 0.
+Evidence:
+
+### T1.13 — Expense form: stream tag and pre-fill             Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend expense-form spec)   Security review: no
+Guide: §7; DECISIONS.md "Linking costs to events and streams".
 Outcome:
-- "+ Sale" opens a large number pad, not a long form.
-- Defaults: date = today, payment = cash, event = today's pretend event if there is one.
-- The usual flow is type an amount, then tap Save.
-- An easy undo of the last sale.
-- The running total is visible.
-Done when:
-- The Playwright tests pass: a sale is logged in a few taps at phone size, undo works, and invalid amounts are blocked.
-- A one-handed layout: the pad sits in the bottom half of the screen.
-Lead decisions (2026-10-25), from the test engineer's questions:
-- The pad is at `/sale`; the header decisions Q1–Q11 in `e2e/quick-sale.spec.ts` are approved.
-- Payment resets to Cash after each save, while the event choice stays.
-- Undo has no time limit and stays until the next save or leaving the pad (WCAG 2.2.1).
-- An empty amount shows "$".
-- "." on an empty amount gives "0.", and a digit after a lone "0" replaces it.
-- The pad's running total counts all of today's sales, matching Home. Per-event totals come in Stage 4.
+- An optional **Income stream** field for event & venue and operating categories. It's hidden for production costs, with a one-line note: "Production costs aren't linked to an event or stream."
+- Pre-fill of the event or stream from the page address.
+- Saving returns to where you came from.
+Done when: the Playwright tests pass; `npm run check` exits 0.
+Evidence:
 
-Review round 1 (code-reviewer: CHANGES REQUIRED). Fixes, tests first:
-- **B1:** the pad's running total must use the device's date at render time, not the date when the pad opened. A sale saved after midnight must show in "Today: …" at once.
-- **B2:** saving the same amount twice in a row must still be announced: each save replaces the text inside the `role="status"` region, while the region stays mounted.
-- **Optional, taken:**
-  - (a) `todaySalesText` moves to `src/lib/entries.ts` with a unit test (it was a plain function inside a client component file);
-  - (b) the `--nav-h` fallback in the pad matches globals.css, including the home-bar inset;
-  - (c) after Undo, focus goes to the amount display;
-  - (d) a reach check at 390×664 (an iPhone Safari tab, as in T1.3b): all keys and Save are fully on screen above the nav without scrolling.
-- **Test gaps closed:**
-  - a real same-moment double click on Save;
-  - Undo removes the pad's own sale, not "the newest entry";
-  - typing digits while the Event select is focused leaves the amount alone.
-- **Logged, not taken:** a digit cap on amounts. "No business maximum yet" is on record in DECISIONS.md, so the cap is the owner's call.
+### T1.14 — The "+" button: Income or Expense                Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: DECISIONS.md "The '+' button".
+Outcome: one shared "+" button component. Tapping it offers **Income** and **Expense** (keyboard and screen-reader friendly, 44px targets, reachable above the nav). Each choice opens its form, pre-filled with the page's event or stream. On Home nothing is pre-filled.
+Done when: the Playwright tests pass; `npm run check` exits 0.
+Evidence:
 
+### T1.15 — Events tab and event page                      Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: §12 "By event or venue" (with its note that production costs aren't included), §7; DECISIONS.md "Event 'Other costs'".
+Outcome:
+- **Events list:** each event with its dates and result.
+- **Event page:**
+  - takings by day (cash, card, total);
+  - event & venue costs;
+  - the result;
+  - the optional "Other costs" figure (add, change, clear) and the result after it;
+  - a note that production costs aren't included;
+  - the "+" button, pre-filled with this event.
+Done when: the Playwright tests pass, including the owner's worked example; `npm run check` exits 0.
+Evidence:
+
+### T1.16 — Income tab and stream pages                     Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: §10 (seven default streams), §12 "By income stream".
+Outcome:
+- **Income tab:** the 7 streams, each with its total.
+- **Stream page:** its income entries, tagged costs, the result, and the "+" button pre-filled with this stream.
+
+"Sales at events" also lists its events.
+Done when: the Playwright tests pass; `npm run check` exits 0.
+Evidence:
+
+### T1.17 — Expenses tab                                    Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: §7, §12.
+Outcome: the expense list (newest first), totals per group (production, event & venue, operating), and the "+" button.
+Done when: the Playwright tests pass; `npm run check` exits 0.
+Evidence:
+
+### T1.18 — Home summary                                    Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: §12 (main profit view, simplified for pretend data).
+Outcome: Home shows this month's income, expenses and net, and the "+" button with nothing pre-filled. It replaces "today" totals, which suited live selling.
+Done when: the Playwright tests pass; `npm run check` exits 0.
 Evidence:
 
 ### T1.9 — Owner tries it on a real phone                   Status: todo
 Owner agent: **owner**
 Steps:
 1. Open the Cloudflare link (or a PR preview link) on your phone.
-2. Add three expenses and five sales.
+2. Enter the takings for a 3-day event (cash and card per day), three event costs, one online sale and one operating cost. Then check the event page and the stream pages.
 3. Note anything awkward, too small or confusing.
 Done when: the owner reports back, and any fixes are made.
 Evidence:

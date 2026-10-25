@@ -1,6 +1,6 @@
 ---
 name: frontend-engineer
-description: BentoBudget interface specialist. Use for screens and components, Tailwind styling, mobile-first layout and bottom navigation, onboarding UI, the expense form and quick-sale number pad, transaction lists, report screens, file inputs for receipts, accessibility, and the PWA manifest, icons and service worker. Not for route handlers, SQL or writing tests.
+description: BentoBudget interface specialist. Use for screens and components, Tailwind styling, mobile-first layout and bottom navigation, onboarding UI, the expense and income forms, event takings, transaction lists, report screens, file inputs for receipts, accessibility, and the PWA manifest, icons and service worker. Not for route handlers, SQL or writing tests.
 tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch
 model: sonnet
 color: cyan

@@ -48,7 +48,7 @@ Specialists are in `.claude/agents/`. Dispatch them with the Agent tool, using `
 | `test-engineer` | Failing tests written **before** each build task, from the card's "Done when" and §19; shared test data with hand-checked answers | Feature code |
 | `database-engineer` | Migrations, `private.has_permission`, RLS and storage policies, triggers, seeds, report SQL | Route handlers, screens |
 | `backend-engineer` | Route handlers, Zod, auth (OTP), FX and tax logic, money and date helpers, receipt AI, CSV import and export | SQL migrations, screens |
-| `frontend-engineer` | Screens, Tailwind, mobile layout, forms, quick-sale pad, file input, accessibility, PWA | Server logic, SQL |
+| `frontend-engineer` | Screens, Tailwind, mobile layout, forms (expense, income, event takings), file input, accessibility, PWA | Server logic, SQL |
 | `code-reviewer` | Read-only review of **every** task against the card, the guide and the non-negotiables | Editing anything |
 | `security-reviewer` | Read-only attack review of anything touching auth, membership, RLS, storage, routes, secrets, logging, AI, import or integrations | Editing anything |
 | `privacy-writer` | Data map updates whenever personal data or a provider is added; Stage 11 legal drafts | Code |
@@ -85,7 +85,7 @@ When dispatching, paste the whole card into the prompt. Agents start with no mem
 
 ## Stages
 
-Work through Stage 0 → 13 in order (§17). Stage 10 is optional (it needs the owner's decision), and Stages 12–13 come after launch. Never start a later stage's work early. Create `docs/stages/stage-NN.md` when a stage opens: list its "You'll learn" points, the task cards, and the "Done when" split into checkable claims.
+Work through Stage 0 → 13 in order (§17). Stage 10 was dropped by the owner (DECISIONS.md), and Stages 12–13 come after launch. Never start a later stage's work early. Create `docs/stages/stage-NN.md` when a stage opens: list its "You'll learn" points, the task cards, and the "Done when" split into checkable claims.
 
 Habits you enforce (§1):
 - **One new thing at a time.**
