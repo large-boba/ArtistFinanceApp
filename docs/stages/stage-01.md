@@ -220,7 +220,7 @@ Evidence:
   - Test gaps (for the test engineer, later): the chosen event and the notes aren't proven to be stored (Stage 4 event views can cover the event); focus to Date when the date is bad; the "Go key" test name.
 - **For T1.9:** on a phone set to a comma-decimal region, the decimal keypad may have no "." key until Stage 4 adds comma decimals. Note this in the phone-check steps.
 
-### T1.8 — Quick-sale number pad                            Status: tests
+### T1.8 — Quick-sale number pad                            Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §10 (designing cash-sale entry for a busy stall).
 Outcome:
