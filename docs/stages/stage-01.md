@@ -180,7 +180,7 @@ Evidence: commit `24b1ea2`. 94 browser tests written first; the full suite passe
 - **Code review approved.** The guide rules hold, the contrast is AAA, and there are no hydration errors.
 - Optional items carried into T1.7/T1.8: reword the Home note, add `role="list"` on the `<ul>`s (Safari/VoiceOver), take the date at the moment of adding, and make Home's totals a polite live region.
 
-### T1.7 — Expense form                                     Status: tests
+### T1.7 — Expense form                                     Status: review
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 3, §7 (groups; event & venue categories prompt for an event), §6 (native date picker, show the interpreted amount).
 Outcome: "+ Expense" opens a form with:

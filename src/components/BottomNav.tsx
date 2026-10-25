@@ -105,7 +105,8 @@ export default function BottomNav() {
       {/* flex-wrap: with normal text all five tabs share one row. With very
           large text (WCAG 1.4.4) they wrap onto a second row instead of
           running off the side of the screen. */}
-      <ul className="mx-auto flex max-w-2xl flex-wrap">
+      {/* role="list": Safari/VoiceOver drops list meaning when bullets are hidden. */}
+      <ul role="list" className="mx-auto flex max-w-2xl flex-wrap">
         {TABS.map((tab) => {
           const isCurrent = pathname === tab.href;
           return (

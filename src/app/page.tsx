@@ -1,10 +1,11 @@
 // Home. A server component: it has no "use client", so nothing here needs the
 // browser. The page title comes from the default in layout.tsx ("BentoBudget").
 //
-// The two big buttons are placeholders for now: they do nothing yet. The
-// "+ Sale" number pad and the "+ Expense" form are built in later tasks. They
-// sit near the top so they are always on screen, above the bottom navigation.
+// "+ Expense" opens the expense form. "+ Sale" is still a placeholder until
+// the number pad is built (T1.8). Both sit near the top so they are always on
+// screen, above the bottom navigation.
 
+import Link from "next/link";
 import TodayTotals from "@/components/TodayTotals";
 
 const bigButton =
@@ -21,17 +22,16 @@ export default function HomePage() {
         >
           + Sale
         </button>
-        <button
-          type="button"
+        <Link
+          href="/expenses/new"
           className={`${bigButton} bg-indigo-800 text-white active:bg-indigo-900`}
         >
           + Expense
-        </button>
+        </Link>
       </div>
       <TodayTotals />
       <p className="mt-6 text-base text-zinc-700 dark:text-zinc-300">
-        These buttons start working soon. Your numbers will appear here once
-        you add some.
+        Practice mode: entries disappear when you refresh or close the app.
       </p>
     </>
   );

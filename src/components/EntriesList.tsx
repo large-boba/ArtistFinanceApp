@@ -52,7 +52,7 @@ export default function EntriesList() {
   }
 
   return (
-    <ul className="mt-4 flex flex-col divide-y divide-zinc-300 dark:divide-zinc-700">
+    <ul role="list" className="mt-4 flex flex-col divide-y divide-zinc-300 dark:divide-zinc-700">
       {entriesNewestFirst(state.entries).map((entry) => (
         <li key={entry.id} className="flex items-start justify-between gap-3 py-3">
           <div className="min-w-0 flex-1">
