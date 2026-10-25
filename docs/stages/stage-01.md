@@ -180,7 +180,7 @@ Evidence: commit `24b1ea2`. 94 browser tests written first; the full suite passe
 - **Code review approved.** The guide rules hold, the contrast is AAA, and there are no hydration errors.
 - Optional items carried into T1.7/T1.8: reword the Home note, add `role="list"` on the `<ul>`s (Safari/VoiceOver), take the date at the moment of adding, and make Home's totals a polite live region.
 
-### T1.7 — Expense form                                     Status: review
+### T1.7 — Expense form                                     Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 3, §7 (groups; event & venue categories prompt for an event), §6 (native date picker, show the interpreted amount).
 Outcome: "+ Expense" opens a form with:
@@ -205,6 +205,20 @@ Lead decisions (2026-10-25), from the test engineer's questions:
 - Process: browser test runs share ports 3000/3001, so run only one at a time.
 
 Evidence:
+- **Built:** `src/app/expenses/new/page.tsx` and `src/components/ExpenseForm.tsx`; "+ Expense" on Home is a link; `role="list"` on the nav and Transactions lists; the new Home note. Commit 0a3a2e2, then the review fixes in the next commit.
+- **Tests unchanged by the builder:** `e2e/expense-form.spec.ts` was last modified at 11:04 UTC, before the build started at 13:51 UTC.
+- **Lead re-ran (after the review fixes):** `npm run check` exit 0 (vitest 405/405, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test e2e/expense-form.spec.ts e2e/app-shell.spec.ts e2e/entries-list.spec.ts e2e/smoke.spec.ts` gave **820 passed, 0 failed** (312 skipped are by-project skips).
+- **Screenshots** (390×844, viewed by the lead): the form reading "$1,234.5" as "Reads as $1,234.50", with the Event field shown for "Stall or table fees"; and the "10.505" error in red with the field outlined.
+- **Code review: ACCEPT, no blocking findings.** Optional findings taken (cheap and clearly right):
+  - the entry id is made before the double-tap guard is set, so a failed `crypto.randomUUID()` (plain-HTTP dev on a phone) can't leave Save stuck;
+  - Save uses `router.replace("/")`, so Back from Home doesn't reopen an empty form.
+- **Optional findings logged, not taken:**
+  - The "Reads as" live region speaks on every keystroke and goes silent when the amount turns invalid. Consider a debounced, visually hidden announcement. Check it in the T1.9 phone check with VoiceOver or TalkBack.
+  - Focus moves to the first bad field before React adds the error attributes. It should be fine in practice; confirm with a real screen reader at T1.9.
+  - The error wording is about format, so it misleads only for amounts above the safe-integer limit. Revisit when a business maximum is decided.
+  - Tidy-ups: build class names with a helper instead of a trailing space; drop the duplicate `min-h` on Notes; comment the TypeScript-only check on line 104.
+  - Test gaps (for the test engineer, later): the chosen event and the notes aren't proven to be stored (Stage 4 event views can cover the event); focus to Date when the date is bad; the "Go key" test name.
+- **For T1.9:** on a phone set to a comma-decimal region, the decimal keypad may have no "." key until Stage 4 adds comma decimals. Note this in the phone-check steps.
 
 ### T1.8 — Quick-sale number pad                            Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no

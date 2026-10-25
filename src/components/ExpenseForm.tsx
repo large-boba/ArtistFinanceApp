@@ -111,10 +111,13 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
       return;
     }
 
+    // Make the id first: if it fails (crypto.randomUUID needs HTTPS or
+    // localhost), Save must not be left blocked by the double-tap guard.
+    const id = crypto.randomUUID();
     savedRef.current = true;
     dispatch({
       type: "add-expense",
-      id: crypto.randomUUID(),
+      id,
       expense: {
         date,
         supplier,
@@ -126,7 +129,8 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
         notes,
       },
     });
-    router.push("/");
+    // replace, not push: Back from Home shouldn't reopen an empty form.
+    router.replace("/");
   }
 
   const describe = (...ids: (string | false | undefined)[]) => ids.filter(Boolean).join(" ") || undefined;
