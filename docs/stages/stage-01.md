@@ -31,7 +31,7 @@ Components, props, state, forms, lists and mobile-first layout. There's no datab
 
 ## Task cards
 
-### T1.1 — Unit test runner (Vitest)                       Status: todo
+### T1.1 — Unit test runner (Vitest)                       Status: done
 Owner agent: backend-engineer   Tests: a sample test proves the runner works (it must fail when broken)   Security review: no
 Guide: §19 (testing). `DECISIONS.md` test stack.
 Outcome:
@@ -45,9 +45,9 @@ Done when:
 - `npm test` passes;
 - breaking the sample test makes `npm run check` fail (then revert);
 - CI is green.
-Evidence:
+Evidence: commit `4a39ae1`; CI run #36 passed. The lead re-ran `npm run check`: exit 0, 1 test file passing, check-rules 0 errors, 60/60 guardrail tests. The builder and the reviewer each broke the test on purpose and saw `check` exit 1. The reviewer confirmed `npm ci` leaves the lockfile unchanged on both npm 10 and npm 11, and that no test code reaches the worker bundle. Code review approved, no blocking findings.
 
-### T1.2 — Browser tests at phone size (Playwright)       Status: todo
+### T1.2 — Browser tests at phone size (Playwright)       Status: building
 Owner agent: backend-engineer   Tests: a smoke test proves the runner works   Security review: no
 Guide: §1 (test on a real phone early), §19 (everyday use).
 Outcome:

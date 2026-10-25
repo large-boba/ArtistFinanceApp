@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** T1.1 Vitest → backend-engineer
+- **In progress:** T1.2 Playwright → backend-engineer (T1.1 done)
 - **Blocked:** —
 
 ## Decided
@@ -49,7 +49,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 - **Before real data (Stage 2+):** decide whether Cloudflare's `workers.dev` and per-version preview URLs stay public, or go behind Cloudflare Access. Today they show only the starter page.
 - `global_fetch_strictly_public` is kept, but it isn't SSRF protection. Routes that fetch URLs (AI, imports) need their own allow-lists.
 
-- The lockfile is written with **npm 11**, which ships with Node 24 (CI, `.nvmrc`). npm 10.9.4 crashed adding Vitest (an npm 10 bug with Vite 8's optional peers). `npm ci` still works on npm 10.
+- The lockfile is written with **npm 11**, which ships with Node 24 (CI, `.nvmrc`). npm 10.9.4 crashed adding Vitest (an npm 10 bug with Vite 8's optional peers). `npm ci` still works on npm 10, but `npm install` with npm 10 rewrites the lockfile (drops `libc` fields). Use Node 24, which ships npm 11, when installing packages.
 - `@types/node` is `^20` but the runtime is Node 24. Bumping it also unblocks Vitest 5. Bump it in a later task (one change at a time).
 - npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
 - `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.
