@@ -5,6 +5,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import BottomNav from "@/components/BottomNav";
+import EntriesProvider from "@/components/EntriesProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,7 +44,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             sits after the content. (The nav is 4rem tall plus a 1px top border; its 4px
             highlight bar is inside that 4rem. Big text can make it taller.) */}
         <main className="mx-auto w-full max-w-2xl flex-1 pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-6 pl-[max(1rem,env(safe-area-inset-left))]">
-          {children}
+          {/* The pretend entries live in memory and are shared by every page
+              (T1.6). The provider draws nothing itself. */}
+          <EntriesProvider>{children}</EntriesProvider>
         </main>
         <BottomNav />
       </body>

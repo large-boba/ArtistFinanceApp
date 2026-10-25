@@ -5,6 +5,8 @@
 // "+ Sale" number pad and the "+ Expense" form are built in later tasks. They
 // sit near the top so they are always on screen, above the bottom navigation.
 
+import TodayTotals from "@/components/TodayTotals";
+
 const bigButton =
   "flex min-h-24 w-full items-center justify-center rounded-2xl text-3xl font-bold focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300";
 
@@ -26,6 +28,7 @@ export default function HomePage() {
           + Expense
         </button>
       </div>
+      <TodayTotals />
       <p className="mt-6 text-base text-zinc-700 dark:text-zinc-300">
         These buttons start working soon. Your numbers will appear here once
         you add some.

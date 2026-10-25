@@ -10,6 +10,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3000;
+// The second server, built without the test flag (see webServer below).
+const FLAG_OFF_PORT = 3001;
 const BASE_URL = `http://localhost:${PORT}`;
 const isCI = !!process.env.CI;
 
@@ -43,17 +45,33 @@ export default defineConfig({
     { name: "phone", use: phone },
     { name: "desktop", use: desktop },
   ],
-  // Build and start the production app before the tests run.
-  // Locally, an app already running on port 3000 is reused to save time;
-  // CI always starts a fresh one.
-  webServer: {
-    // Pass the port explicitly so a PORT variable in the shell can't move the app.
-    command: `npm run build && npm run start -- -p ${PORT}`,
-    url: BASE_URL,
-    // Locally, anything already listening on this port (e.g. `npm run dev`) is
-    // reused instead of a fresh production build. Stop it first for a true run.
-    reuseExistingServer: !isCI,
-    // A cold `next build` can take a few minutes on a slow machine.
-    timeout: 300_000,
-  },
+  // Build and start the production app before the tests run. TWO servers:
+  //  - port 3000 (the baseURL) is the TEST build: made with NEXT_PUBLIC_E2E=1,
+  //    which turns on the test-only hook window.__bentoTest (T1.6). The flag
+  //    is passed through the webServer `env` option, so it applies to these
+  //    commands only and the test runner's own environment stays clean. This
+  //    build goes into its own folder, .next-e2e (see next.config.ts).
+  //  - port 3001 is built WITHOUT the flag, exactly the way Cloudflare builds
+  //    the live app (into .next). Tests use it to prove the hook is not there.
+  // Locally, anything already listening on a port (e.g. `npm run dev`) is
+  // reused instead of a fresh production build. Stop it first for a true run;
+  // a reused server on 3000 that lacks the flag makes the entries tests fail.
+  // CI always starts fresh ones.
+  webServer: [
+    {
+      // Pass the port explicitly so a PORT variable in the shell can't move the app.
+      command: `npm run build && npm run start -- -p ${PORT}`,
+      url: BASE_URL,
+      env: { NEXT_PUBLIC_E2E: "1" },
+      reuseExistingServer: !isCI,
+      // A cold `next build` can take a few minutes on a slow machine.
+      timeout: 300_000,
+    },
+    {
+      command: `npm run build && npm run start -- -p ${FLAG_OFF_PORT}`,
+      url: `http://localhost:${FLAG_OFF_PORT}`,
+      reuseExistingServer: !isCI,
+      timeout: 300_000,
+    },
+  ],
 });
