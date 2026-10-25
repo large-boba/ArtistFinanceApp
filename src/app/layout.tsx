@@ -26,18 +26,21 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // Lets the page draw under the phone's rounded corners / home bar; the
-  // nav and <main> add padding using env(safe-area-inset-bottom) to stay clear.
+  // nav adds padding using env(safe-area-inset-bottom) to stay clear.
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="min-h-full">
-        {/* The one <main> per page. The bottom padding is the nav height (4rem
-            plus its 4px top border) plus the phone's safe area, so the last
-            line of content is never hidden behind the fixed nav. */}
-        <main className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+      <body className="flex min-h-dvh flex-col">
+        {/* The one <main> per page. It grows to fill the screen, which pushes
+            the nav to the bottom on short pages. The nav comes after <main>
+            and is sticky, so it takes its own real height in the page: the
+            last line of content is never hidden behind it, whatever the text
+            size. (The nav is 4rem tall plus a 1px top border; its 4px
+            highlight bar is inside that 4rem. Big text can make it taller.) */}
+        <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-6 pb-6">
           {children}
         </main>
         <BottomNav />

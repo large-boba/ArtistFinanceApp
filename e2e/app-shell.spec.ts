@@ -71,6 +71,24 @@
 //     vercel.com or nextjs.org, no page contains "To get started, edit", and
 //     the starter images (/next.svg, /vercel.svg, /file.svg, /globe.svg,
 //     /window.svg) are no longer served (HTTP 404).
+//
+// 14. Bigger text (WCAG 1.4.4 Resize text, added after T1.3 review). On the
+//     phone (390 px wide), with the root font size at 150% and at 200%, on
+//     every page: all five nav links are fully on screen horizontally
+//     (0 ≤ left, right ≤ 390, within 1 px), each is still at least 44×44 px,
+//     each can be tapped and opens its page, and the page doesn't scroll
+//     sideways (scrollWidth ≤ clientWidth). The tests set
+//     `document.documentElement.style.fontSize`, the way a browser text-size
+//     setting scales everything sized in rem. Labels may wrap, shrink to an
+//     icon with an accessible name, or the bar may grow taller; all five tabs
+//     must stay reachable.
+//     Content must not hide behind a taller nav either, at 150% and 200% on
+//     every page: after scrolling to the very bottom, the lowest-ending
+//     element inside <main> ends at or above the nav's top edge (within
+//     1 px). On Home, "+ Sale" and "+ Expense", once scrolled to the top of
+//     the screen (`scrollIntoView({ block: "start" })`, the most a person
+//     can scroll them up), are fully on screen and end at or above the nav's
+//     top edge. Both are still at least 44×44 px and inside 0–390 px.
 import {
   expect,
   test as base,
@@ -569,6 +587,164 @@ test.describe("keyboard", () => {
     await expect(page).toHaveURL("/events");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Events");
   });
+});
+
+// ---------- 14. bigger text (WCAG 1.4.4) ----------
+
+const PHONE_WIDTH_PX = 390;
+const EDGE_TOLERANCE_PX = 1;
+// Known answers: Chromium's default root font size is 16 px, so 150% is
+// 24 px and 200% is 32 px. Each test checks the size really took effect.
+const TEXT_SIZES = [
+  { percent: 150, rootPx: "24px" },
+  { percent: 200, rootPx: "32px" },
+] as const;
+
+type TextSize = (typeof TEXT_SIZES)[number];
+
+async function rootFontSize(page: Page): Promise<string> {
+  return page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+}
+
+/** Opens a page, then enlarges the root font size and checks it applied. */
+async function openWithTextSize(page: Page, path: string, size: TextSize): Promise<void> {
+  await open(page, path);
+  await page.evaluate((percent) => {
+    document.documentElement.style.fontSize = `${percent}%`;
+  }, size.percent);
+  expect(await rootFontSize(page), "root font size after enlarging").toBe(size.rootPx);
+}
+
+test.describe("on a phone, the navigation still works with bigger text", () => {
+  for (const size of TEXT_SIZES) {
+    for (const screen of SCREENS) {
+      test(`on a phone at ${size.percent}% text on ${screen.name}, all five nav links are fully on screen horizontally`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        expect(page.viewportSize()?.width, "phone viewport width").toBe(PHONE_WIDTH_PX);
+        await openWithTextSize(page, screen.path, size);
+        // Measure all five first, so a failure lists every link that's off.
+        const offScreen: string[] = [];
+        for (const tab of SCREENS) {
+          const b = await box(navLink(page, tab.name));
+          const left = b.x;
+          const right = b.x + b.width;
+          if (left < -EDGE_TOLERANCE_PX || right > PHONE_WIDTH_PX + EDGE_TOLERANCE_PX) {
+            offScreen.push(`${tab.name}: left ${left.toFixed(1)}, right ${right.toFixed(1)}`);
+          }
+        }
+        expect(offScreen, `nav links outside 0–${PHONE_WIDTH_PX} px`).toEqual([]);
+      });
+
+      test(`on a phone at ${size.percent}% text on ${screen.name}, every nav link is at least 44×44 px`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await openWithTextSize(page, screen.path, size);
+        for (const tab of SCREENS) {
+          const b = await box(navLink(page, tab.name));
+          expect(b.width, `"${tab.name}" width in CSS px`).toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX);
+          expect(b.height, `"${tab.name}" height in CSS px`).toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX);
+        }
+      });
+
+      test(`on a phone at ${size.percent}% text on ${screen.name}, the page doesn't scroll sideways`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await openWithTextSize(page, screen.path, size);
+        const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(clientWidth, "page width (px)").toBe(PHONE_WIDTH_PX);
+        expect(scrollWidth, "scrollable width (px) must not exceed the page width").toBeLessThanOrEqual(
+          clientWidth,
+        );
+      });
+
+      test(`on a phone at ${size.percent}% text on ${screen.name}, each nav link can be tapped and opens its page`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        for (const tab of SCREENS) {
+          await openWithTextSize(page, screen.path, size);
+          // A finger can only tap what's on screen.
+          await expect(navLink(page, tab.name), `"${tab.name}" is fully on screen`).toBeInViewport({
+            ratio: 1,
+          });
+          await press(navLink(page, tab.name), true);
+          await expect(page, `after tapping "${tab.name}"`).toHaveURL(tab.path);
+          await expect(page.getByRole("heading", { level: 1 })).toHaveText(tab.name);
+          // The bigger text must still be in place, or the tap proved nothing.
+          expect(await rootFontSize(page), "root font size after tapping").toBe(size.rootPx);
+        }
+      });
+
+      test(`on a phone at ${size.percent}% text on ${screen.name}, the end of the page isn't hidden behind the nav`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await openWithTextSize(page, screen.path, size);
+        // Scroll the window, and any element that scrolls, to the very bottom.
+        await page.evaluate(() => {
+          for (const el of [document.scrollingElement, ...Array.from(document.querySelectorAll("*"))]) {
+            if (el && el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight;
+          }
+          window.scrollTo(0, document.documentElement.scrollHeight);
+        });
+        const navTop = (await box(mainNav(page))).y;
+        // The lowest bottom edge of anything rendered inside <main> (its own
+        // padding doesn't count, only real content).
+        const contentBottom = await page.getByRole("main").evaluate((main) => {
+          let lowest = -Infinity;
+          for (const el of Array.from(main.querySelectorAll("*"))) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) lowest = Math.max(lowest, r.bottom);
+          }
+          return lowest;
+        });
+        expect(contentBottom, "main has rendered content").toBeGreaterThan(-Infinity);
+        expect(
+          contentBottom,
+          `bottom of the page content (px) vs the nav's top edge at ${navTop.toFixed(1)} px`,
+        ).toBeLessThanOrEqual(navTop + EDGE_TOLERANCE_PX);
+      });
+    }
+
+    for (const name of ["+ Sale", "+ Expense"] as const) {
+      test(`on a phone at ${size.percent}% text, Home's "${name}" is fully visible above the nav when scrolled into view`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await openWithTextSize(page, "/", size);
+        const control = homeControl(page, name);
+        await expect(control).toBeVisible();
+        await control.evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await expect(control, `"${name}" is fully on screen`).toBeInViewport({ ratio: 1 });
+        const b = await box(control);
+        const navTop = (await box(mainNav(page))).y;
+        expect(b.y, `"${name}" top (px)`).toBeGreaterThanOrEqual(0);
+        expect(
+          b.y + b.height,
+          `"${name}" bottom (px) vs the nav's top edge at ${navTop.toFixed(1)} px`,
+        ).toBeLessThanOrEqual(navTop + EDGE_TOLERANCE_PX);
+      });
+
+      test(`on a phone at ${size.percent}% text, Home's "${name}" is at least 44×44 px and inside 0–390 px`, async ({
+        page,
+      }, testInfo) => {
+        test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+        await openWithTextSize(page, "/", size);
+        const b = await box(homeControl(page, name));
+        expect(b.width, "width in CSS px").toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX);
+        expect(b.height, "height in CSS px").toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX);
+        expect(b.x, "left edge (px)").toBeGreaterThanOrEqual(-EDGE_TOLERANCE_PX);
+        expect(b.x + b.width, "right edge (px)").toBeLessThanOrEqual(PHONE_WIDTH_PX + EDGE_TOLERANCE_PX);
+      });
+    }
+  }
 });
 
 // ---------- 12. no uncaught errors, end to end ----------

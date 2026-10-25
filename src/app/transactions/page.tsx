@@ -9,7 +9,7 @@ export default function TransactionsPage() {
     <>
       <h1 className="text-2xl font-bold">Transactions</h1>
       <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300">
-        Nothing here yet. Sales and expenses you add will be listed here.
+        Coming soon. Sales and expenses you add will be listed here.
       </p>
     </>
   );

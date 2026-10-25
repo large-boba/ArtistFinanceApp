@@ -44,23 +44,29 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    // Fixed to the bottom edge of the screen, so it stays put while the page
-    // scrolls. The bottom padding keeps the tabs clear of the iPhone home bar.
+    // "sticky bottom-0": the nav is the last thing in the page, and it sticks
+    // to the bottom edge of the screen while the page scrolls. Because it is
+    // part of the page flow (not floating on top), the page always leaves room
+    // for its real height, even when big text makes it taller. The bottom
+    // padding keeps the tabs clear of the iPhone home bar.
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-300 bg-white pb-[env(safe-area-inset-bottom)] dark:border-zinc-700 dark:bg-zinc-900"
+      className="sticky bottom-0 z-10 border-t border-zinc-300 bg-white pb-[env(safe-area-inset-bottom)] dark:border-zinc-700 dark:bg-zinc-900"
     >
-      <ul className="mx-auto flex max-w-2xl">
+      {/* flex-wrap: with normal text all five tabs share one row. With very
+          large text (WCAG 1.4.4) they wrap onto a second row instead of
+          running off the side of the screen. */}
+      <ul className="mx-auto flex max-w-2xl flex-wrap">
         {TABS.map((tab) => {
           const isCurrent = pathname === tab.href;
           return (
-            <li key={tab.href} className="flex-1">
+            <li key={tab.href} className="min-w-[44px] grow">
               <Link
                 href={tab.href}
                 // Only the current tab gets aria-current; the others get none.
                 aria-current={isCurrent ? "page" : undefined}
                 className={
-                  "flex h-16 min-w-11 flex-col items-center justify-center gap-0.5 border-t-4 text-xs focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300 sm:text-sm " +
+                  "flex min-h-16 min-w-[44px] flex-col items-center justify-center gap-0.5 border-t-4 px-2 text-xs focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300 sm:text-sm " +
                   (isCurrent
                     ? "border-indigo-700 bg-indigo-100 font-bold text-indigo-900 dark:border-indigo-300 dark:bg-indigo-950 dark:text-indigo-100"
                     : "border-transparent font-normal text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800")
@@ -78,7 +84,7 @@ export default function BottomNav() {
                 >
                   {tab.icon}
                 </svg>
-                <span>{tab.label}</span>
+                <span className="text-center [overflow-wrap:anywhere]">{tab.label}</span>
               </Link>
             </li>
           );
