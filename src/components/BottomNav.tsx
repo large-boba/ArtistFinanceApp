@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 // Each tab: where it goes, its label, and a small picture. The pictures are
 // aria-hidden so a screen reader says just "Home", not "Home, icon".
@@ -42,6 +42,27 @@ const TABS: { href: string; label: string; icon: ReactNode }[] = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  // Measure the nav's real height (it grows when the text is enlarged) and
+  // publish it as the CSS variable --nav-h on <html>. globals.css uses it as
+  // scroll-padding-bottom, so when a keyboard user tabs to a control the page
+  // scrolls it clear of the sticky nav instead of leaving it hidden behind.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const root = document.documentElement;
+    const publish = () =>
+      root.style.setProperty("--nav-h", `${nav.getBoundingClientRect().height}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(nav);
+    // Clean up when the nav goes away: stop watching and remove the variable.
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--nav-h");
+    };
+  }, []);
 
   return (
     // "sticky bottom-0": the nav is the last thing in the page, and it sticks
@@ -49,9 +70,13 @@ export default function BottomNav() {
     // part of the page flow (not floating on top), the page always leaves room
     // for its real height, even when big text makes it taller. The bottom
     // padding keeps the tabs clear of the iPhone home bar.
+    // On a screen 700px tall or less (small phones, or any phone on its side)
+    // a sticky nav would cover too much, so there it is not sticky: it sits
+    // after the page content and scrolls with it.
     <nav
+      ref={navRef}
       aria-label="Main"
-      className="sticky bottom-0 z-10 border-t border-zinc-300 bg-white pb-[env(safe-area-inset-bottom)] dark:border-zinc-700 dark:bg-zinc-900"
+      className="sticky bottom-0 z-10 border-t border-zinc-300 bg-white pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] [@media(max-height:700px)]:static dark:border-zinc-700 dark:bg-zinc-900"
     >
       {/* flex-wrap: with normal text all five tabs share one row. With very
           large text (WCAG 1.4.4) they wrap onto a second row instead of

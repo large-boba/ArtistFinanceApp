@@ -11,7 +11,7 @@ const bigButton =
 export default function HomePage() {
   return (
     <>
-      <h1 className="text-2xl font-bold">Home</h1>
+      <h1 className="text-2xl font-bold break-words">Home</h1>
       <div className="mt-6 flex flex-col gap-4">
         <button
           type="button"

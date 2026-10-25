@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             last line of content is never hidden behind it, whatever the text
             size. (The nav is 4rem tall plus a 1px top border; its 4px
             highlight bar is inside that 4rem. Big text can make it taller.) */}
-        <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-6 pb-6">
+        <main className="mx-auto w-full max-w-2xl flex-1 pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-6 pl-[max(1rem,env(safe-area-inset-left))]">
           {children}
         </main>
         <BottomNav />

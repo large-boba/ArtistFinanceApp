@@ -18,6 +18,15 @@
   }
 }
 
+/* On screens taller than 700px the nav is sticky. When the keyboard moves focus
+   to a control, keep it clear of the nav by the nav's real height (BottomNav
+   writes --nav-h). On shorter screens the nav is not sticky, so no padding. */
+@media (min-height: 701px) {
+  html {
+    scroll-padding-bottom: var(--nav-h, 5rem);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

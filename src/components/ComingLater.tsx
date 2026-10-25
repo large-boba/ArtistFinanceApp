@@ -13,7 +13,7 @@ export default function ComingLater({
 }) {
   return (
     <>
-      <h1 className="text-2xl font-bold">{title}</h1>
+      <h1 className="text-2xl font-bold break-words">{title}</h1>
       <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300">
         {children}
       </p>

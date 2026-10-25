@@ -89,6 +89,25 @@
 //     the screen (`scrollIntoView({ block: "start" })`, the most a person
 //     can scroll them up), are fully on screen and end at or above the nav's
 //     top edge. Both are still at least 44×44 px and inside 0–390 px.
+//
+// 15. Short and landscape screens (WCAG 2.4.11 Focus not obscured; lead's
+//     design decision after the T1.3 re-review). Tested in the phone project
+//     at 320×568, 568×320, 390×844 and 844×390, each at 100% and 200% text:
+//     - On a screen 700 CSS px tall or less, the nav is NOT sticky or fixed
+//       (neither it nor any ancestor has computed position sticky/fixed). It
+//       sits in the normal page flow after <main>, so it never covers
+//       content. Scrolled to the very bottom, the nav is the last thing on
+//       the page and all of <main>'s content ends above it.
+//     - On taller screens it stays sticky at the bottom (the earlier tests at
+//       390×844 still apply), and the page must scroll a focused element
+//       clear of it (e.g. with scroll-padding-bottom).
+//     - Either way, pressing Tab through every focusable element in <main>
+//       leaves each one fully on screen and not overlapped by the nav at all.
+//       Nav links are exempt.
+//     - At 320 px wide and 200% text, no page scrolls sideways
+//       (scrollWidth ≤ clientWidth), and each page's h1 text stays inside
+//       0–320 px (long words like "Transactions" must wrap, not overflow or
+//       get clipped).
 import {
   expect,
   test as base,
@@ -600,7 +619,7 @@ const TEXT_SIZES = [
   { percent: 200, rootPx: "32px" },
 ] as const;
 
-type TextSize = (typeof TEXT_SIZES)[number];
+type TextSize = { readonly percent: number; readonly rootPx: string };
 
 async function rootFontSize(page: Page): Promise<string> {
   return page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
@@ -744,6 +763,226 @@ test.describe("on a phone, the navigation still works with bigger text", () => {
         expect(b.x + b.width, "right edge (px)").toBeLessThanOrEqual(PHONE_WIDTH_PX + EDGE_TOLERANCE_PX);
       });
     }
+  }
+});
+
+// ---------- 15. short and landscape screens (WCAG 2.4.11) ----------
+
+const SHORT_SCREEN_MAX_HEIGHT_PX = 700;
+const SCREEN_SIZES = [
+  { width: 320, height: 568 },
+  { width: 568, height: 320 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+] as const;
+// Known answers again: 100% is 16 px, 200% is 32 px.
+const FOCUS_TEXT_SIZES = [
+  { percent: 100, rootPx: "16px" },
+  { percent: 200, rootPx: "32px" },
+] as const;
+
+/** Waits for the browser to finish layout and any scroll from focusing. */
+function nextFrame(page: Page): Promise<unknown> {
+  return page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+}
+
+/**
+ * Presses Tab through every focusable, rendered element inside <main>. After
+ * each press, the focused element must be fully on screen and must not
+ * overlap the nav at all. Focus on nav links (or anything outside <main>) is
+ * exempt. Fails if Tab doesn't reach every element in <main>.
+ */
+async function expectTabKeepsMainFocusClearOfNav(page: Page): Promise<void> {
+  // Number every focusable, rendered element inside <main>.
+  const count = await page.getByRole("main").evaluate((main) => {
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+    const found = Array.from(main.querySelectorAll(selector)).filter(
+      (el) => el.getClientRects().length > 0 && el.getAttribute("tabindex") !== "-1",
+    );
+    found.forEach((el, i) => el.setAttribute("data-focus-test", String(i)));
+    return found.length;
+  });
+
+  const reached = new Set<number>();
+  const maxPresses = count + SCREENS.length + 10;
+  for (let press = 0; press < maxPresses && reached.size < count; press++) {
+    await page.keyboard.press("Tab");
+    await nextFrame(page);
+    const state = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      const nav = document.querySelector('nav[aria-label="Main"]');
+      if (!el || !nav || !el.hasAttribute("data-focus-test")) return null;
+      const r = el.getBoundingClientRect();
+      const n = nav.getBoundingClientRect();
+      return {
+        index: Number(el.getAttribute("data-focus-test")),
+        label: `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 30)}"`,
+        top: r.top,
+        bottom: r.bottom,
+        left: r.left,
+        right: r.right,
+        navTop: n.top,
+        navBottom: n.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+    if (state === null) continue; // focus is in the nav or elsewhere: exempt
+    reached.add(state.index);
+    const where = `${state.label} at top ${state.top.toFixed(1)}, bottom ${state.bottom.toFixed(1)}`;
+    expect(state.top, `${where}: top is on screen`).toBeGreaterThanOrEqual(-EDGE_TOLERANCE_PX);
+    expect(state.bottom, `${where}: bottom is on screen (height ${state.viewportHeight})`).toBeLessThanOrEqual(
+      state.viewportHeight + EDGE_TOLERANCE_PX,
+    );
+    expect(state.left, `${where}: left is on screen`).toBeGreaterThanOrEqual(-EDGE_TOLERANCE_PX);
+    expect(state.right, `${where}: right is on screen`).toBeLessThanOrEqual(
+      state.viewportWidth + EDGE_TOLERANCE_PX,
+    );
+    const overlapsNav =
+      state.bottom > state.navTop + EDGE_TOLERANCE_PX &&
+      state.top < state.navBottom - EDGE_TOLERANCE_PX;
+    expect(
+      overlapsNav,
+      `${where} overlaps the nav (top ${state.navTop.toFixed(1)}, bottom ${state.navBottom.toFixed(1)})`,
+    ).toBe(false);
+  }
+  expect(reached.size, "focusable elements in <main> reached by Tab").toBe(count);
+}
+
+test.describe("on a phone, the navigation never hides content on short or landscape screens", () => {
+  for (const viewport of SCREEN_SIZES) {
+    const sizeLabel = `${viewport.width}×${viewport.height}`;
+    const isShort = viewport.height <= SHORT_SCREEN_MAX_HEIGHT_PX;
+
+    for (const size of FOCUS_TEXT_SIZES) {
+      for (const screen of SCREENS) {
+        test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, Tab never leaves a focused element in <main> hidden or under the nav`, async ({
+          page,
+        }, testInfo) => {
+          test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+          await page.setViewportSize(viewport);
+          await openWithTextSize(page, screen.path, size);
+
+          await expectTabKeepsMainFocusClearOfNav(page);
+        });
+
+        if (isShort) {
+          test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, the nav isn't sticky or fixed`, async ({
+            page,
+          }, testInfo) => {
+            test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+            await page.setViewportSize(viewport);
+            await openWithTextSize(page, screen.path, size);
+            const positions = await mainNav(page).evaluate((nav) => {
+              const found: string[] = [];
+              for (let el: Element | null = nav; el; el = el.parentElement) {
+                found.push(`${el.tagName.toLowerCase()}: ${getComputedStyle(el).position}`);
+              }
+              return found;
+            });
+            const pinned = positions.filter((p) => p.endsWith(": sticky") || p.endsWith(": fixed"));
+            expect(pinned, `positions of the nav and its ancestors: ${positions.join(", ")}`).toEqual([]);
+          });
+
+          test(`on a phone at ${sizeLabel} and ${size.percent}% text on ${screen.name}, scrolling reaches the end of the page with the nav last`, async ({
+            page,
+          }, testInfo) => {
+            test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+            await page.setViewportSize(viewport);
+            await openWithTextSize(page, screen.path, size);
+            await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+            await nextFrame(page);
+            const m = await page.evaluate(() => {
+              const nav = document.querySelector('nav[aria-label="Main"]')!.getBoundingClientRect();
+              const main = document.querySelector("main")!;
+              let contentBottom = -Infinity;
+              for (const el of Array.from(main.querySelectorAll("*"))) {
+                const r = el.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) contentBottom = Math.max(contentBottom, r.bottom);
+              }
+              return {
+                navTop: nav.top,
+                navBottom: nav.bottom,
+                contentBottom,
+                viewportHeight: window.innerHeight,
+              };
+            });
+            expect(
+              Math.abs(m.navBottom - m.viewportHeight),
+              "scrolled to the end, the nav's bottom is the bottom of the screen (px gap)",
+            ).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+            expect(m.contentBottom, "main has rendered content").toBeGreaterThan(-Infinity);
+            expect(
+              m.contentBottom,
+              `end of <main>'s content (px) vs the nav's top at ${m.navTop.toFixed(1)}`,
+            ).toBeLessThanOrEqual(m.navTop + EDGE_TOLERANCE_PX);
+          });
+        }
+      }
+    }
+  }
+
+  // The tall screen keeps a sticky nav, so make a page long enough that Tab
+  // must scroll focus past it: 30 extra buttons at the end of <main>.
+  for (const size of FOCUS_TEXT_SIZES) {
+    test(`on a phone at 390×844 and ${size.percent}% text, Tab through a long page scrolls each focused element clear of the sticky nav`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await openWithTextSize(page, "/", size);
+      await page.getByRole("main").evaluate((main) => {
+        for (let i = 1; i <= 30; i++) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = `Filler ${i}`;
+          button.style.cssText = "display:block;height:3rem;margin:1rem 0";
+          main.appendChild(button);
+        }
+      });
+      await expectTabKeepsMainFocusClearOfNav(page);
+    });
+  }
+
+  const narrow = { width: 320, height: 568 } as const;
+  const big = FOCUS_TEXT_SIZES[1];
+  for (const screen of SCREENS) {
+    test(`on a phone at 320×568 and 200% text on ${screen.name}, the page doesn't scroll sideways`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await page.setViewportSize(narrow);
+      await openWithTextSize(page, screen.path, big);
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(clientWidth, "page width (px)").toBe(narrow.width);
+      expect(scrollWidth, "scrollable width (px) must not exceed the page width").toBeLessThanOrEqual(clientWidth);
+    });
+
+    test(`on a phone at 320×568 and 200% text on ${screen.name}, the h1 text stays inside 0–320 px`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await page.setViewportSize(narrow);
+      await openWithTextSize(page, screen.path, big);
+      const h1 = page.getByRole("heading", { level: 1 });
+      await expect(h1).toHaveCount(1);
+      // Measure the text itself, so text that spills out of (or is clipped
+      // by) its box is caught.
+      const text = await h1.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const r = range.getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      });
+      expect(text.left, "h1 text left edge (px)").toBeGreaterThanOrEqual(-EDGE_TOLERANCE_PX);
+      expect(text.right, "h1 text right edge (px)").toBeLessThanOrEqual(narrow.width + EDGE_TOLERANCE_PX);
+    });
   }
 });
 
