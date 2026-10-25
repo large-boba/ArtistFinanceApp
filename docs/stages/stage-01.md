@@ -244,27 +244,51 @@ Evidence:
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 405/405, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **828 passed, 0 failed** (308 skipped are by-project skips).
 - **For T1.18:** the new Home summary must also be a polite live region; D10 will be re-targeted then, with the lead's approval.
 
-### T1.10 — Income model: streams, event takings, stream tags, "Other costs"   Status: todo
-Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no (pure functions, pretend data)
-Guide: §10 (seven default streams; cash basis; "Two styles, one table"), §7 (groups; production costs unlinked), §6, DECISIONS.md rows from "What the app is for" to "Event 'Other costs'".
-Outcome: `src/lib/entries.ts` and `src/lib/pretend-data.ts` model what the new screens need:
-- **Pretend data:**
-  - the 7 default income streams, with stable ids, in pretend data;
-  - pretend events: at least one multi-day event that has already finished (e.g. 3 days ending recently) and an ongoing shelf rental, with dates relative to today.
-- **Entries:**
-  - "sale" entries become **income** entries: date, stream, amount, payment method, optional event (only for the "Sales at events" stream; may be "not assigned yet"), notes;
-  - one action adds an event day's takings as **two income rows** (cash and card, both always saved, $0 allowed).
-- **Expenses:** an optional **stream tag**, allowed only for event & venue and operating costs. Production costs never carry an event or a stream.
-- **Events:** one optional "Other costs" figure per event (amount and short note), which can be set, changed or cleared.
-- **Selectors:**
-  - by event: takings per day (cash, card, total), event & venue costs, other costs, the result before and after other costs;
-  - by stream: income, tagged costs, result;
-  - totals for a date range (for Home).
+### T1.10 — Income entries and income streams (replacing "sales")   Status: tests
+Owner agent: backend-engineer (`src/lib`), then frontend-engineer (wiring: the test seam, the entries list, Home's totals)   Tests: test-engineer (Vitest + the e2e seam contract)   Security review: no (pure functions, pretend data)
+Guide: §10 (seven default streams, cash basis, "the event's usual stream"), §7, §6; DECISIONS.md rows from "What the app is for" to "Event 'Other costs'".
+Outcome:
+- **`src/lib/pretend-data.ts`:**
+  - `INCOME_STREAMS`: the 7 default streams with stable ids, in the guide's order.
+  - Pretend events gain a **usual stream**. Shelf rentals use Vendor shelf rental; everything else uses Sales at events.
+  - The events become:
+    - a finished **3-day** convention whose dates are worked out from today;
+    - today's market (keep the id `pretend-event-todays-market`);
+    - an ongoing shelf rental with no end date.
+  - Date arithmetic is a small pure helper on `YYYY-MM-DD` strings (no `new Date("YYYY-MM-DD")`, no time-zone maths).
+- **`src/lib/entries.ts`:**
+  - The `"sale"` entry kind becomes **`"income"`**: date, stream, amount, payment method (required), an optional event, and notes.
+  - An event may be linked only for the Sales at events and Vendor shelf rental streams.
+  - The add-sale action becomes **add-income**; edit and delete keep working.
+  - `totalsForDate` counts income rows, so Home keeps working until T1.18.
+- **Wiring** (frontend-engineer):
+  - The test seam's `addSale` becomes `addIncome`, with the same safety locks (only when `NEXT_PUBLIC_E2E` is "1" and on localhost).
+  - The Transactions list shows an income row with its stream name.
+  - Home's wording is unchanged.
+Out of scope: event takings, stream tags and "Other costs" (T1.10b); summaries (T1.10c); any new screen.
+Done when: the Vitest and updated Playwright tests pass; the seam is still absent from the Cloudflare build (CI grep); `npm run check` exits 0.
+Evidence:
 
-  Money is added up only in these selectors.
-Rules that apply: dates are YYYY-MM-DD strings; money is integer cents; "Other costs" is never part of overall totals; nothing trusts a total typed in, everything is added up from rows.
-Out of scope: screens; the database (Stage 2+).
-Done when: the Vitest tests pass with hand-worked totals (including the owner's example: 1,000 + 2,000 + 1,500 = $4,500 takings; table $500 + hotel $299 + food $200 = $999 event costs; result $3,501; with $600 other costs, $2,901); `npm run check` exits 0.
+### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: todo
+Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
+Guide: §10 "Two styles, one table", §7; DECISIONS.md "Event takings", "Linking costs to events and streams", "Event 'Other costs'".
+Outcome:
+- One action adds an event day's takings as **two income rows**, cash and card. Both are always saved, even at $0. The stream is Sales at events, or the event's usual stream.
+- Expenses get an optional **stream tag**, allowed only for event & venue and operating costs. Production costs never carry an event or a stream, including after an edit.
+- Each event can have one "Other costs" figure (amount and short note), which can be set, changed or cleared.
+Done when: the Vitest tests pass with hand-worked values; `npm run check` exits 0.
+Evidence:
+
+### T1.10c — Summaries: by event, by stream, by date range   Status: todo
+Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
+Guide: §12 "By event or venue", "By income stream"; DECISIONS.md "Event 'Other costs'".
+Outcome: pure selectors that do all the adding up:
+- **Event:** takings per day (cash, card, total), event & venue costs, the result, the "Other costs" figure, and the result after it.
+- **Stream:** income, the costs counted toward the stream (its tag, or else the linked event's usual stream; each cost counts toward one stream at most), and the result.
+- **Date range:** income, expenses, net.
+
+"Other costs" never enters stream or range totals.
+Done when: the Vitest tests pass, including the owner's example: takings $1,000 + $2,000 + $1,500 = $4,500; event costs $500 + $299 + $200 = $999; result $3,501; with $600 other costs, $2,901. `npm run check` exits 0.
 Evidence:
 
 ### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: todo
