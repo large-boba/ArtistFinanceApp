@@ -10,10 +10,10 @@ import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
 
 /**
- * The sentence both Home and the quick-sale pad show: "Today: $12.50 from 1 sale".
+ * The sentence Home shows: "Today: $12.50 from 1 sale".
  * It only words figures that totalsForDate already worked out.
  */
-export function todaySalesText(salesCents: number, salesCount: number, locale: string): string {
+function todaySalesText(salesCents: number, salesCount: number, locale: string): string {
   return `Today: ${formatCents(salesCents, "AUD", locale)} from ${salesCount} ${salesCount === 1 ? "sale" : "sales"}`;
 }
 

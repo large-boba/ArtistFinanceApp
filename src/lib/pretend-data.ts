@@ -63,8 +63,8 @@ export type PretendEvent = {
 };
 
 /**
- * Three PRETEND events. One is a market on `today` (so the quick-sale screen
- * has a "today's event" to default to); the other two have fixed dates in the
+ * Three PRETEND events. One is a market on `today` (so there is always an
+ * event running today); the other two have fixed dates in the
  * first half of 2026. Usually exactly one event is running on `today`, but if
  * `today` falls on one of the fixed dates (e.g. a device with a wrong clock),
  * two are. That's harmless for pretend data. The ids never change, so entries

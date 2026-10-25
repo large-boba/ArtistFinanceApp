@@ -7,7 +7,8 @@
 // Rules: guide §6 (dates stay "YYYY-MM-DD" strings), §7 (money is integer
 // minor units; every category belongs to exactly one group; event & venue
 // costs prompt for an event but allow "not assigned yet"), §10 (payment
-// methods; quick sales default to cash), owner decision "zero is allowed".
+// methods; a sale's payment method left out defaults to cash), owner
+// decision "zero is allowed".
 //
 // ─── CONTRACT FOR src/lib/entries.ts (the builder follows this exactly) ──────
 //
@@ -686,7 +687,7 @@ describe("delete", () => {
     });
   });
 
-  it("removes the last-added sale (the quick-sale undo)", () => {
+  it("removes the last-added sale", () => {
     const after = entriesReducer(start(), { type: "delete", id: "s2" });
     expect(ids(after.entries)).toStrictEqual(["s1", "e1"]);
   });

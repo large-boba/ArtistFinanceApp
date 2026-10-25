@@ -116,6 +116,15 @@
 //     edge (within 1 px). The page never scrolls sideways, also at 320 px wide
 //     with 200% text.
 // D9. No uncaught errors and no React hydration errors during any test.
+// D10. Home's two totals lines (D3) sit inside a POLITE live region: the
+//     nearest ancestor-or-self with aria-live="polite", or role="status" or
+//     an <output> (both polite by default). Not "assertive" or role="alert",
+//     and not missing. So a screen reader reads a changed total when it is
+//     next free, without interrupting.
+//     Carried over from the removed quick-sale spec (its claim Q10, first
+//     raised in the T1.6 review) when T1.8 deleted the pad under the owner's
+//     2026-10-25 direction. Q10's other half, role="list" on the
+//     Transactions list, stays in expense-form.spec.ts (F9).
 //
 // ═══ THE HAND-WORKED DATASET ════════════════════════════════════════════════
 //
@@ -380,6 +389,25 @@ function amountsIn(text: string): string[] {
 /** Every whole-word "Sale" or "Expense" in a piece of text. */
 function kindWordsIn(text: string): string[] {
   return text.match(/\b(Sale|Expense)\b/g) ?? [];
+}
+
+/**
+ * The politeness of the nearest live region holding the element (itself or an
+ * ancestor): aria-live wins; otherwise role="status" or <output> mean
+ * "polite" and role="alert" means "assertive". null when there is none. (D10;
+ * moved from the removed quick-sale.spec.ts.)
+ */
+function liveRegionOf(locator: Locator): Promise<string | null> {
+  return locator.evaluate((el) => {
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const live = node.getAttribute("aria-live");
+      if (live !== null) return live;
+      const role = node.getAttribute("role");
+      if (role === "status" || (role === null && node.tagName === "OUTPUT")) return "polite";
+      if (role === "alert") return "assertive";
+    }
+    return null;
+  });
 }
 
 /** Waits for the page to have hydrated, using the nav's --nav-h (app-shell claim 15). */
@@ -780,6 +808,14 @@ test.describe("the list is accessible", () => {
     const snapshot = await main(page).ariaSnapshot();
     expect(snapshot).toContain(HOME_SYDNEY_SALES);
     expect(snapshot).toContain(HOME_SYDNEY_EXPENSES);
+  });
+
+  // D10. Moved from quick-sale.spec.ts when T1.8 removed the pad.
+  test("Home's two totals lines sit inside a polite live region", async ({ page }) => {
+    await openWithHook(page, "/");
+    await expect(exactText(page, HOME_EMPTY_SALES)).toBeVisible();
+    expect(await liveRegionOf(exactText(page, HOME_EMPTY_SALES)), "sales total").toBe("polite");
+    expect(await liveRegionOf(exactText(page, HOME_EMPTY_EXPENSES)), "expenses total").toBe("polite");
   });
 });
 

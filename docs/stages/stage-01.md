@@ -221,7 +221,7 @@ Evidence:
   - Test gaps (for the test engineer, later): the chosen event and the notes aren't proven to be stored (Stage 4 event views can cover the event); focus to Date when the date is bad; the "Go key" test name.
 - **For T1.9:** on a phone set to a comma-decimal region, the decimal keypad may have no "." key until Stage 4 adds comma decimals. Note this in the phone-check steps.
 
-### T1.8 — Remove the quick-sale pad                       Status: todo
+### T1.8 — Remove the quick-sale pad                       Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (update the specs that mention "+ Sale"; prove /sale is gone)   Security review: no
 Guide: DECISIONS.md "What the app is for" and "Quick-sale pad" (these replace §10's cash-sale design and §17 Stage 1's "quick-sale number pad").
 Outcome: the pad (`src/app/sale/`, `src/components/QuickSale.tsx`, `e2e/quick-sale.spec.ts`) and Home's "+ Sale" button are deleted. Nothing else changes yet: the sale entries in the store stay until T1.10 replaces them.
@@ -229,6 +229,20 @@ Out of scope: the new navigation, income forms and the "+" button (later cards).
 Done when: `/sale` returns 404; Home has no "+ Sale"; the full Playwright suite passes; `npm run check` exits 0.
 History: the original pad card (built in 671a37a, review round 1 found 2 blocking issues) was cancelled when the owner changed direction. Its tests-first fix round was paused mid-build and kept only as a local stash and patch.
 Evidence:
+- **Tests first** (test engineer): `e2e/removed-quick-sale.spec.ts` covers:
+  - R1: /sale is a 404 on the test build and on the build without the test flag, with redirects not followed;
+  - R2: Home has no "Sale" control and no link to /sale, and still has "+ Expense";
+  - R3: no page or hydration errors.
+
+  `e2e/app-shell.spec.ts` now expects only "+ Expense". Red run: the 5 removal tests failed in both projects (200 instead of 404, one "+ Sale" link); everything else passed.
+- **Built** (frontend engineer):
+  - deleted `src/app/sale/`, `src/components/QuickSale.tsx` and `e2e/quick-sale.spec.ts`;
+  - "+ Sale" removed from Home;
+  - `todaySalesText` no longer exported;
+  - stale comments reworded.
+- **Code review: CHANGES REQUIRED, 1 blocking.** Deleting the pad's spec also removed the only test that Home's totals sit in a polite live region (the T1.6-review carry-over). Fixed by the test engineer: the test and its helper moved to `e2e/entries-list.spec.ts` (claim D10). Proof it can fail: with `aria-live` removed, both projects failed (Expected "polite", Received null); the file was restored byte for byte. Optional findings taken: a re-wrapped comment in `entries.ts`, and stale live-selling comments in the unit tests reworded (no assertion changed).
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 405/405, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **828 passed, 0 failed** (308 skipped are by-project skips).
+- **For T1.18:** the new Home summary must also be a polite live region; D10 will be re-targeted then, with the lead's approval.
 
 ### T1.10 — Income model: streams, event takings, stream tags, "Other costs"   Status: todo
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no (pure functions, pretend data)

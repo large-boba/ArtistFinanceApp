@@ -32,7 +32,7 @@
 //   };
 //   export function pretendEvents(today: string): PretendEvent[]
 //     2 or 3 events. Exactly one of them runs on `today` and starts on `today`
-//     (so the quick-sale screen has a "today's event" to default to). The
+//     (so the pretend data always has an event dated today). The
 //     others are fixed dates that end before 2026-07-01. Event ids are the same
 //     whatever `today` is, so entries that point at an event stay valid.
 //     Throws RangeError when `today` isn't a real YYYY-MM-DD date.

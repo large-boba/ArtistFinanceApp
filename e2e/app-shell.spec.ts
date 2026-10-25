@@ -45,19 +45,24 @@
 //    with a short note matching /coming in Stage \d+/i. (Transactions isn't
 //    checked here because T1.6 replaces its placeholder with the entries list.)
 //
-// 8. Home buttons. Home has exactly one control (a <button> or a link) whose
-//    accessible name is exactly "+ Sale", and exactly one named exactly
-//    "+ Expense". The name equals the visible label, so speech-input users can
-//    say what they see (WCAG 2.5.3); screen readers read it as "plus Sale".
+// 8. Home button. Home has exactly one control (a <button> or a link) whose
+//    accessible name is exactly "+ Expense". The name equals the visible
+//    label, so speech-input users can say what they see (WCAG 2.5.3); screen
+//    readers read it as "plus Expense".
+//    CHANGED (T1.8) by the owner's 2026-10-25 direction (DECISIONS.md "What
+//    the app is for" and "Quick-sale pad"): T1.3's second button, "+ Sale",
+//    and the quick-sale pad it opened are removed. The proof that they are
+//    gone (/sale is a 404, no "Sale" control on Home) is in
+//    removed-quick-sale.spec.ts.
 //
-// 9. Tap targets. Every nav link and both Home buttons are at least 44×44
+// 9. Tap targets. Every nav link and Home's "+ Expense" are at least 44×44
 //    CSS pixels (their own bounding box, not a parent's).
 //
 // 10. Phone layout (390×844). The nav is visible, inside the screen's width,
 //     and its bottom edge is the bottom of the viewport (within 1 px) on every
 //     page, and it stays there while a long page scrolls underneath. On Home,
-//     both buttons are fully on screen without scrolling and not covered by
-//     the nav.
+//     "+ Expense" is fully on screen without scrolling and not covered by the
+//     nav.
 //
 // 11. Keyboard. Pressing Tab from the top of the page reaches the five nav
 //     links in order. A keyboard-focused link shows a visible focus indicator
@@ -86,10 +91,10 @@
 //     Content must not hide behind a taller nav either, at 150% and 200% on
 //     every page: after scrolling to the very bottom, the lowest-ending
 //     element inside <main> ends at or above the nav's top edge (within
-//     1 px). On Home, "+ Sale" and "+ Expense", once scrolled to the top of
-//     the screen (`scrollIntoView({ block: "start" })`, the most a person
-//     can scroll them up), are fully on screen and end at or above the nav's
-//     top edge. Both are still at least 44×44 px and inside 0–390 px.
+//     1 px). On Home, "+ Expense", once scrolled to the top of the screen
+//     (`scrollIntoView({ block: "start" })`, the most a person can scroll it
+//     up), is fully on screen and ends at or above the nav's top edge. It is
+//     still at least 44×44 px and inside 0–390 px.
 //
 // 15. When the nav is pinned (WCAG 2.4.11 Focus not obscured; lead's
 //     decision for T1.3b, replacing T1.3's "700 px tall or less → static"
@@ -197,8 +202,13 @@ function navLink(page: Page, name: string): Locator {
   return mainNav(page).getByRole("link", { name, exact: true });
 }
 
+// Home's big buttons (claim 8). "+ Sale" was removed in T1.8 (owner's
+// 2026-10-25 direction), so only "+ Expense" is left.
+const HOME_BUTTONS = ["+ Expense"] as const;
+type HomeButton = (typeof HOME_BUTTONS)[number];
+
 /** The Home control with this exact accessible name, as a button or a link. */
-function homeControl(page: Page, name: "+ Sale" | "+ Expense"): Locator {
+function homeControl(page: Page, name: HomeButton): Locator {
   return page
     .getByRole("button", { name, exact: true })
     .or(page.getByRole("link", { name, exact: true }));
@@ -446,10 +456,10 @@ test.describe("bottom navigation", () => {
   }
 });
 
-// ---------- 8. Home buttons ----------
+// ---------- 8. Home button ----------
 
-test.describe("Home's two big buttons", () => {
-  for (const name of ["+ Sale", "+ Expense"] as const) {
+test.describe("Home's big button", () => {
+  for (const name of HOME_BUTTONS) {
     test(`Home has exactly one visible control named "${name}"`, async ({
       page,
     }) => {
@@ -460,13 +470,13 @@ test.describe("Home's two big buttons", () => {
     });
   }
 
-  test("on a phone, + Sale and + Expense are fully on screen above the navigation without scrolling", async ({
+  test("on a phone, + Expense is fully on screen above the navigation without scrolling", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "phone", "phone-layout claim");
     await open(page, "/");
     const navTop = (await box(mainNav(page))).y;
-    for (const name of ["+ Sale", "+ Expense"] as const) {
+    for (const name of HOME_BUTTONS) {
       const b = await box(homeControl(page, name));
       expect(b.y, `${name} top is on screen`).toBeGreaterThanOrEqual(0);
       expect(
@@ -491,7 +501,7 @@ test.describe("tap targets are at least 44×44 px", () => {
     });
   }
 
-  for (const name of ["+ Sale", "+ Expense"] as const) {
+  for (const name of HOME_BUTTONS) {
     test(`the Home "${name}" control is at least 44×44 px`, async ({
       page,
     }) => {
@@ -760,7 +770,7 @@ test.describe("on a phone, the navigation still works with bigger text", () => {
       });
     }
 
-    for (const name of ["+ Sale", "+ Expense"] as const) {
+    for (const name of HOME_BUTTONS) {
       test(`on a phone at ${size.percent}% text, Home's "${name}" is fully visible above the nav when scrolled into view`, async ({
         page,
       }, testInfo) => {

@@ -10,8 +10,8 @@
 // Rules: dates are "YYYY-MM-DD" strings (guide §6); money is whole cents
 // (guide §7), never a decimal number; every category belongs to exactly one
 // group, and only event & venue costs may point at an event (guide §7);
-// quick sales default to cash (guide §10). The detailed decisions are written
-// at the top of src/lib/entries.test.ts.
+// a sale's payment method left out defaults to cash (guide §10). The detailed
+// decisions are written at the top of src/lib/entries.test.ts.
 
 import { isIsoDate } from "@/lib/dates";
 import { DRAFT_CATEGORIES } from "@/lib/pretend-data";
