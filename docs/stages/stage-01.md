@@ -90,7 +90,7 @@ Evidence: commits `186b39e` (shell), `bb3da79` (200% text fix) and `3be7d45` (fo
   3. Approve. 9 viewports × 2 text sizes × 5 pages, with 0 cases of hidden focus.
 - Follow-ups go to T1.3b.
 
-### T1.3b — Keep the nav pinned unless it's too tall (before T1.6)   Status: building
+### T1.3b — Keep the nav pinned unless it's too tall (before T1.6)   Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §10 (fast entry at a stall), §19 (everyday use).
 Why: the T1.3 final review found that the 700px height rule un-pins the nav for most iPhones in a Safari tab (visible height is about 664px). That makes switching tabs slow once Transactions is a long list.
@@ -112,7 +112,11 @@ Lead decisions (2026-10-25), from the test engineer's questions:
 - The T1.3 decision-14 tap test now scrolls the tab into view first, because at 200% text on a tall phone the nav sits at the end of the page.
 - A suite of about 3.6 minutes is acceptable.
 
-Evidence:
+Evidence: commit `a610f8f`; CI run #49 green.
+- Tests first: 66 failed before the change.
+- Lead re-run: `npm run check` exit 0; `CI=1 npx playwright test` 455 passed.
+- Code review approved, no blocking findings. Probe results: the switch happens exactly at 25%, there's no flip-flop under 60 rapid resizes, and no ResizeObserver errors.
+- Optional follow-ups logged in `DECISIONS.md`.
 
 ### T1.4 — Turning typed amounts into cents                Status: done
 Owner agent: backend-engineer   Tests: test-engineer (Vitest, written first)   Security review: no
@@ -130,7 +134,7 @@ Evidence: commit `087d4e1`; CI run #42 green.
 - Optional follow-ups logged in `DECISIONS.md`.
 - Note: the lead's commit `5fc8b66` accidentally removed the sample test, and CI run #40 failed. It was restored in `8dd7ff7` (run #41 green).
 
-### T1.5 — Pretend-data store and today's date              Status: todo
+### T1.5 — Pretend-data store and today's date              Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Vitest for the store logic and the date helper)   Security review: no
 Guide: §6 (store a date, not a moment; `todayOnDevice`), §7 (shape), §10 (income fields).
 Outcome:

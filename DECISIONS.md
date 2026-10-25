@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** next up are T1.3b (nav pinning rule) and T1.5 (pretend-data store). T1.1, T1.2, T1.3 and T1.4 are done.
+- **In progress:** T1.5 pretend-data store (tests first). T1.1–T1.4 and T1.3b are done.
 - **Blocked:** —
 
 ## Decided
@@ -69,6 +69,10 @@ Formatting is exact to the cent, with no float division. | §6, §7 |
   - add tests for negative cents (refunds) and for RangeError on non-integers, at the latest when refunds arrive;
   - note that old browsers without `Intl.NumberFormat` v3 lose exactness only above about $70 trillion;
   - Stage 4 must handle 0- and 3-decimal currencies (JPY prints rounded today).
+- Nav (T1.3b review):
+  - at 200% text, a pinned nav flashes for about 100 ms before hydration. If it's reported, add an rem-based media query that guesses the pinning before JS runs;
+  - add a comment that iOS Safari's toolbar can cause one switch from static to sticky while scrolling;
+  - add one 150% pinning test case.
 - `@types/node` is `^20` but the runtime is Node 24. Bumping it also unblocks Vitest 5. Bump it in a later task (one change at a time).
 - npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
 - `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.
