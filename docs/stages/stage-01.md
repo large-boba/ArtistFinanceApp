@@ -65,7 +65,7 @@ Evidence: commit `ef9b146`; CI run #38 green (rules, app and e2e jobs).
 - The reviewer's probe confirmed the phone project is 390×844 with touch and a coarse pointer.
 - Code review approved, no blocking findings. Optional fixes taken: an explicit port and a reuse-server comment. The page-error check is passed on to the T1.3 tests.
 
-### T1.3 — App shell: replace the starter page, bottom navigation   Status: tests
+### T1.3 — App shell: replace the starter page, bottom navigation   Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 steps 1–2, §15 (installable app comes in Stage 6), §19 (everyday use).
 Outcome:
@@ -80,6 +80,31 @@ Rules that apply: mobile-first; accessible; no server code; no new libraries.
 Out of scope: forms, data, PWA manifest.
 Done when:
 - The test engineer's Playwright tests pass at phone and desktop sizes: each tab navigates, each page has its heading, the tap targets meet the minimum size, and there are no links to vercel.com or nextjs.org.
+- `npm run check` passes.
+Evidence: commits `186b39e` (shell), `bb3da79` (200% text fix) and `3be7d45` (focus-not-hidden fix).
+- Tests first: the T1.3 spec has 329 passing runs (177 skipped by project).
+- Lead re-run: `npm run check` exit 0; `CI=1 npx playwright test` 329 passed.
+- Code review, three rounds:
+  1. BLOCKING: nav overflow at 200% text (WCAG 1.4.4). Fixed with a wrapping nav.
+  2. BLOCKING: the sticky multi-row nav hid focused controls on short screens (WCAG 2.4.11). Fixed with a static nav when the screen is 700px tall or less, plus scroll-padding.
+  3. Approve. 9 viewports × 2 text sizes × 5 pages, with 0 cases of hidden focus.
+- Follow-ups go to T1.3b.
+
+### T1.3b — Keep the nav pinned unless it's too tall (before T1.6)   Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Guide: §10 (fast entry at a stall), §19 (everyday use).
+Why: the T1.3 final review found that the 700px height rule un-pins the nav for most iPhones in a Safari tab (visible height is about 664px). That makes switching tabs slow once Transactions is a long list.
+Outcome:
+- The nav stays sticky at the bottom unless its **measured** height is more than a set share of the visible screen (the lead suggests 25%). Only then does it sit in page flow. The share is measured with the existing ResizeObserver, not guessed from the screen height.
+- Focus must still never be hidden (the T1.3 tests stay green).
+- Review cleanups:
+  - no 700/701px gap: use `height >` and `height <=`, or remove the media queries;
+  - `observe(nav, { box: "border-box" })`;
+  - a better first-paint fallback for `--nav-h`;
+  - fix the layout comment about "sticky".
+Done when:
+- New tests pass: at 390×664 (Safari iPhone) and 375×667 at 100% the nav is sticky; at 320×568 and 568×320 at 200% it isn't.
+- All existing T1.3 tests still pass.
 - `npm run check` passes.
 Evidence:
 

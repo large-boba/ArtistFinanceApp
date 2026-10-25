@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** T1.3 app shell (tests being written). T1.1, T1.2 and T1.4 are done.
+- **In progress:** next up are T1.3b (nav pinning rule) and T1.5 (pretend-data store). T1.1, T1.2, T1.3 and T1.4 are done.
 - **Blocked:** —
 
 ## Decided
