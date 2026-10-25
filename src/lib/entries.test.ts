@@ -445,6 +445,7 @@ describe("rejects bad amounts with RangeError and leaves the state untouched", (
     [0.1, "a fraction of a cent"],
     [-1, "negative"],
     [-500, "negative"],
+    [-0, "negative zero: Number.isSafeInteger(-0) is true and -0 < 0 is false, so it needs its own check"],
     [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER, no longer exact"],
     [Number.NaN, "NaN"],
     [Number.POSITIVE_INFINITY, "Infinity"],
@@ -453,8 +454,11 @@ describe("rejects bad amounts with RangeError and leaves the state untouched", (
     [undefined, "missing"],
   ];
 
+  /** Like String(), but shows -0 as "-0" (String(-0) is "0"). */
+  const show = (amount: unknown) => (Object.is(amount, -0) ? "-0" : String(amount));
+
   for (const [amount, why] of badAmounts) {
-    it(`add-sale rejects amountCents ${String(amount)} (${why})`, () => {
+    it(`add-sale rejects amountCents ${show(amount)} (${why})`, () => {
       const before = frozenState(addSale("s0", TODAY, 100));
       const copy = snapshot(before);
       expect(() =>
@@ -463,7 +467,7 @@ describe("rejects bad amounts with RangeError and leaves the state untouched", (
       expect(before).toStrictEqual(copy);
     });
 
-    it(`add-expense rejects amountCents ${String(amount)} (${why})`, () => {
+    it(`add-expense rejects amountCents ${show(amount)} (${why})`, () => {
       const before = frozenState(addSale("s0", TODAY, 100));
       const copy = snapshot(before);
       expect(() =>
@@ -476,7 +480,7 @@ describe("rejects bad amounts with RangeError and leaves the state untouched", (
       expect(before).toStrictEqual(copy);
     });
 
-    it(`edit rejects amountCents ${String(amount)} (${why})`, () => {
+    it(`edit rejects amountCents ${show(amount)} (${why})`, () => {
       const before = frozenState(addSale("s1", TODAY, 100));
       const copy = snapshot(before);
       expect(() => entriesReducer(before, { type: "edit", id: "s1", changes: { amountCents: amount as number } })).toThrow(
@@ -943,6 +947,85 @@ describe("supplier and notes are optional and stored trimmed", () => {
 
   it("throws RangeError for notes that aren't a string (null)", () => {
     expect(() => run(expense({ notes: null }))).toThrow(RangeError);
+  });
+});
+
+// ─── Explicit undefined (lead's ruling, review follow-up) ────────────────────
+//
+// On edit, leave a field out to keep it; use null to clear the event. A field
+// set to explicit `undefined` is a bug in the caller, so it throws RangeError
+// and the state is unchanged. On add, an optional field set to `undefined`
+// just gets its default, exactly as if it were left out (and no key holding
+// `undefined` is stored: toStrictEqual checks that).
+
+describe("explicit undefined: rejected on edit, a default on add", () => {
+  const start = () =>
+    frozenState(
+      {
+        type: "add-expense",
+        id: "v1",
+        expense: { date: TODAY, supplier: "Craft Fair Co", amountCents: 8000, categoryId: STALL_FEES, eventId: TODAYS_EVENT_ID, notes: "Table 12" },
+      },
+      { type: "add-sale", id: "s1", sale: { date: TODAY, amountCents: 500, paymentMethod: "card", eventId: TODAYS_EVENT_ID } },
+    );
+
+  for (const field of ["date", "supplier", "amountCents", "categoryId", "eventId", "notes"] as const) {
+    it(`edit of an expense throws RangeError for ${field}: undefined and leaves the state unchanged`, () => {
+      const before = start();
+      const copy = snapshot(before);
+      expect(() => entriesReducer(before, { type: "edit", id: "v1", changes: { [field]: undefined } })).toThrow(
+        RangeError,
+      );
+      expect(before).toStrictEqual(copy);
+    });
+  }
+
+  for (const field of ["date", "amountCents", "paymentMethod", "eventId"] as const) {
+    it(`edit of a sale throws RangeError for ${field}: undefined and leaves the state unchanged`, () => {
+      const before = start();
+      const copy = snapshot(before);
+      expect(() => entriesReducer(before, { type: "edit", id: "s1", changes: { [field]: undefined } })).toThrow(
+        RangeError,
+      );
+      expect(before).toStrictEqual(copy);
+    });
+  }
+
+  it("edit with eventId: null (not undefined) still clears the event", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "s1", changes: { eventId: null } });
+    expect(after.entries[1]).toStrictEqual({
+      kind: "sale", id: "s1", date: TODAY, amountCents: 500, paymentMethod: "card", eventId: null,
+    });
+  });
+
+  it("add-expense with supplier, eventId and notes all undefined stores the defaults \"\", null and \"\"", () => {
+    const state = run({
+      type: "add-expense",
+      id: "e1",
+      expense: { date: TODAY, supplier: undefined, amountCents: 100, categoryId: PRINTING, eventId: undefined, notes: undefined },
+    });
+    expect(state.entries[0]).toStrictEqual({
+      kind: "expense",
+      id: "e1",
+      date: TODAY,
+      supplier: "",
+      amountCents: 100,
+      categoryId: PRINTING,
+      group: "production",
+      eventId: null,
+      notes: "",
+    });
+  });
+
+  it("add-sale with paymentMethod and eventId undefined stores the defaults \"cash\" and null", () => {
+    const state = run({
+      type: "add-sale",
+      id: "s1",
+      sale: { date: TODAY, amountCents: 100, paymentMethod: undefined, eventId: undefined },
+    });
+    expect(state.entries[0]).toStrictEqual({
+      kind: "sale", id: "s1", date: TODAY, amountCents: 100, paymentMethod: "cash", eventId: null,
+    });
   });
 });
 

@@ -100,9 +100,13 @@ export function createEntriesState(eventIds: readonly string[]): EntriesState {
 
 // ─── Checks shared by adding and editing ─────────────────────────────────────
 
-/** Whole cents from 0 up to the largest number JavaScript holds exactly. */
+/**
+ * Whole cents from 0 up to the largest number JavaScript holds exactly.
+ * -0 is refused too: `-0 < 0` is false, so it needs its own check
+ * (Object.is tells -0 and 0 apart).
+ */
 function checkAmountCents(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
     throw new RangeError("amountCents must be a whole number of cents, 0 or more");
   }
   return value;
@@ -262,6 +266,7 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
  * sales count), and the expenses in cents. Exact whole-cent sums. Throws
  * RangeError for a bad date, or if a total would go past
  * Number.MAX_SAFE_INTEGER cents (beyond that it could no longer be exact).
+ * Negative amounts are rejected for now; refunds arrive in Stage 4 as linked negative income rows, and real totals move to SQL (§12).
  */
 export function totalsForDate(
   entries: readonly Entry[],

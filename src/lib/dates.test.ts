@@ -218,6 +218,7 @@ describe("isIsoDate — a real calendar date written exactly as YYYY-MM-DD", () 
   const invalid: Array<[unknown, string]> = [
     ["2026-02-29", "2026 is not a leap year"],
     ["2100-02-29", "2100 is not a leap year (divisible by 100, not 400)"],
+    ["0000-01-01", "there is no year 0 (Postgres `date` rejects it too)"],
     ["2026-02-30", "February never has 30 days"],
     ["2026-04-31", "April has 30 days"],
     ["2026-06-31", "June has 30 days"],

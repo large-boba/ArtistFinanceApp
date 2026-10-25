@@ -65,9 +65,10 @@ export type PretendEvent = {
 /**
  * Three PRETEND events. One is a market on `today` (so the quick-sale screen
  * has a "today's event" to default to); the other two have fixed dates in the
- * first half of 2026, before this app existed, so for any real `today` exactly
- * one event is running. The ids never change, so entries that point at an
- * event stay valid whatever day it is.
+ * first half of 2026. Usually exactly one event is running on `today`, but if
+ * `today` falls on one of the fixed dates (e.g. a device with a wrong clock),
+ * two are. That's harmless for pretend data. The ids never change, so entries
+ * that point at an event stay valid whatever day it is.
  * Throws RangeError when `today` isn't a real "YYYY-MM-DD" date.
  */
 export function pretendEvents(today: string): PretendEvent[] {
