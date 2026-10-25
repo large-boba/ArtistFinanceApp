@@ -192,6 +192,18 @@ Outcome: "+ Expense" opens a form with:
 
 Saving adds the entry to the store and returns to Home.
 Done when: the Playwright tests pass. They cover a valid save, rejected amounts with clear messages, the event prompt for event & venue categories, and keyboard and screen-reader labels.
+Lead decisions (2026-10-25), from the test engineer's questions:
+- The form is its own page at `/expenses/new`; the header decisions F1–F10 in `e2e/expense-form.spec.ts` are approved.
+- The Home note reads "Practice mode: entries disappear when you refresh or close the app." (the owner may reword it).
+- `role="list"` goes on the nav `<ul>` too.
+- Expense rows don't show the linked event in Stage 1 (T1.6 D6 stands; event views come in Stage 4).
+- Accepted:
+  - a Cancel link;
+  - errors only on Save;
+  - category required, with no default;
+  - the expense Event defaults to "Not assigned yet".
+- Process: browser test runs share ports 3000/3001, so run only one at a time.
+
 Evidence:
 
 ### T1.8 — Quick-sale number pad                            Status: tests
