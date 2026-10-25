@@ -12,6 +12,7 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "rules": "node scripts/check-rules.mjs && node --test scripts/*.test.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run rules",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
@@ -25,6 +26,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

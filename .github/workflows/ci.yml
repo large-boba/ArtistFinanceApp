@@ -47,5 +47,33 @@ jobs:
         run: npx opennextjs-cloudflare build
         env:
           WRANGLER_SEND_METRICS: "false"
-      # Unit tests (Vitest) run inside `npm run check`. Later stages add:
-      # Playwright (T1.2) and supabase test db (Stage 2+).
+      # Unit tests (Vitest) run inside `npm run check`. Browser tests
+      # (Playwright) run in the e2e job below. Later stages add:
+      # supabase test db (Stage 2+).
+
+  e2e:
+    name: Browser tests (Playwright, phone and desktop)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install exact dependencies from package-lock.json
+        run: npm ci
+      # Downloads the Chromium build that matches the pinned @playwright/test
+      # version, plus the Linux libraries it needs.
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      # Builds and starts the production app (webServer in
+      # playwright.config.ts), then runs every test at phone and desktop size.
+      - name: Run browser tests
+        run: npm run test:e2e
+      - name: Upload the Playwright HTML report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
