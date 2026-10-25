@@ -155,7 +155,7 @@ Evidence: commit for T1.5; 287 tests written first, and 388 unit tests pass in t
   - 200k random reducer actions.
 - Follow-up in progress: reject `-0` cents, and add tests for explicit `undefined` in edits and for year 0000.
 
-### T1.6 — Entries list and running total                  Status: tests
+### T1.6 — Entries list and running total                  Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 4, §10 (a running total for the event).
 Outcome:
@@ -164,6 +164,16 @@ Outcome:
 - **Home** shows "Today: $X from N sales" and today's expenses.
 - An empty state when there are no entries.
 Done when: the Playwright tests pass (after an entry is added it appears in the list and the totals update, and the empty state shows).
+Lead decisions (2026-10-25), from the test engineer's questions:
+- **Test seam approved, with both locks.** `window.__bentoTest` exists only in a build made with `NEXT_PUBLIC_E2E=1` (pinned in next.config, built into `.next-e2e`), and it installs only on localhost or 127.0.0.1. Tests S1–S5 prove it never ships. A **security review is required** before acceptance.
+- Money and dates show in the device's locale (an en-US device shows "A$").
+- Wording:
+  - "Today: $X from N sales" ("1 sale" when singular);
+  - "Today's expenses: $X";
+  - "No entries yet.".
+- Rows show the words "Sale" or "Expense", positive amounts, a `<time datetime>`, and the amount in its own element.
+- Sales show the event name if there is one, otherwise the payment method. Expenses show the supplier, otherwise the category.
+
 Evidence:
 
 ### T1.7 — Expense form                                     Status: todo
