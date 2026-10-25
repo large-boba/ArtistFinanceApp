@@ -244,7 +244,7 @@ Evidence:
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 405/405, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **828 passed, 0 failed** (308 skipped are by-project skips).
 - **For T1.18:** the new Home summary must also be a polite live region; D10 will be re-targeted then, with the lead's approval.
 
-### T1.10 — Income entries and income streams (replacing "sales")   Status: tests
+### T1.10 — Income entries and income streams (replacing "sales")   Status: building
 Owner agent: backend-engineer (`src/lib`), then frontend-engineer (wiring: the test seam, the entries list, Home's totals)   Tests: test-engineer (Vitest + the e2e seam contract)   Security review: no (pure functions, pretend data)
 Guide: §10 (seven default streams, cash basis, "the event's usual stream"), §7, §6; DECISIONS.md rows from "What the app is for" to "Event 'Other costs'".
 Outcome:
@@ -267,6 +267,12 @@ Outcome:
   - Home's wording is unchanged.
 Out of scope: event takings, stream tags and "Other costs" (T1.10b); summaries (T1.10c); any new screen.
 Done when: the Vitest and updated Playwright tests pass; the seam is still absent from the Cloudflare build (CI grep); `npm run check` exits 0.
+Lead decisions (2026-10-25), from the test engineer's questions:
+- The event order stays as the card lists it (convention, today's market, shelf).
+- `addDays` works within 0001–9999.
+- Income needs a stream and a payment method; neither has a default.
+- `add-sale` is an unknown action, not an alias.
+- **An income's stream doesn't have to match its event's usual stream.** The usual stream is a smart default (§10), not a rule. The owner may overrule this.
 Evidence:
 
 ### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: todo
