@@ -36,6 +36,19 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | Hosting | **Cloudflare Workers via the OpenNext adapter (`@opennextjs/cloudflare`), replacing Vercel** (owner, 2026-10-24). Why: the free tier allows commercial use; trade-off: Next.js runs through an adapter, so some features need extra setup. The guide's Vercel references and §18 hosting costs no longer apply. Adapter 1.20.13 supports Next.js ≥ 16.4.1. Agents build and preview locally only; deploys, secrets and the account are owner-only. | §4, §18 |
 | Stage 1 screens | No paper sketch. The team builds from the guide's descriptions and the owner reacts to the live result (owner, 2026-10-25). | §17 Stage 1 |
 | Typed amounts (Stage 1) | A leading `$` is ignored, commas are thousands separators, at most 2 decimals (more is rejected, not rounded), zero allowed, negatives and other symbols rejected. Comma decimals and per-currency decimal places come in Stage 4 (owner, 2026-10-25). | §17 Stage 1, §6, §7 |
+| Typed amounts: detailed rules (T1.4 tests) | The lead confirmed the test engineer's readings of the owner's rules (owner may overrule). Rejected inputs:
+- a space after `$`, or `$` anywhere but first;
+- `.5` and `5.` (as the guide's pattern does);
+- signs, brackets, other currency codes;
+- non-ASCII digits.
+
+Rules for what's accepted:
+- Commas must be real thousands groups in the whole-number part.
+- Leading zeros are allowed.
+- Whitespace is trimmed around the input only.
+- Above `Number.MAX_SAFE_INTEGER` cents is rejected; no business maximum yet.
+
+Formatting is exact to the cent, with no float division. | §6, §7 |
 | Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
 | Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
 | Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |

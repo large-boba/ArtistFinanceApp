@@ -83,7 +83,7 @@ Done when:
 - `npm run check` passes.
 Evidence:
 
-### T1.4 — Turning typed amounts into cents                Status: tests
+### T1.4 — Turning typed amounts into cents                Status: building
 Owner agent: backend-engineer   Tests: test-engineer (Vitest, written first)   Security review: no
 Guide: §17 Stage 1 exercise, §7 (money as integer minor units), owner decisions above.
 Outcome: `src/lib/money.ts` with:
