@@ -134,7 +134,7 @@ Evidence: commit `087d4e1`; CI run #42 green.
 - Optional follow-ups logged in `DECISIONS.md`.
 - Note: the lead's commit `5fc8b66` accidentally removed the sample test, and CI run #40 failed. It was restored in `8dd7ff7` (run #41 green).
 
-### T1.5 — Pretend-data store and today's date              Status: tests
+### T1.5 — Pretend-data store and today's date              Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Vitest for the store logic and the date helper)   Security review: no
 Guide: §6 (store a date, not a moment; `todayOnDevice`), §7 (shape), §10 (income fields).
 Outcome:
@@ -147,13 +147,19 @@ Outcome:
 - A **draft** category list using the guide's §7 examples, clearly labelled as pretend data. The real list is still to decide.
 Rules that apply: dates stay strings, never `new Date("YYYY-MM-DD")`; money stays integer cents.
 Done when: the test engineer's tests pass for adding, editing and deleting entries, the totals, and the date helper.
-Evidence:
+Evidence: commit for T1.5; 287 tests written first, and 388 unit tests pass in total.
+- Lead re-run: `npm run check` exit 0.
+- Code review approved, no blocking findings. Fuzz checks found 0 mismatches:
+  - 50k instants × every IANA zone;
+  - 60k dates × 29 locales;
+  - 200k random reducer actions.
+- Follow-up in progress: reject `-0` cents, and add tests for explicit `undefined` in edits and for year 0000.
 
-### T1.6 — Entries list and running total                  Status: todo
-Also (moved from T1.5): the React context provider (`useReducer(entriesReducer, pretendEvents(todayOnDevice()).map(e => e.id), createEntriesState)`) in the root layout, with ids from `crypto.randomUUID()`.
+### T1.6 — Entries list and running total                  Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 4, §10 (a running total for the event).
 Outcome:
+- (Moved from T1.5) the React context provider in the root layout: `useReducer(entriesReducer, pretendEvents(todayOnDevice()).map(e => e.id), createEntriesState)`, with entry ids from `crypto.randomUUID()`. It's a client component, kept as small as possible.
 - **Transactions** lists the pretend entries, newest first, showing the date in the device's local format, the description and the amount.
 - **Home** shows "Today: $X from N sales" and today's expenses.
 - An empty state when there are no entries.
