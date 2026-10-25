@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** T1.2 review; next T1.3 app shell (T1.1 done)
+- **In progress:** T1.3 app shell and T1.4 amounts (tests first, in parallel). T1.1 and T1.2 are done.
 - **Blocked:** —
 
 ## Decided

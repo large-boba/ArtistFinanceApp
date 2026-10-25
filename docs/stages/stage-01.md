@@ -47,7 +47,7 @@ Done when:
 - CI is green.
 Evidence: commit `4a39ae1`; CI run #36 passed. The lead re-ran `npm run check`: exit 0, 1 test file passing, check-rules 0 errors, 60/60 guardrail tests. The builder and the reviewer each broke the test on purpose and saw `check` exit 1. The reviewer confirmed `npm ci` leaves the lockfile unchanged on both npm 10 and npm 11, and that no test code reaches the worker bundle. Code review approved, no blocking findings.
 
-### T1.2 — Browser tests at phone size (Playwright)       Status: building
+### T1.2 — Browser tests at phone size (Playwright)       Status: done
 Owner agent: backend-engineer   Tests: a smoke test proves the runner works   Security review: no
 Guide: §1 (test on a real phone early), §19 (everyday use).
 Outcome:
@@ -59,9 +59,13 @@ Out of scope: real feature tests (the test engineer writes those per task).
 Done when:
 - `npm run test:e2e` passes locally;
 - CI's e2e job is green.
-Evidence:
+Evidence: commit `ef9b146`; CI run #38 green (rules, app and e2e jobs).
+- Lead re-run: `CI=1 npm run test:e2e` 2/2 passed, also with a stray `PORT=4123` set after the review fix.
+- A deliberate break failed both projects.
+- The reviewer's probe confirmed the phone project is 390×844 with touch and a coarse pointer.
+- Code review approved, no blocking findings. Optional fixes taken: an explicit port and a reuse-server comment. The page-error check is passed on to the T1.3 tests.
 
-### T1.3 — App shell: replace the starter page, bottom navigation   Status: todo
+### T1.3 — App shell: replace the starter page, bottom navigation   Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 steps 1–2, §15 (installable app comes in Stage 6), §19 (everyday use).
 Outcome:
@@ -79,7 +83,7 @@ Done when:
 - `npm run check` passes.
 Evidence:
 
-### T1.4 — Turning typed amounts into cents                Status: todo
+### T1.4 — Turning typed amounts into cents                Status: tests
 Owner agent: backend-engineer   Tests: test-engineer (Vitest, written first)   Security review: no
 Guide: §17 Stage 1 exercise, §7 (money as integer minor units), owner decisions above.
 Outcome: `src/lib/money.ts` with:

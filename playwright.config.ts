@@ -47,8 +47,11 @@ export default defineConfig({
   // Locally, an app already running on port 3000 is reused to save time;
   // CI always starts a fresh one.
   webServer: {
-    command: "npm run build && npm run start",
+    // Pass the port explicitly so a PORT variable in the shell can't move the app.
+    command: `npm run build && npm run start -- -p ${PORT}`,
     url: BASE_URL,
+    // Locally, anything already listening on this port (e.g. `npm run dev`) is
+    // reused instead of a fresh production build. Stop it first for a true run.
     reuseExistingServer: !isCI,
     // A cold `next build` can take a few minutes on a slow machine.
     timeout: 300_000,
