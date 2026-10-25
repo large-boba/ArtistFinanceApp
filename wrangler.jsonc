@@ -7,7 +7,7 @@
 // by the owner in the Cloudflare dashboard.
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "bentobudget",
+	"name": "artistfinanceapp",
 	// The worker that `opennextjs-cloudflare build` writes.
 	"main": ".open-next/worker.js",
 	// Should match a date the installed local runtime (workerd) supports.

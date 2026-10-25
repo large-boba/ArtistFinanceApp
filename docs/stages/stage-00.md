@@ -86,7 +86,7 @@ Why now: the owner wants to preview the app on Cloudflare. In the guide, a hoste
 Outcome:
 - `@opennextjs/cloudflare` (dependency) and `wrangler` (devDependency) installed, at versions that satisfy the adapter's peer range.
 - A `wrangler.jsonc` with:
-  - worker name `bentobudget`;
+  - worker name `bentobudget` (renamed to `artistfinanceapp` by the owner on 2026-10-25, to match the Cloudflare project);
   - `main` and `assets` as the adapter's docs specify;
   - a current `compatibility_date`;
   - the compatibility flags the adapter requires (at least `nodejs_compat`);
