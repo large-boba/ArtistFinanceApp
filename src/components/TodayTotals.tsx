@@ -9,6 +9,14 @@ import { totalsForDate } from "@/lib/entries";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
 
+/**
+ * The sentence both Home and the quick-sale pad show: "Today: $12.50 from 1 sale".
+ * It only words figures that totalsForDate already worked out.
+ */
+export function todaySalesText(salesCents: number, salesCount: number, locale: string): string {
+  return `Today: ${formatCents(salesCents, "AUD", locale)} from ${salesCount} ${salesCount === 1 ? "sale" : "sales"}`;
+}
+
 export default function TodayTotals() {
   const device = useDevice();
   const { state } = useEntries();
@@ -27,10 +35,10 @@ export default function TodayTotals() {
   const money = (cents: number) => formatCents(cents, "AUD", device.locale);
 
   return (
-    <div className="mt-6 flex flex-col gap-1">
-      <p className="text-xl font-semibold break-words">
-        {`Today: ${money(salesCents)} from ${salesCount} ${salesCount === 1 ? "sale" : "sales"}`}
-      </p>
+    // aria-live="polite": when a sale or expense is added, a screen reader
+    // reads the changed line when it is next free, without interrupting.
+    <div aria-live="polite" className="mt-6 flex flex-col gap-1">
+      <p className="text-xl font-semibold break-words">{todaySalesText(salesCents, salesCount, device.locale)}</p>
       <p className="text-lg break-words text-zinc-800 dark:text-zinc-200">
         {`Today's expenses: ${money(expensesCents)}`}
       </p>

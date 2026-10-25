@@ -1,9 +1,9 @@
 // Home. A server component: it has no "use client", so nothing here needs the
 // browser. The page title comes from the default in layout.tsx ("BentoBudget").
 //
-// "+ Expense" opens the expense form. "+ Sale" is still a placeholder until
-// the number pad is built (T1.8). Both sit near the top so they are always on
-// screen, above the bottom navigation.
+// "+ Sale" opens the quick-sale number pad and "+ Expense" opens the expense
+// form. Both sit near the top so they are always on screen, above the bottom
+// navigation.
 
 import Link from "next/link";
 import TodayTotals from "@/components/TodayTotals";
@@ -16,12 +16,12 @@ export default function HomePage() {
     <>
       <h1 className="text-2xl font-bold break-words">Home</h1>
       <div className="mt-6 flex flex-col gap-4">
-        <button
-          type="button"
+        <Link
+          href="/sale"
           className={`${bigButton} bg-emerald-800 text-white active:bg-emerald-900`}
         >
           + Sale
-        </button>
+        </Link>
         <Link
           href="/expenses/new"
           className={`${bigButton} bg-indigo-800 text-white active:bg-indigo-900`}
