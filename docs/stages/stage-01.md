@@ -155,7 +155,7 @@ Evidence: commit for T1.5; 287 tests written first, and 388 unit tests pass in t
   - 200k random reducer actions.
 - Follow-up in progress: reject `-0` cents, and add tests for explicit `undefined` in edits and for year 0000.
 
-### T1.6 — Entries list and running total                  Status: building
+### T1.6 — Entries list and running total                  Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 4, §10 (a running total for the event).
 Outcome:
@@ -174,9 +174,13 @@ Lead decisions (2026-10-25), from the test engineer's questions:
 - Rows show the words "Sale" or "Expense", positive amounts, a `<time datetime>`, and the amount in its own element.
 - Sales show the event name if there is one, otherwise the payment method. Expenses show the supplier, otherwise the category.
 
-Evidence:
+Evidence: commit `24b1ea2`. 94 browser tests written first; the full suite passes 548.
+- Lead re-run: `npm run check` exit 0.
+- **Security review approved.** It built the app exactly as Cloudflare does and found no trace of the seam anywhere in `.open-next`. The hostname lock held against tricky names, and the impact if enabled is informational. Both hardening items were taken: a CI step that fails if `__bentoTest` appears in `.open-next`, and a check-rules rule blocking `NEXT_PUBLIC_E2E` in env and wrangler files.
+- **Code review approved.** The guide rules hold, the contrast is AAA, and there are no hydration errors.
+- Optional items carried into T1.7/T1.8: reword the Home note, add `role="list"` on the `<ul>`s (Safari/VoiceOver), take the date at the moment of adding, and make Home's totals a polite live region.
 
-### T1.7 — Expense form                                     Status: todo
+### T1.7 — Expense form                                     Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §17 Stage 1 step 3, §7 (groups; event & venue categories prompt for an event), §6 (native date picker, show the interpreted amount).
 Outcome: "+ Expense" opens a form with:
@@ -190,7 +194,7 @@ Saving adds the entry to the store and returns to Home.
 Done when: the Playwright tests pass. They cover a valid save, rejected amounts with clear messages, the event prompt for event & venue categories, and keyboard and screen-reader labels.
 Evidence:
 
-### T1.8 — Quick-sale number pad                            Status: todo
+### T1.8 — Quick-sale number pad                            Status: tests
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §10 (designing cash-sale entry for a busy stall).
 Outcome:

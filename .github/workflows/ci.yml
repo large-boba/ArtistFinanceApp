@@ -47,6 +47,14 @@ jobs:
         run: npx opennextjs-cloudflare build
         env:
           WRANGLER_SEND_METRICS: "false"
+      # The test-only seam (T1.6) must never reach the package Cloudflare deploys.
+      - name: Check the Cloudflare package has no test seam
+        run: |
+          if grep -rla --exclude='.env*' "__bentoTest" .open-next/; then
+            echo "::error::__bentoTest found in .open-next (the test seam must not ship)"
+            exit 1
+          fi
+          echo "No test seam in .open-next"
       # Unit tests (Vitest) run inside `npm run check`. Browser tests
       # (Playwright) run in the e2e job below. Later stages add:
       # supabase test db (Stage 2+).

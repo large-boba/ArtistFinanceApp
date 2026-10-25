@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** T1.5 pretend-data store (tests first). T1.1–T1.4 and T1.3b are done.
+- **In progress:** T1.7 expense form and T1.8 quick-sale pad (tests first). T1.1–T1.6 are done.
 - **Blocked:** —
 
 ## Decided
