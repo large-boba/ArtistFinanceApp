@@ -6,7 +6,7 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 - **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
 - **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
-- **In progress:** T1.3 app shell and T1.4 amounts (tests first, in parallel). T1.1 and T1.2 are done.
+- **In progress:** T1.3 app shell (tests being written). T1.1, T1.2 and T1.4 are done.
 - **Blocked:** —
 
 ## Decided
@@ -65,6 +65,10 @@ Formatting is exact to the cent, with no float division. | §6, §7 |
 - The lockfile is written with **npm 11**, which ships with Node 24 (CI, `.nvmrc`). npm 10.9.4 crashed adding Vitest (an npm 10 bug with Vite 8's optional peers). `npm ci` still works on npm 10, but `npm install` with npm 10 rewrites the lockfile (drops `libc` fields). Use Node 24, which ships npm 11, when installing packages.
 - Playwright is pinned to **1.63.0** to match the cloud container's preinstalled Chromium (revision 1243). Upgrading means checking the browser match, or adding an `executablePath` override (T1.2).
 - Before e2e tests touch Supabase (Stage 2+), the security reviewer checks that CI failure reports and traces can't contain personal or financial data.
+- `formatCents` (T1.4 review):
+  - add tests for negative cents (refunds) and for RangeError on non-integers, at the latest when refunds arrive;
+  - note that old browsers without `Intl.NumberFormat` v3 lose exactness only above about $70 trillion;
+  - Stage 4 must handle 0- and 3-decimal currencies (JPY prints rounded today).
 - `@types/node` is `^20` but the runtime is Node 24. Bumping it also unblocks Vitest 5. Bump it in a later task (one change at a time).
 - npm marks ESLint 9.39.5 as deprecated. Consider ESLint 10 once `eslint-config-next` supports it.
 - `npm install` on a dev machine may add `@tailwindcss/oxide-wasm32-wasi` entries to `package-lock.json`. That's harmless, and it can be committed.

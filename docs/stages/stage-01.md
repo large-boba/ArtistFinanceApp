@@ -83,7 +83,7 @@ Done when:
 - `npm run check` passes.
 Evidence:
 
-### T1.4 — Turning typed amounts into cents                Status: building
+### T1.4 — Turning typed amounts into cents                Status: done
 Owner agent: backend-engineer   Tests: test-engineer (Vitest, written first)   Security review: no
 Guide: §17 Stage 1 exercise, §7 (money as integer minor units), owner decisions above.
 Outcome: `src/lib/money.ts` with:
@@ -92,7 +92,12 @@ Outcome: `src/lib/money.ts` with:
 
 No floating-point arithmetic on money: parse the whole and fraction parts as integers, as the guide's example does.
 Done when: the test engineer's table of cases passes. The table includes "110", "110.5", "110.50", "$110", "1,100.00", "0", "0.00", "10.505", "-5", "abc", "", "  12.30  ", "1,10,0" and "€5".
-Evidence:
+Evidence: commit `087d4e1`; CI run #42 green.
+- Tests first: 101 Vitest cases. They failed before the code existed and pass now. They were also run against five deliberately wrong versions, and every one failed.
+- Lead re-run: `npm run check` exit 0.
+- Code review approved, no blocking findings. A fuzz test of 2.5M inputs against an independent reference found 0 differences.
+- Optional follow-ups logged in `DECISIONS.md`.
+- Note: the lead's commit `5fc8b66` accidentally removed the sample test, and CI run #40 failed. It was restored in `8dd7ff7` (run #41 green).
 
 ### T1.5 — Pretend-data store and today's date              Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Vitest for the store logic and the date helper)   Security review: no
