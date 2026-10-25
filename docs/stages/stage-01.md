@@ -90,7 +90,7 @@ Evidence: commits `186b39e` (shell), `bb3da79` (200% text fix) and `3be7d45` (fo
   3. Approve. 9 viewports × 2 text sizes × 5 pages, with 0 cases of hidden focus.
 - Follow-ups go to T1.3b.
 
-### T1.3b — Keep the nav pinned unless it's too tall (before T1.6)   Status: todo
+### T1.3b — Keep the nav pinned unless it's too tall (before T1.6)   Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §10 (fast entry at a stall), §19 (everyday use).
 Why: the T1.3 final review found that the 700px height rule un-pins the nav for most iPhones in a Safari tab (visible height is about 664px). That makes switching tabs slow once Transactions is a long list.
@@ -106,6 +106,12 @@ Done when:
 - New tests pass: at 390×664 (Safari iPhone) and 375×667 at 100% the nav is sticky; at 320×568 and 568×320 at 200% it isn't.
 - All existing T1.3 tests still pass.
 - `npm run check` passes.
+Lead decisions (2026-10-25), from the test engineer's questions:
+- The 25% share is measured against `window.innerHeight`, not `visualViewport`, so pinch-zoom never un-pins the nav.
+- The rule is re-checked when the nav resizes **and** when only the screen height changes.
+- The T1.3 decision-14 tap test now scrolls the tab into view first, because at 200% text on a tall phone the nav sits at the end of the page.
+- A suite of about 3.6 minutes is acceptable.
+
 Evidence:
 
 ### T1.4 — Turning typed amounts into cents                Status: done
