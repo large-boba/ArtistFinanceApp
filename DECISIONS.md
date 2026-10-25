@@ -4,9 +4,9 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 
 ## Status
 
-- **Current stage:** Stage 0 — Set up your workshop (in progress, see `docs/stages/stage-00.md`)
-- **Done:** repository cleared; build guide, decisions log and agent team (lead + 7 specialists, guardrails, CI) added
-- **In progress:** T0.1, T0.2 and T0.5 are done. Waiting on the owner for T0.3 (run locally), T0.4 (protect main) and T0.6 (connect Cloudflare). PR #1 merged; Stage 0 follow-up work is in PR #2.
+- **Current stage:** Stage 1 — Build the screens with pretend data (in progress, see `docs/stages/stage-01.md`)
+- **Done:** Stage 0, signed off by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (branch protection on `main`, recommended soon) and the Stage 0 "Check yourself" questions.
+- **In progress:** T1.1 Vitest → backend-engineer
 - **Blocked:** —
 
 ## Decided
@@ -34,6 +34,8 @@ Maintained by the `project-lead` agent. The full reasoning lives in `docs/build-
 | AI | One vision model reads receipts and suggests a category. | §11 |
 | Stack | Next.js + TypeScript (App Router), Tailwind, Supabase, **Cloudflare** (see Hosting). Installed in T0.1: Next.js 16.4.3 (Turbopack, Tailwind via `@tailwindcss/turbopack`), React 19.3.0, TypeScript 5.9.3, Tailwind CSS 4.3.3, ESLint 9.39.5, npm 10.9.4. React Compiler and Cache Components are off. Node.js **24 LTS** (`.nvmrc`, `engines >=24`), checked against nodejs.org on 2026-10-24. Node 26 isn't LTS yet, so revisit when it is. | §4 |
 | Hosting | **Cloudflare Workers via the OpenNext adapter (`@opennextjs/cloudflare`), replacing Vercel** (owner, 2026-10-24). Why: the free tier allows commercial use; trade-off: Next.js runs through an adapter, so some features need extra setup. The guide's Vercel references and §18 hosting costs no longer apply. Adapter 1.20.13 supports Next.js ≥ 16.4.1. Agents build and preview locally only; deploys, secrets and the account are owner-only. | §4, §18 |
+| Stage 1 screens | No paper sketch. The team builds from the guide's descriptions and the owner reacts to the live result (owner, 2026-10-25). | §17 Stage 1 |
+| Typed amounts (Stage 1) | A leading `$` is ignored, commas are thousands separators, at most 2 decimals (more is rejected, not rounded), zero allowed, negatives and other symbols rejected. Comma decimals and per-currency decimal places come in Stage 4 (owner, 2026-10-25). | §17 Stage 1, §6, §7 |
 | Build team | The project lead runs as the main session and directs 7 specialists: test engineer, database engineer, backend engineer, frontend engineer, code reviewer, security reviewer, privacy writer. See `docs/TEAM.md`. | — |
 | Check-ins | The lead works through a whole stage, then waits for the owner's sign-off. It stops earlier only for owner decisions, owner-only actions or phone checks, or a guide/reality conflict. (Owner's choice, 2026-10-24.) | — |
 | Models | The lead chose by difficulty (the owner delegated this). Opus for the database engineer, backend engineer, test engineer, code reviewer and security reviewer: high-risk or subtle work. Sonnet for the frontend engineer and privacy writer: clear-spec work that is always reviewed. The lead inherits the session model. | — |
@@ -75,6 +77,7 @@ To be filled in as providers and fields are added: what personal data, why, wher
   - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
 
   Owner to turn on GitHub branch protection for `main` (T0.4).
+- 2026-10-25 — Stage 0 signed off by the owner (T0.3, T0.4 and the questions carried over). Stage 1 opened. Live app at https://artistfinanceapp.michaelz110897.workers.dev.
 - 2026-10-25 — Cloudflare worker renamed from `bentobudget` to `artistfinanceapp` (owner request) in `wrangler.jsonc`, to match the Cloudflare project and the repo name.
 - 2026-10-24 — **Hosting changed from Vercel to Cloudflare** (owner's decision). Guard and deny list extended: agents can't deploy, change secrets or use remote Cloudflare commands. `.dev.vars` is treated as a secrets file. Task T0.5 added to Stage 0.
 - 2026-10-24 — Round 2 (code-reviewer and security-reviewer) fixed:
