@@ -383,7 +383,7 @@ Evidence:
   - Done: T1.10's note that "the Reports page wording goes when T1.11 removes it".
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **884 passed, 0 failed** (308 by-project skips).
 
-### T1.12 — Income form                                     Status: tests
+### T1.12 — Income form                                     Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data). The `back` address is checked as an internal path; see below.
 Guide: §10 (streams, cash basis), §6 (native date picker, show the interpreted amount); DECISIONS.md "Event takings", "The '+' button".
 Outcome: a new page `/income/new` ("Add income"), in the same style as the expense form: labels, 16px fields, 44px targets, errors only after Save, focus on the first bad field, and "Reads as $X" feedback.
@@ -403,6 +403,11 @@ Outcome: a new page `/income/new` ("Add income"), in the same style as the expen
 - **After Save**, go back to `?back=<path>` if it's a safe internal path: it starts with a single "/", has no "//", "\\" or scheme, and is made only of letters, digits, "-" and "/". Otherwise go back to Home. Use a replace, so Back doesn't reopen the form. A double tap saves once.
 Out of scope: the "+" button (T1.14), event and stream pages (T1.15/T1.16), editing existing income.
 Done when: the Playwright tests pass at phone and desktop size (valid saves for both shapes, rejected amounts with clear messages, pre-fill, the safe `back`, labels and keyboard, 320px at 200% text); `npm run check` exits 0.
+Lead decisions (2026-10-26), from the test engineer's questions; the full spec is decisions I1–I12 in `e2e/income-form.spec.ts`:
+- **Error wording accepted.** For example: "Choose an income stream.", "Enter the cash amount, or 0 if there was none.", "Choose a payment method." The owner may reword these.
+- **Switching streams:** moving between Sales at events and Vendor shelf rental keeps the chosen event; switching to any other stream clears it. Typed amounts don't carry over when the form changes shape.
+- **Cancel** goes to the same place as Save (the safe `back`, otherwise Home).
+- The safe-`back` check is a small shared function in `src/lib`, so the expense form and the "+" button can reuse it.
 Evidence:
 
 ### T1.13 — Expense form: stream tag and pre-fill             Status: todo
