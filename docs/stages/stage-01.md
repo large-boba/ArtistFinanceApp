@@ -570,7 +570,7 @@ Evidence:
   - Logged for the T1.15 test round: Escape should also close the group when focus isn't inside it (Safari doesn't focus a button clicked with the mouse), using a document keydown listener while open. Also refresh the stale claim-8 wording in app-shell.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1717 passed, 0 failed**. Two leftover dev servers from earlier tasks were stopped.
 
-### T1.15 — Events tab and event page                      Status: tests
+### T1.15 — Events tab and event page                      Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data; the event id from the address is only looked up in a fixed list)
 Guide: §12 "By event or venue" (with its note that production costs aren't included), §7, §6; DECISIONS.md "Event takings", "Event 'Other costs'", "The '+' button".
 Outcome:
@@ -596,6 +596,14 @@ Done when: the Playwright tests pass, including the owner's worked example on th
 - with $600 other costs, **$2,901**.
 
 `npm run check` exits 0.
+Lead decisions (2026-10-26); the full spec is E1–E11 in `e2e/events.spec.ts`:
+- **Wording** (the owner may reword any of it):
+  - a loss shows as "-$50.00" (an ordinary hyphen, which is what `formatCents` prints);
+  - dates read "22/06/2026 to 24/06/2026" and "From 02/05/2026, ongoing";
+  - "No takings yet.", "No event & venue costs yet.", "Production costs aren't included here.", "Add other costs", "Change", "Clear".
+- **The events list** shows the plain Result. "Other costs" appear only on the event's own page.
+- **Clear** removes "Other costs" straight away, with no confirmation.
+- **Not decided yet:** whether the Events tab shows as current on an event's page.
 Evidence:
 
 ### T1.16 — Income tab and stream pages                     Status: todo
