@@ -244,7 +244,7 @@ Evidence:
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 405/405, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **828 passed, 0 failed** (308 skipped are by-project skips).
 - **For T1.18:** the new Home summary must also be a polite live region; D10 will be re-targeted then, with the lead's approval.
 
-### T1.10 — Income entries and income streams (replacing "sales")   Status: building
+### T1.10 — Income entries and income streams (replacing "sales")   Status: done
 Owner agent: backend-engineer (`src/lib`), then frontend-engineer (wiring: the test seam, the entries list, Home's totals)   Tests: test-engineer (Vitest + the e2e seam contract)   Security review: no (pure functions, pretend data)
 Guide: §10 (seven default streams, cash basis, "the event's usual stream"), §7, §6; DECISIONS.md rows from "What the app is for" to "Event 'Other costs'".
 Outcome:
@@ -274,6 +274,24 @@ Lead decisions (2026-10-25), from the test engineer's questions:
 - `add-sale` is an unknown action, not an alias.
 - **An income's stream doesn't have to match its event's usual stream.** The usual stream is a smart default (§10), not a rule. The owner may overrule this.
 Evidence:
+- **Tests first** (test engineer): `addDays` (rollovers, leap years, years 0001–0099, phone time zones, limits); `INCOME_STREAMS` and the three events; sale becomes income in `entries.test.ts`; e2e seam `addIncome`, stream-name labels, S6.
+  - Red run: 223 unit and 83 e2e failures, for the intended reasons.
+  - 11 deliberate bugs in a scratch implementation were all caught.
+- **Built:**
+  - backend engineer: `src/lib/dates.ts`, `pretend-data.ts`, `entries.ts`;
+  - frontend engineer: `EntriesProvider.tsx` (the seam renamed, locks unchanged), `EntriesList.tsx` (stream names), `TodayTotals.tsx` (comments).
+  - Phone screenshot viewed by the lead: rows labelled Wholesale, Sales at events, Commissions, Expense, Subscription income and Vendor shelf rental.
+- **Code review: ACCEPT, no blocking findings.** The reviewer cross-checked `addDays` against UTC arithmetic over 884,322 cases, with 0 mismatches.
+  - Optional finding taken: two inaccurate comments in `dates.ts` corrected.
+  - Logged for later:
+    - pin `STREAMS_WITH_EVENTS` in a test, and consider an `IncomeStreamId` type when T1.12 uses it;
+    - the e2e `IncomeSeed` could use `import type { IncomeInput }` (test engineer's call);
+    - a cosmetic spacing nit in `entries.test.ts`;
+    - the Reports page wording goes when T1.11 removes it.
+- **Lead re-ran from a clean build:**
+  - `npm run check` exit 0 (vitest 576/576, check-rules 0 errors, rules tests 61/61);
+  - `CI=1 npx playwright test` gave **834 passed, 0 failed** (308 by-project skips);
+  - the builder's Cloudflare build plus the grep found no `__bentoTest` in `.open-next`; CI repeats this on push.
 
 ### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: todo
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no

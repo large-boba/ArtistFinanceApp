@@ -1,5 +1,6 @@
 // Tests for T1.5, part 1: today's date and showing a date
-// (docs/stages/stage-01.md "T1.5 — Pretend-data store and today's date").
+// (docs/stages/stage-01.md "T1.5 — Pretend-data store and today's date"),
+// and for T1.10: adding days to a date (addDays, at the end of this file).
 //
 // Written by test-engineer BEFORE src/lib/dates.ts exists. The builder must
 // not edit this file; disputes go to the project lead.
@@ -34,6 +35,20 @@
 //     format Date.UTC(year, month - 1, day) with { timeZone: "UTC" }.
 //     Throws RangeError when `iso` fails isIsoDate.
 //
+//   export function addDays(iso: string, days: number): string      (T1.10)
+//     The calendar date `days` days after `iso` (before it when `days` is
+//     negative), e.g. addDays("2026-03-01", -1) is "2026-02-28". Lead's
+//     decision, 2026-10-25. It is PURE CALENDAR MATHS on the year, month and
+//     day numbers: it must not pass the string to new Date() or Date.parse(),
+//     must not use the device's time zone or clock, and must not add 24 hours
+//     of milliseconds to a local midnight (a 23- or 25-hour daylight-saving day
+//     would then land on the wrong date). Throws RangeError when:
+//       - `iso` fails isIsoDate;
+//       - `days` isn't an integer number (1.5, NaN, Infinity, "1", ...);
+//       - the answer would fall outside 0001-01-01 .. 9999-12-31, which is
+//         all a "YYYY-MM-DD" string can hold (DECISION, test engineer: a
+//         RangeError rather than a 5-digit or year-0 string).
+//
 // DECISION (display style): the expected strings below are what Intl's
 // numeric day/month/year style gives in Node 22 and 24 (ICU 77, CLDR 47).
 // For en-AU that is "01/07/2026", not the guide's "1/7/2026": we follow the
@@ -44,7 +59,7 @@
 // that moment (written next to each case). None comes from the code under test.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatDateForDisplay, isIsoDate, todayOnDevice } from "@/lib/dates";
+import { addDays, formatDateForDisplay, isIsoDate, todayOnDevice } from "@/lib/dates";
 
 const ISO_DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -286,6 +301,162 @@ describe("formatDateForDisplay — the person's local format", () => {
   for (const bad of ["2026-02-30", "2026-02-29", "2026-7-1", "2026-07-01T00:00:00Z", "01/07/2026", ""]) {
     it(`throws RangeError for ${JSON.stringify(bad)} instead of showing a made-up date`, () => {
       expect(() => formatDateForDisplay(bad, "en-AU")).toThrow(RangeError);
+    });
+  }
+});
+
+// ─── addDays (T1.10) ─────────────────────────────────────────────────────────
+//
+// Every answer below was counted by hand on a calendar (the working is next to
+// each case). Month lengths: 31 for Jan, Mar, May, Jul, Aug, Oct, Dec; 30 for
+// Apr, Jun, Sep, Nov; February 28, or 29 in a leap year (every 4th year,
+// except century years not divisible by 400: 2000 is a leap year, 2100 isn't).
+
+describe("addDays — rolls over months and years", () => {
+  const cases: Array<[string, number, string, string]> = [
+    ["2026-07-01", 0, "2026-07-01", "adding nothing gives the same day"],
+    ["2026-07-01", 1, "2026-07-02", "the next day"],
+    ["2026-07-02", -1, "2026-07-01", "the day before"],
+    ["2026-01-31", 1, "2026-02-01", "January has 31 days"],
+    ["2026-04-30", 1, "2026-05-01", "April has 30 days"],
+    ["2026-06-30", 1, "2026-07-01", "Australian FY end → FY start"],
+    ["2026-12-31", 1, "2027-01-01", "into the next year"],
+    ["2027-01-01", -1, "2026-12-31", "back into the previous year"],
+    ["2026-03-31", -31, "2026-02-28", "30 days back is 1 March, one more is 28 Feb"],
+  ];
+  for (const [iso, days, expected, why] of cases) {
+    it(`${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} = ${expected} (${why})`, () => {
+      expect(addDays(iso, days)).toBe(expected);
+    });
+  }
+});
+
+describe("addDays — leap years", () => {
+  const cases: Array<[string, number, string, string]> = [
+    ["2026-03-01", -1, "2026-02-28", "2026 isn't a leap year"],
+    ["2026-02-28", 1, "2026-03-01", "2026 isn't a leap year"],
+    ["2028-03-01", -1, "2028-02-29", "2028 is a leap year (divisible by 4)"],
+    ["2028-02-28", 1, "2028-02-29", "2028 is a leap year"],
+    ["2028-02-29", 1, "2028-03-01", "the leap day rolls into March"],
+    ["2100-02-28", 1, "2100-03-01", "2100 isn't a leap year (century, not divisible by 400)"],
+    ["2000-02-28", 1, "2000-02-29", "2000 is a leap year (divisible by 400)"],
+    ["2026-07-01", 365, "2027-07-01", "no 29 February between them, so a year is 365 days"],
+    ["2027-07-01", 366, "2028-07-01", "29 Feb 2028 is in between, so a year is 366 days"],
+    ["2028-07-01", -366, "2027-07-01", "the same year, counted backwards"],
+    // 2026 has 365 days → 2027-01-01 is +365; 2027 has 365 → 2028-01-01 is +730.
+    // 270 days left in leap 2028: Jan 31 + Feb 29 + Mar 31 + Apr 30 + May 31 +
+    // Jun 30 + Jul 31 + Aug 31 = 244 → 1 Sep is +974; 26 more → 27 Sep.
+    ["2026-01-01", 1000, "2028-09-27", "a long jump across a leap year"],
+  ];
+  for (const [iso, days, expected, why] of cases) {
+    it(`${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} = ${expected} (${why})`, () => {
+      expect(addDays(iso, days)).toBe(expected);
+    });
+  }
+});
+
+describe("addDays — early years stay four digits and use the same calendar", () => {
+  // JavaScript's Date.UTC(99, ...) means 1999, not the year 99, so code that
+  // leans on it gets these wrong. isIsoDate uses the same calendar back to year 1.
+  const cases: Array<[string, number, string, string]> = [
+    ["0099-12-31", 1, "0100-01-01", "year 99 is not 1999"],
+    ["0100-01-01", -1, "0099-12-31", "back across the year 100"],
+    ["0999-12-31", 1, "1000-01-01", "three-digit year to four"],
+    ["0050-03-01", -1, "0050-02-28", "50 isn't divisible by 4, so no leap day"],
+    ["0048-03-01", -1, "0048-02-29", "48 is divisible by 4, so a leap day"],
+    ["0001-01-02", -1, "0001-01-01", "the first day of year 1 is fine"],
+    ["9999-12-30", 1, "9999-12-31", "the last day a YYYY-MM-DD string can hold is fine"],
+  ];
+  for (const [iso, days, expected, why] of cases) {
+    it(`${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} = ${expected} (${why})`, () => {
+      expect(addDays(iso, days)).toBe(expected);
+    });
+  }
+});
+
+describe("addDays — the phone's time zone and clock make no difference", () => {
+  // Days around the 2026 daylight-saving changes. Code that adds 24 hours of
+  // milliseconds to a local midnight lands on the wrong date on a 23- or
+  // 25-hour day:
+  //   New York falls back on Sun 1 Nov 2026 (25 hours): midnight 1 Nov + 24 h
+  //     is 23:00 on 1 Nov.
+  //   New York springs forward on Sun 8 Mar 2026 (23 hours): midnight 9 Mar
+  //     − 24 h is 23:00 on 7 Mar.
+  //   Sydney falls back on Sun 5 Apr 2026 and springs forward on Sun 4 Oct 2026.
+  // Code that parses the string as midnight UTC lands a day early in the
+  // Americas (UTC−) and code that mixes local and UTC goes wrong at UTC+14.
+  const cases: Array<[string, string, number, string]> = [
+    ["America/New_York", "2026-11-01", 1, "2026-11-02"],
+    ["America/New_York", "2026-11-02", -1, "2026-11-01"],
+    ["America/New_York", "2026-03-08", 1, "2026-03-09"],
+    ["America/New_York", "2026-03-09", -1, "2026-03-08"],
+    ["Australia/Sydney", "2026-04-05", 1, "2026-04-06"],
+    ["Australia/Sydney", "2026-10-05", -1, "2026-10-04"],
+    ["Australia/Sydney", "2026-10-04", -1, "2026-10-03"],
+    ["America/Los_Angeles", "2026-07-01", 0, "2026-07-01"],
+    ["Pacific/Pago_Pago", "2026-12-31", 1, "2027-01-01"],
+    ["Pacific/Kiritimati", "2026-12-31", 1, "2027-01-01"],
+    ["Pacific/Kiritimati", "2026-03-01", -1, "2026-02-28"],
+  ];
+  for (const [zone, iso, days, expected] of cases) {
+    it(`on a device in ${zone}, ${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} = ${expected}`, () => {
+      onDeviceIn(zone, () => {
+        expect(addDays(iso, days)).toBe(expected);
+      });
+    });
+  }
+
+  it("doesn't read the clock: with the clock frozen on 1 Jan 2030, 2026-07-01 + 1 is still 2026-07-02", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(utc(2030, 1, 1, 0, 0));
+    expect(addDays("2026-07-01", 1)).toBe("2026-07-02");
+  });
+});
+
+describe("addDays — refuses bad input with RangeError", () => {
+  const badDates: Array<[unknown, string]> = [
+    ["2026-02-29", "2026 has no 29 February"],
+    ["2026-04-31", "April has 30 days"],
+    ["2026-7-1", "month and day must be two digits"],
+    ["01/07/2026", "a display format"],
+    ["2026-07-01T00:00:00Z", "a timestamp, not a date"],
+    ["0000-01-01", "there is no year 0"],
+    ["", "empty"],
+    [20260701, "a number"],
+    [null, "null"],
+    [new Date(Date.UTC(2026, 6, 1)), "a Date object"],
+  ];
+  for (const [value, why] of badDates) {
+    it(`throws for the date ${typeof value === "string" ? JSON.stringify(value) : String(value)} (${why})`, () => {
+      expect(() => addDays(value as string, 1)).toThrow(RangeError);
+    });
+  }
+
+  const badDays: Array<[unknown, string]> = [
+    [1.5, "half a day"],
+    [-0.25, "part of a day"],
+    [Number.NaN, "NaN"],
+    [Number.POSITIVE_INFINITY, "Infinity"],
+    [Number.NEGATIVE_INFINITY, "-Infinity"],
+    ["1", "a string"],
+    [null, "null"],
+    [undefined, "missing"],
+  ];
+  for (const [value, why] of badDays) {
+    it(`throws for days = ${typeof value === "string" ? JSON.stringify(value) : String(value)} (${why})`, () => {
+      expect(() => addDays("2026-07-01", value as number)).toThrow(RangeError);
+    });
+  }
+
+  const outOfRange: Array<[string, number, string]> = [
+    ["9999-12-31", 1, "past the last date a 4-digit year can hold"],
+    ["0001-01-01", -1, "before year 1 (there is no year 0)"],
+    ["2026-07-01", 3_000_000, "about 8,200 years later: a 5-digit year"],
+    ["2026-07-01", -800_000, "about 2,190 years earlier: before year 1"],
+  ];
+  for (const [iso, days, why] of outOfRange) {
+    it(`throws for ${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} (${why})`, () => {
+      expect(() => addDays(iso, days)).toThrow(RangeError);
     });
   }
 });

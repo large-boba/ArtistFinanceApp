@@ -1,14 +1,22 @@
 // PRETEND DATA for Stage 1. The real expense category list is STILL TO DECIDE
 // (DECISIONS.md "Still to decide": "Exact expense category list. Draft with
-// real artists", guide §7). Nothing here is a decision.
+// real artists", guide §7). Nothing in DRAFT_CATEGORIES is a decision.
 //
 // DRAFT_CATEGORIES is a draft only: the example categories from guide §7's
 // "Expense groups" table, word for word (first letter capitalised), so the
-// screens have something to show. The pretend events below are made up too.
-// From Stage 3 both come from the database instead of this file.
+// screens have something to show.
+//
+// INCOME_STREAMS is different: the seven starting streams ARE decided
+// (DECISIONS.md "Income streams", guide §10). Only their ids are new (the
+// lead's choice for T1.10). Renaming, adding and archiving streams come later.
+//
+// The pretend events are made up. Their dates are worked out from "today", so
+// there is always a finished convention, a market today and an ongoing shelf.
+// From Stage 3 categories, streams and events come from the database instead
+// of this file.
 
 import type { ExpenseGroup } from "@/lib/entries";
-import { isIsoDate } from "@/lib/dates";
+import { addDays, isIsoDate } from "@/lib/dates";
 
 export type ExpenseCategory = { id: string; name: string; group: ExpenseGroup };
 
@@ -51,6 +59,28 @@ export const DRAFT_CATEGORIES: readonly ExpenseCategory[] = Object.freeze(
   draftCategories.map((c) => Object.freeze(c)),
 );
 
+export type IncomeStream = { id: string; name: string };
+
+/**
+ * The seven default income streams, in the guide's order (§10). The `id` is a
+ * stable slug that income entries point at; the `name` is what people see.
+ * To show a stream's name: INCOME_STREAMS.find((s) => s.id === entry.streamId)?.name.
+ */
+const incomeStreams: IncomeStream[] = [
+  { id: "sales-at-events", name: "Sales at events" },
+  { id: "online-sales", name: "Online sales" },
+  { id: "wholesale", name: "Wholesale" },
+  { id: "commissions", name: "Commissions" },
+  { id: "vendor-shelf-rental", name: "Vendor shelf rental" },
+  { id: "social-media", name: "Social media" },
+  { id: "subscription-income", name: "Subscription income" },
+];
+
+// Frozen (the list and each stream) so no screen can change them by accident.
+export const INCOME_STREAMS: readonly IncomeStream[] = Object.freeze(
+  incomeStreams.map((s) => Object.freeze(s)),
+);
+
 /** The event types from guide §7's `events` table. */
 export type EventType = "market" | "convention" | "exhibition" | "workshop" | "shelf_rental" | "other";
 
@@ -60,14 +90,17 @@ export type PretendEvent = {
   type: EventType;
   startDate: string; // YYYY-MM-DD
   endDate: string | null; // YYYY-MM-DD, or null for an ongoing shelf
+  usualStreamId: string; // an INCOME_STREAMS id: the smart default for this event's income
 };
 
 /**
- * Three PRETEND events. One is a market on `today` (so there is always an
- * event running today); the other two have fixed dates in the
- * first half of 2026. Usually exactly one event is running on `today`, but if
- * `today` falls on one of the fixed dates (e.g. a device with a wrong clock),
- * two are. That's harmless for pretend data. The ids never change, so entries
+ * Three PRETEND events, with dates worked out from `today`:
+ *   1. a comic convention that finished last week: 3 days, from 9 days ago to 7 days ago;
+ *   2. a market on `today` (so there is always an event running today);
+ *   3. a gallery shelf rental that started 60 days ago and is still going (no end date).
+ * Each has a usual income stream (guide §10): a shelf rental's is "Vendor shelf
+ * rental", every other event's is "Sales at events". It's only a smart default
+ * for new income, not a rule. The ids, names and order never change, so entries
  * that point at an event stay valid whatever day it is.
  * Throws RangeError when `today` isn't a real "YYYY-MM-DD" date.
  */
@@ -75,25 +108,28 @@ export function pretendEvents(today: string): PretendEvent[] {
   if (!isIsoDate(today)) throw new RangeError("pretendEvents needs today as a real YYYY-MM-DD date");
   return [
     {
+      id: "pretend-event-comic-con",
+      name: "Pretend comic convention",
+      type: "convention",
+      startDate: addDays(today, -9),
+      endDate: addDays(today, -7),
+      usualStreamId: "sales-at-events",
+    },
+    {
       id: "pretend-event-todays-market",
       name: "Pretend weekend market (today)",
       type: "market",
       startDate: today,
       endDate: today,
+      usualStreamId: "sales-at-events",
     },
     {
-      id: "pretend-event-comic-con",
-      name: "Pretend comic convention",
-      type: "convention",
-      startDate: "2026-05-16",
-      endDate: "2026-05-17",
-    },
-    {
-      id: "pretend-event-zine-workshop",
-      name: "Pretend zine workshop",
-      type: "workshop",
-      startDate: "2026-06-13",
-      endDate: "2026-06-13",
+      id: "pretend-event-shelf",
+      name: "Pretend gallery shelf",
+      type: "shelf_rental",
+      startDate: addDays(today, -60),
+      endDate: null,
+      usualStreamId: "vendor-shelf-rental",
     },
   ];
 }

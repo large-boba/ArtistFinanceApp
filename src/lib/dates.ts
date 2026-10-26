@@ -114,3 +114,78 @@ export function formatDateForDisplay(iso: string, locale: string): string {
     day: "numeric",
   }).format(instant);
 }
+
+// ─── Adding days to a date (T1.10) ───────────────────────────────────────────
+//
+// addDays works only with the year, month and day numbers. It never makes a
+// Date, so neither the phone's time zone nor daylight saving (a 23- or 25-hour
+// day) can move the answer, and the clock is never read.
+//
+// The idea: give every calendar day a serial number (a "day number"), add the
+// days to that number, then turn the number back into a year, month and day.
+// The two conversions are Howard Hinnant's well-known days_from_civil and
+// civil_from_days formulas, which use only whole-number maths. Their one trick is to start each
+// year on 1 March, so the awkward leap day (29 February) falls at the very
+// end of the year and the month lengths before it never change.
+
+/** Day number of 1970-01-01 is 0; each day after adds 1, each day before takes 1 away. */
+function dayNumberOf(year: number, month: number, day: number): number {
+  // Count January and February as months 11 and 12 of the year before.
+  const y = month <= 2 ? year - 1 : year;
+  // The calendar repeats exactly every 400 years (146,097 days): an "era".
+  const era = Math.floor(y / 400);
+  const yearOfEra = y - era * 400; // 0..399
+  const monthFromMarch = month > 2 ? month - 3 : month + 9; // March 0 .. February 11
+  // Days from 1 March to the 1st of this month (31, 30, 31, 30, 31 ... pattern), plus the day.
+  const dayOfYear = Math.floor((153 * monthFromMarch + 2) / 5) + day - 1;
+  // A year has 365 days, plus a leap day every 4th year, minus one every 100th, plus one every 400th.
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  // 0000-03-01 is 719,468 days before 1970-01-01, so taking 719,468 away makes 1970-01-01 come out as 0.
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/** The reverse of dayNumberOf: turns a day number back into year, month and day. */
+function dateOfDayNumber(dayNumber: number): { year: number; month: number; day: number } {
+  const z = dayNumber + 719468; // days since 0000-03-01
+  const era = Math.floor(z / 146097);
+  const dayOfEra = z - era * 146097; // 0..146096
+  const yearOfEra = Math.floor(
+    (dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) / 365,
+  ); // 0..399
+  const dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+  const monthFromMarch = Math.floor((5 * dayOfYear + 2) / 153); // March 0 .. February 11
+  const day = dayOfYear - Math.floor((153 * monthFromMarch + 2) / 5) + 1;
+  const month = monthFromMarch < 10 ? monthFromMarch + 3 : monthFromMarch - 9;
+  // January and February belong to the next calendar year (see dayNumberOf).
+  const year = yearOfEra + era * 400 + (month <= 2 ? 1 : 0);
+  return { year, month, day };
+}
+
+// The first and last days a "YYYY-MM-DD" string can hold (there is no year 0).
+const FIRST_DAY_NUMBER = dayNumberOf(1, 1, 1);
+const LAST_DAY_NUMBER = dayNumberOf(9999, 12, 31);
+
+/**
+ * The calendar date `days` days after `iso` (before it when `days` is
+ * negative), e.g. addDays("2026-03-01", -1) is "2026-02-28" and
+ * addDays("2028-03-01", -1) is "2028-02-29" (a leap year).
+ * Throws RangeError when `iso` isn't a real "YYYY-MM-DD" date, when `days`
+ * isn't a whole number, or when the answer would be before 0001-01-01 or
+ * after 9999-12-31.
+ */
+export function addDays(iso: string, days: number): string {
+  const parts = splitIsoDate(iso);
+  if (parts === null) throw new RangeError("addDays needs a real YYYY-MM-DD date");
+  // Number.isInteger is false for 1.5, NaN, Infinity and anything that isn't a number (such as "1").
+  if (!Number.isInteger(days)) throw new RangeError("addDays needs a whole number of days");
+
+  const target = dayNumberOf(parts.year, parts.month, parts.day) + days;
+  if (target < FIRST_DAY_NUMBER || target > LAST_DAY_NUMBER) {
+    throw new RangeError("addDays: the answer would be outside 0001-01-01 to 9999-12-31");
+  }
+
+  const { year, month, day } = dateOfDayNumber(target);
+  const pad = (n: number, width: number) => String(n).padStart(width, "0");
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
+}

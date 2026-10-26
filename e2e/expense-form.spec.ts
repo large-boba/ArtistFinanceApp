@@ -77,8 +77,10 @@
 // F6. Event. A native <select> labelled "Event" is in the accessibility tree
 //     only while an event & venue category is chosen. Its options, in order:
 //     "Not assigned yet" (selected when it appears), then the pretend events
-//     "Pretend weekend market (today)", "Pretend comic convention",
-//     "Pretend zine workshop". With no category, or a production or operating
+//     in pretendEvents()'s order. Since T1.10 those are
+//     "Pretend comic convention", "Pretend weekend market (today)",
+//     "Pretend gallery shelf" (pinned in src/lib/pretend-data.test.ts; the
+//     zine workshop is gone). With no category, or a production or operating
 //     category, there is no Event field, and saving never sends an event for
 //     those (the store refuses it, guide §7).
 //
@@ -194,12 +196,12 @@ const OPERATING = [
   "Phone",
 ] as const;
 
-// pretendEvents() names, in order, after "Not assigned yet".
+// pretendEvents() names, in order, after "Not assigned yet" (T1.10's three events).
 const EVENT_OPTIONS = [
   NOT_ASSIGNED,
-  "Pretend weekend market (today)",
   "Pretend comic convention",
-  "Pretend zine workshop",
+  "Pretend weekend market (today)",
+  "Pretend gallery shelf",
 ] as const;
 
 // Valid amounts (owner's T1.4 rules) and what "Reads as" must show in en-AU.

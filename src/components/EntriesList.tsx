@@ -1,12 +1,13 @@
 "use client";
 
 // The Transactions screen's content: every pretend entry, newest first, or a
-// friendly empty message. Each row says "Sale" or "Expense" in words (colour
-// alone would not help someone who can't tell the colours apart), and shows
-// the date, a short description and the amount. Amounts are shown as stored,
-// without a minus sign: the word says which kind it is.
+// friendly empty message. Each row says "Expense", or the name of its income
+// stream ("Wholesale", "Online sales", ...), in words (colour alone would not
+// help someone who can't tell the colours apart), and shows the date, a short
+// description and the amount. Amounts are shown as stored, without a minus
+// sign: the word says which kind it is.
 
-import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
+import { DRAFT_CATEGORIES, INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { entriesNewestFirst, type Entry, type PaymentMethod } from "@/lib/entries";
@@ -41,7 +42,14 @@ export default function EntriesList() {
 
   const events = pretendEvents(device.today);
 
-  // What the row says about the entry: who you paid or what you sold at.
+  // The row's label: "Expense", or the income's stream name.
+  function labelOf(entry: Entry): string {
+    if (entry.kind === "expense") return "Expense";
+    return INCOME_STREAMS.find((s) => s.id === entry.streamId)?.name ?? "Income";
+  }
+
+  // What the row says about the entry: who you paid, or for income the event
+  // it came from (or, with no event, how you were paid).
   function describe(entry: Entry): string {
     if (entry.kind === "expense") {
       if (entry.supplier !== "") return entry.supplier;
@@ -59,12 +67,12 @@ export default function EntriesList() {
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-700 dark:text-zinc-300">
               <span
                 className={
-                  entry.kind === "sale"
+                  entry.kind === "income"
                     ? "rounded-md bg-emerald-800 px-2 py-0.5 font-semibold text-white"
                     : "rounded-md bg-indigo-800 px-2 py-0.5 font-semibold text-white"
                 }
               >
-                {entry.kind === "sale" ? "Sale" : "Expense"}
+                {labelOf(entry)}
               </span>
               <time dateTime={entry.date}>{formatDateForDisplay(entry.date, device.locale)}</time>
             </p>

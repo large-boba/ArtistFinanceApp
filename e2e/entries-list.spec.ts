@@ -1,7 +1,12 @@
-// Entries list and running total (T1.6, docs/stages/stage-01.md).
+// Entries list and running total (T1.6, docs/stages/stage-01.md), updated for
+// T1.10 ("Income entries and income streams (replacing 'sales')"): the store's
+// "sale" entries became "income" entries with an income stream, so the seam's
+// addSale became addIncome and an income row shows its stream's name where a
+// sale row showed "Sale".
 // Guide §6 (store a date, show it the local way), §10 ("Today: $640 from 23
-// sales"), §17 Stage 1 step 4, §19 (dates display locally; screen reader and
-// keyboard).
+// sales"; the seven income streams), §17 Stage 1 step 4, §19 (dates display
+// locally; screen reader and keyboard). DECISIONS.md "What the app is for"
+// (owner, 2026-10-25: tracking after the fact, not live selling).
 //
 // Written by the test engineer BEFORE the code. Builders must not edit this
 // file; report a disputed test to the project lead instead.
@@ -12,7 +17,7 @@
 //
 // ═══ THE TEST SEAM (the builder follows this exactly) ═══════════════════════
 //
-// There is no form to add entries until T1.7 and T1.8, so these tests put
+// There is no form to add income until T1.12, so these tests put
 // pretend entries into the store through a small hook on `window`. It must be
 // impossible for it to reach the live site, so it has TWO independent locks:
 //
@@ -50,13 +55,21 @@
 //
 // The hook, when both locks are open:
 //   window.__bentoTest = {
-//     addSale(sale: SaleInput): void,
+//     addIncome(income: IncomeInput): void,                (T1.10, was addSale)
 //     addExpense(expense: ExpenseInput): void,
 //   }
 //   - Each call does exactly what the real store does for a new entry:
-//     dispatch({ type: "add-sale", id: crypto.randomUUID(), sale }) (or
+//     dispatch({ type: "add-income", id: crypto.randomUUID(), income }) (or
 //     "add-expense"/expense) on the provider's useReducer. Nothing else: no
-//     edit, delete, reset, "seed by name", URL parameter or storage.
+//     edit, delete, reset, "seed by name", URL parameter or storage. The old
+//     addSale is gone: the hook has exactly the two functions above (S6).
+//   - IncomeInput is src/lib/entries.ts's type (see entries.test.ts):
+//     { date, streamId, amountCents, paymentMethod, eventId?, notes? }, with
+//     paymentMethod required. This file writes the inputs out by hand (the
+//     IncomeSeed type below) instead of importing the type, so the test build
+//     still compiles before T1.10 is built and the red run shows the real
+//     failures. A seed the store refuses throws in the page, which fails the
+//     test through the D9 fixture.
 //   - It is set by the entries provider (in the root layout) in a useEffect
 //     once the page has hydrated, so it exists on every page, and it is
 //     removed in that effect's cleanup. Tests wait for it to appear.
@@ -73,10 +86,11 @@
 // D2. "Today" is todayOnDevice() in the device's own time zone (guide §6),
 //     never the UTC date. Tests pin `timezoneId` and freeze the clock.
 // D3. Home shows two lines, each its own element whose whole text is exactly:
-//       "Today: <formatCents(sales today)> from <N> sales"
+//       "Today: <formatCents(income today)> from <N> sales"
 //       "Today's expenses: <formatCents(expenses today)>"
-//     with a plain ASCII apostrophe (U+0027). N counts every sale dated
-//     today, $0.00 sales included. When N is 1 it says "from 1 sale"
+//     with a plain ASCII apostrophe (U+0027). N counts every income row dated
+//     today, from every stream, $0.00 rows included (T1.10 keeps this wording
+//     until T1.18 replaces Home's "today" totals). When N is 1 it says "from 1 sale"
 //     (singular). With no entries: "Today: $0.00 from 0 sales" and
 //     "Today's expenses: $0.00". The two lines update as soon as an entry is
 //     added, without a reload.
@@ -91,20 +105,26 @@
 //       - the date in a <time> element whose `datetime` attribute is the
 //         stored "YYYY-MM-DD" and whose text is formatDateForDisplay(date,
 //         locale). Exactly one <time> per row. The raw ISO text is not shown;
-//       - the kind, as the word "Sale" or "Expense" (so the difference never
-//         depends on colour alone, WCAG 1.4.1). A row never contains the
-//         other kind's word;
+//       - the label, in words (so the difference never depends on colour
+//         alone, WCAG 1.4.1):
+//           expense → the word "Expense";
+//           income  → its stream's name from INCOME_STREAMS (T1.10), one of
+//                     "Sales at events", "Online sales", "Wholesale",
+//                     "Commissions", "Vendor shelf rental", "Social media",
+//                     "Subscription income".
+//         A row holds exactly one of these eight labels, once, and never the
+//         old word "Sale" on its own;
 //       - the description:
 //           expense → the supplier (as stored, trimmed) if it isn't empty,
 //                     otherwise the category's name from DRAFT_CATEGORIES;
-//           sale    → the event's name from pretendEvents() if the sale has an
-//                     event, otherwise its payment method label:
+//           income  → the event's name from pretendEvents() if the income has
+//                     an event, otherwise its payment method label:
 //                     cash "Cash", card "Card", online "Online",
 //                     bank_transfer "Bank transfer", other "Other";
 //       - the amount: formatCents(amountCents, "AUD", locale), shown as
 //         stored, with no sign in front ("-" or "−"). Expenses are not shown
 //         as negative: the guide keeps negative amounts for refunds (§10), and
-//         the kind word says which it is. Exactly one amount per row, in its
+//         the label says which it is. Exactly one amount per row, in its
 //         own element whose whole text is the amount (e.g. <span>$12.50</span>).
 //     The order of these inside a row is up to the builder.
 // D7. Lost on refresh (the stage lesson). Entries live only in React state:
@@ -134,32 +154,41 @@
 // on 30 June, so today = "2026-06-30" there (guide §19's late-night Perth and
 // early-morning Sydney cases).
 //
-// Added in this order (A1 first):
-//   A1  sale     2026-06-30   4500  cash                       "Cash"            $45.00
-//   A2  expense  2026-07-01   2350  Printing, "Officeworks"    "Officeworks"     $23.50
-//   A3  sale     2026-07-01   1250  card                       "Card"            $12.50
-//   A4  sale     2026-07-01      0  cash (a zero sale)         "Cash"            $0.00
-//   A5  expense  2026-06-13   6000  Stall or table fees, no supplier,
-//                                   event: zine workshop       "Stall or table fees" $60.00
-//   A6  expense  2026-07-02  15000  Accommodation, "Harbour Hotel"  "Harbour Hotel"  $150.00
-//   A7  sale     2026-07-01   2000  cash, event: today's market
-//                                   "Pretend weekend market (today)"           $20.00
-//   A8  expense  2026-07-01   3299  Software, "  Adobe  " (stored "Adobe")      $32.99
-//   A9  sale     2026-06-30    999  online                     "Online"          $9.99
-//   A10 sale     2026-07-01 123456  bank_transfer              "Bank transfer"   $1,234.56
-//   A11 sale     2026-06-30      1  other                      "Other"           $0.01
+// Added in this order (A1 first). The seven income rows use each of the seven
+// streams once, so every stream name is checked as a row label. The amounts
+// and dates are the same as before T1.10, so the totals didn't change.
+//        kind     date        cents  details                        label / description             amount
+//   A1  income   2026-06-30   4500  Vendor shelf rental, cash, event: the shelf
+//                                   "Vendor shelf rental" / "Pretend gallery shelf"           $45.00
+//   A2  expense  2026-07-01   2350  Printing, "Officeworks"        "Expense" / "Officeworks"         $23.50
+//   A3  income   2026-07-01   1250  Commissions, card              "Commissions" / "Card"            $12.50
+//   A4  income   2026-07-01      0  Subscription income, cash (a zero row)
+//                                                                  "Subscription income" / "Cash"    $0.00
+//   A5  expense  2026-06-13   6000  Stall or table fees, no supplier, event: the convention
+//                                                                  "Expense" / "Stall or table fees" $60.00
+//   A6  expense  2026-07-02  15000  Accommodation, "Harbour Hotel" "Expense" / "Harbour Hotel"       $150.00
+//   A7  income   2026-07-01   2000  Sales at events, cash, event: today's market
+//                                   "Sales at events" / "Pretend weekend market (today)"      $20.00
+//   A8  expense  2026-07-01   3299  Software, "  Adobe  " (stored "Adobe")
+//                                                                  "Expense" / "Adobe"               $32.99
+//   A9  income   2026-06-30    999  Social media, online           "Social media" / "Online"         $9.99
+//   A10 income   2026-07-01 123456  Wholesale, bank_transfer       "Wholesale" / "Bank transfer"     $1,234.56
+//   A11 income   2026-06-30      1  Online sales, other            "Online sales" / "Other"          $0.01
+// (A9 and A11 are paired on purpose: the description "Online" never sits in a
+// row labelled "Online sales", so finding "Online" can't be fooled by the label.)
 //
 // Newest first (date descending; same date, added later first):
 //   A6 (07-02) · A10, A8, A7, A4, A3, A2 (07-01) · A11, A9, A1 (06-30) · A5 (06-13)
 //
 // Sydney, today 2026-07-01:
-//   sales    A3 1250 + A4 0 + A7 2000 + A10 123456 = 126706 cents → $1,267.06, 4 sales
+//   income   A3 1250 + A4 0 + A7 2000 + A10 123456 = 126706 cents → $1,267.06, 4 rows
 //   expenses A2 2350 + A8 3299                     =   5649 cents → $56.49
 // Perth, today 2026-06-30:
-//   sales    A1 4500 + A9 999 + A11 1 = 5500 cents → $55.00, 3 sales
+//   income   A1 4500 + A9 999 + A11 1 = 5500 cents → $55.00, 3 rows
 //   expenses none                                 → $0.00
 // (An app that wrongly used the UTC date in Sydney would show the Perth
-// numbers, and one that skipped $0.00 sales would say "3 sales".)
+// numbers, one that skipped $0.00 rows would say "3 sales", and one that
+// counted only "Sales at events" would say "$20.00 from 1 sale".)
 //
 // Every expected string below is written out by hand. None is computed with
 // the app's own code (formatCents, formatDateForDisplay, totalsForDate, ...).
@@ -167,8 +196,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
-// Type-only import (erased at run time): the hook takes the store's own input types.
-import type { ExpenseInput, SaleInput } from "../src/lib/entries";
+// Type-only import (erased at run time): the hook takes the store's own expense
+// input type. The income input is written out by hand below (see the seam notes).
+import type { ExpenseInput } from "../src/lib/entries";
 
 // ---------- fixed facts ----------
 
@@ -186,46 +216,73 @@ const HOOK_WAIT_MS = 10_000;
 
 // Pretend event ids and names (pinned by src/lib/pretend-data.test.ts).
 const TODAYS_MARKET = "pretend-event-todays-market";
-const ZINE_WORKSHOP = "pretend-event-zine-workshop";
+const CONVENTION = "pretend-event-comic-con";
+const SHELF = "pretend-event-shelf";
 
-type SeedItem = { kind: "sale"; input: SaleInput } | { kind: "expense"; input: ExpenseInput };
+/**
+ * What addIncome takes (src/lib/entries.ts IncomeInput, T1.10), written out by
+ * hand. streamId is an INCOME_STREAMS id (pinned by pretend-data.test.ts).
+ */
+type IncomeSeed = {
+  date: string;
+  streamId: string;
+  amountCents: number;
+  paymentMethod: "cash" | "card" | "online" | "bank_transfer" | "other";
+  eventId?: string | null;
+  notes?: string;
+};
+
+type SeedItem = { kind: "income"; input: IncomeSeed } | { kind: "expense"; input: ExpenseInput };
 
 /** A1..A11 in the order they are added. */
 const DATASET: readonly SeedItem[] = [
-  /* A1  */ { kind: "sale", input: { date: "2026-06-30", amountCents: 4500, paymentMethod: "cash" } },
+  /* A1  */ { kind: "income", input: { date: "2026-06-30", streamId: "vendor-shelf-rental", amountCents: 4500, paymentMethod: "cash", eventId: SHELF } },
   /* A2  */ { kind: "expense", input: { date: "2026-07-01", amountCents: 2350, categoryId: "printing", supplier: "Officeworks" } },
-  /* A3  */ { kind: "sale", input: { date: "2026-07-01", amountCents: 1250, paymentMethod: "card" } },
-  /* A4  */ { kind: "sale", input: { date: "2026-07-01", amountCents: 0, paymentMethod: "cash" } },
-  /* A5  */ { kind: "expense", input: { date: "2026-06-13", amountCents: 6000, categoryId: "stall-table-fees", eventId: ZINE_WORKSHOP } },
+  /* A3  */ { kind: "income", input: { date: "2026-07-01", streamId: "commissions", amountCents: 1250, paymentMethod: "card" } },
+  /* A4  */ { kind: "income", input: { date: "2026-07-01", streamId: "subscription-income", amountCents: 0, paymentMethod: "cash" } },
+  /* A5  */ { kind: "expense", input: { date: "2026-06-13", amountCents: 6000, categoryId: "stall-table-fees", eventId: CONVENTION } },
   /* A6  */ { kind: "expense", input: { date: "2026-07-02", amountCents: 15000, categoryId: "accommodation", supplier: "Harbour Hotel" } },
-  /* A7  */ { kind: "sale", input: { date: "2026-07-01", amountCents: 2000, paymentMethod: "cash", eventId: TODAYS_MARKET } },
+  /* A7  */ { kind: "income", input: { date: "2026-07-01", streamId: "sales-at-events", amountCents: 2000, paymentMethod: "cash", eventId: TODAYS_MARKET } },
   /* A8  */ { kind: "expense", input: { date: "2026-07-01", amountCents: 3299, categoryId: "software", supplier: "  Adobe  " } },
-  /* A9  */ { kind: "sale", input: { date: "2026-06-30", amountCents: 999, paymentMethod: "online" } },
-  /* A10 */ { kind: "sale", input: { date: "2026-07-01", amountCents: 123456, paymentMethod: "bank_transfer" } },
-  /* A11 */ { kind: "sale", input: { date: "2026-06-30", amountCents: 1, paymentMethod: "other" } },
+  /* A9  */ { kind: "income", input: { date: "2026-06-30", streamId: "social-media", amountCents: 999, paymentMethod: "online" } },
+  /* A10 */ { kind: "income", input: { date: "2026-07-01", streamId: "wholesale", amountCents: 123456, paymentMethod: "bank_transfer" } },
+  /* A11 */ { kind: "income", input: { date: "2026-06-30", streamId: "online-sales", amountCents: 1, paymentMethod: "other" } },
 ];
+
+/** The eight row labels (D6): "Expense" and the seven stream names, written out by hand. */
+const ROW_LABELS = [
+  "Expense",
+  "Sales at events",
+  "Online sales",
+  "Wholesale",
+  "Commissions",
+  "Vendor shelf rental",
+  "Social media",
+  "Subscription income",
+] as const;
+type RowLabel = (typeof ROW_LABELS)[number];
 
 type Row = {
   iso: string;
   date: string; // as shown for the locale
-  kind: "Sale" | "Expense";
+  label: RowLabel;
   description: string;
   amount: string; // as shown for the locale
 };
 
 /** The rows newest first, worked out by hand, in en-AU. */
 const ROWS_EN_AU: readonly Row[] = [
-  { iso: "2026-07-02", date: "02/07/2026", kind: "Expense", description: "Harbour Hotel", amount: "$150.00" }, // A6
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Sale", description: "Bank transfer", amount: "$1,234.56" }, // A10
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Expense", description: "Adobe", amount: "$32.99" }, // A8
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Sale", description: "Pretend weekend market (today)", amount: "$20.00" }, // A7
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Sale", description: "Cash", amount: "$0.00" }, // A4
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Sale", description: "Card", amount: "$12.50" }, // A3
-  { iso: "2026-07-01", date: "01/07/2026", kind: "Expense", description: "Officeworks", amount: "$23.50" }, // A2
-  { iso: "2026-06-30", date: "30/06/2026", kind: "Sale", description: "Other", amount: "$0.01" }, // A11
-  { iso: "2026-06-30", date: "30/06/2026", kind: "Sale", description: "Online", amount: "$9.99" }, // A9
-  { iso: "2026-06-30", date: "30/06/2026", kind: "Sale", description: "Cash", amount: "$45.00" }, // A1
-  { iso: "2026-06-13", date: "13/06/2026", kind: "Expense", description: "Stall or table fees", amount: "$60.00" }, // A5
+  { iso: "2026-07-02", date: "02/07/2026", label: "Expense", description: "Harbour Hotel", amount: "$150.00" }, // A6
+  { iso: "2026-07-01", date: "01/07/2026", label: "Wholesale", description: "Bank transfer", amount: "$1,234.56" }, // A10
+  { iso: "2026-07-01", date: "01/07/2026", label: "Expense", description: "Adobe", amount: "$32.99" }, // A8
+  { iso: "2026-07-01", date: "01/07/2026", label: "Sales at events", description: "Pretend weekend market (today)", amount: "$20.00" }, // A7
+  { iso: "2026-07-01", date: "01/07/2026", label: "Subscription income", description: "Cash", amount: "$0.00" }, // A4
+  { iso: "2026-07-01", date: "01/07/2026", label: "Commissions", description: "Card", amount: "$12.50" }, // A3
+  { iso: "2026-07-01", date: "01/07/2026", label: "Expense", description: "Officeworks", amount: "$23.50" }, // A2
+  { iso: "2026-06-30", date: "30/06/2026", label: "Online sales", description: "Other", amount: "$0.01" }, // A11
+  { iso: "2026-06-30", date: "30/06/2026", label: "Social media", description: "Online", amount: "$9.99" }, // A9
+  { iso: "2026-06-30", date: "30/06/2026", label: "Vendor shelf rental", description: "Pretend gallery shelf", amount: "$45.00" }, // A1
+  { iso: "2026-06-13", date: "13/06/2026", label: "Expense", description: "Stall or table fees", amount: "$60.00" }, // A5
 ];
 
 /** The same rows as an en-US device shows them (AUD is "A$" outside Australia). */
@@ -294,15 +351,15 @@ async function waitForHook(page: Page): Promise<void> {
   await page
     .waitForFunction(
       (name) => {
-        const hook = (window as unknown as Record<string, { addSale?: unknown; addExpense?: unknown } | undefined>)[name];
-        return typeof hook?.addSale === "function" && typeof hook?.addExpense === "function";
+        const hook = (window as unknown as Record<string, { addIncome?: unknown; addExpense?: unknown } | undefined>)[name];
+        return typeof hook?.addIncome === "function" && typeof hook?.addExpense === "function";
       },
       HOOK_NAME,
       { timeout: HOOK_WAIT_MS },
     )
     .catch(() => {
       throw new Error(
-        `test seam window.${HOOK_NAME} (addSale, addExpense) never appeared: ` +
+        `test seam window.${HOOK_NAME} (addIncome, addExpense) never appeared: ` +
           "the app must install it when built with NEXT_PUBLIC_E2E=1 and served on localhost",
       );
     });
@@ -319,11 +376,11 @@ async function seed(page: Page, items: readonly SeedItem[]): Promise<void> {
   await page.evaluate(
     ({ name, items }) => {
       const hook = (window as unknown as Record<string, {
-        addSale(sale: unknown): void;
+        addIncome(income: unknown): void;
         addExpense(expense: unknown): void;
       }>)[name];
       for (const item of items) {
-        if (item.kind === "sale") hook.addSale(item.input);
+        if (item.kind === "income") hook.addIncome(item.input);
         else hook.addExpense(item.input);
       }
     },
@@ -386,9 +443,15 @@ function amountsIn(text: string): string[] {
   return text.match(/[A-Z]{0,2}\$\d[\d,]*\.\d{2}/g) ?? [];
 }
 
-/** Every whole-word "Sale" or "Expense" in a piece of text. */
-function kindWordsIn(text: string): string[] {
-  return text.match(/\b(Sale|Expense)\b/g) ?? [];
+/** Every row label (D6: "Expense" or a stream name) in a piece of text, in order. */
+function labelsIn(text: string): string[] {
+  const pattern = new RegExp(`\\b(${ROW_LABELS.map(escapeRegExp).join("|")})\\b`, "g");
+  return text.match(pattern) ?? [];
+}
+
+/** Every whole-word "Sale" (the old label; "Sales" doesn't count) in a piece of text. */
+function oldSaleWordsIn(text: string): string[] {
+  return text.match(/\bSale\b/g) ?? [];
 }
 
 /**
@@ -525,13 +588,23 @@ test.describe("with the hand-worked entries", () => {
     }
   });
 
-  test('each row says "Sale" or "Expense" exactly once, and never the other word', async ({ page }) => {
+  test('each row shows its label exactly once ("Expense" or its stream\'s name), and no other label', async ({ page }) => {
     await openWithHook(page, "/transactions");
     await seed(page, DATASET);
     await expect(rows(page)).toHaveCount(11);
     for (let i = 0; i < ROWS_EN_AU.length; i++) {
       const text = await rowText(rows(page).nth(i));
-      expect(kindWordsIn(text), `row ${i + 1}: "${text}"`).toEqual([ROWS_EN_AU[i].kind]);
+      expect(labelsIn(text), `row ${i + 1}: "${text}"`).toEqual([ROWS_EN_AU[i].label]);
+    }
+  });
+
+  test('no row says the old label "Sale" any more', async ({ page }) => {
+    await openWithHook(page, "/transactions");
+    await seed(page, DATASET);
+    await expect(rows(page)).toHaveCount(11);
+    for (let i = 0; i < ROWS_EN_AU.length; i++) {
+      const text = await rowText(rows(page).nth(i));
+      expect(oldSaleWordsIn(text), `row ${i + 1}: "${text}"`).toEqual([]);
     }
   });
 
@@ -569,15 +642,31 @@ test.describe("with the hand-worked entries", () => {
     }
   });
 
-  test("the $0.00 sale is listed like any other sale", async ({ page }) => {
+  test("the $0.00 income is listed like any other income", async ({ page }) => {
     await openWithHook(page, "/transactions");
     await seed(page, DATASET);
     // A4 is row 5.
     const zero = rows(page).nth(4);
     const text = await rowText(zero);
     expect(amountsIn(text)).toEqual(["$0.00"]);
-    expect(kindWordsIn(text)).toEqual(["Sale"]);
+    expect(labelsIn(text)).toEqual(["Subscription income"]);
     await expect(zero.locator("time")).toHaveAttribute("datetime", "2026-07-01");
+  });
+
+  test('an Online sales income is labelled "Online sales"', async ({ page }) => {
+    await openWithHook(page, "/transactions");
+    await seed(page, [
+      { kind: "income", input: { date: "2026-07-01", streamId: "online-sales", amountCents: 2599, paymentMethod: "card" } },
+    ]);
+    await expect(rows(page)).toHaveCount(1);
+    const row = rows(page).first();
+    const text = await rowText(row);
+    expect(labelsIn(text), `row: "${text}"`).toEqual(["Online sales"]);
+    expect(oldSaleWordsIn(text), `row: "${text}"`).toEqual([]);
+    expect(text, "the description is the payment method").toMatch(/(^|[^\p{L}])Card([^\p{L}]|$)/u);
+    expect(amountsIn(text)).toEqual(["$25.99"]);
+    await expect(row.locator("time")).toHaveAttribute("datetime", "2026-07-01");
+    expect(await row.ariaSnapshot(), "the label is in the accessibility tree").toContain("Online sales");
   });
 
   test(`Home says exactly "${HOME_SYDNEY_SALES}" (early morning in Sydney is already 1 July)`, async ({ page }) => {
@@ -602,9 +691,11 @@ test.describe("with the hand-worked entries", () => {
     await expect(exactText(page, HOME_EMPTY_EXPENSES)).toHaveCount(0);
   });
 
-  test('a single $0.00 sale today shows as "Today: $0.00 from 1 sale"', async ({ page }) => {
+  test('a single $0.00 income today shows as "Today: $0.00 from 1 sale"', async ({ page }) => {
     await openWithHook(page, "/");
-    await seed(page, [{ kind: "sale", input: { date: "2026-07-01", amountCents: 0 } }]);
+    await seed(page, [
+      { kind: "income", input: { date: "2026-07-01", streamId: "sales-at-events", amountCents: 0, paymentMethod: "cash" } },
+    ]);
     await expect(exactText(page, "Today: $0.00 from 1 sale")).toHaveCount(1);
     await expect(exactText(page, "Today: $0.00 from 1 sale")).toBeVisible();
   });
@@ -626,12 +717,14 @@ test.describe("with the hand-worked entries", () => {
     await expect(exactText(page, HOME_SYDNEY_EXPENSES)).toBeVisible();
   });
 
-  test("a sale added while Transactions is open appears straight away, in its newest-first place", async ({ page }) => {
+  test("an income added while Transactions is open appears straight away, in its newest-first place", async ({ page }) => {
     await openWithHook(page, "/transactions");
     await seed(page, DATASET);
     await expect(rows(page)).toHaveCount(11);
     // Today's newest entry: it goes after A6 (2 July) and before A10, i.e. row 2.
-    await seed(page, [{ kind: "sale", input: { date: "2026-07-01", amountCents: 750, paymentMethod: "card" } }]);
+    await seed(page, [
+      { kind: "income", input: { date: "2026-07-01", streamId: "sales-at-events", amountCents: 750, paymentMethod: "card" } },
+    ]);
     await expect(rows(page)).toHaveCount(12);
     const second = rows(page).nth(1);
     await expect(second.locator("time")).toHaveAttribute("datetime", "2026-07-01");
@@ -640,13 +733,13 @@ test.describe("with the hand-worked entries", () => {
     expect(amountsIn(await rowText(rows(page).nth(2)))).toEqual(["$1,234.56"]);
   });
 
-  test("Home's totals update straight away when a sale and an expense are added", async ({ page }) => {
+  test("Home's totals update straight away when an income and an expense are added", async ({ page }) => {
     await openWithHook(page, "/");
     await seed(page, DATASET);
     await expect(exactText(page, HOME_SYDNEY_SALES)).toBeVisible();
     // 126706 + 750 = 127456 → $1,274.56 from 5 sales; 5649 + 101 = 5750 → $57.50.
     await seed(page, [
-      { kind: "sale", input: { date: "2026-07-01", amountCents: 750, paymentMethod: "card" } },
+      { kind: "income", input: { date: "2026-07-01", streamId: "online-sales", amountCents: 750, paymentMethod: "card" } },
       { kind: "expense", input: { date: "2026-07-01", amountCents: 101, categoryId: "packaging" } },
     ]);
     await expect(exactText(page, "Today: $1,274.56 from 5 sales")).toBeVisible();
@@ -779,14 +872,14 @@ test.describe("the list is accessible", () => {
     expect(tags.items).toEqual(Array(11).fill("LI"));
   });
 
-  test("each row's date, kind, description and amount are in the accessibility tree", async ({ page }) => {
+  test("each row's date, label, description and amount are in the accessibility tree", async ({ page }) => {
     await openWithHook(page, "/transactions");
     await seed(page, DATASET);
     await expect(rows(page)).toHaveCount(11);
     for (let i = 0; i < ROWS_EN_AU.length; i++) {
       const snapshot = await rows(page).nth(i).ariaSnapshot();
-      const { date, kind, description, amount } = ROWS_EN_AU[i];
-      for (const part of [date, kind, description, amount]) {
+      const { date, label, description, amount } = ROWS_EN_AU[i];
+      for (const part of [date, label, description, amount]) {
         expect(snapshot, `row ${i + 1} exposes "${part}" to screen readers`).toContain(part);
       }
     }
@@ -899,6 +992,20 @@ test.describe("the test seam is locked", () => {
     // Both builds exist, so the flag-on one went to its own folder (S2).
     expect(existsSync(path.join(repoRoot(), ".next-e2e", "BUILD_ID")), "the flagged build is in .next-e2e").toBe(true);
     expect(buildFilesContaining(distDir, HOOK_NAME)).toEqual([]);
+  });
+
+  test("S6: the seam offers exactly addExpense and addIncome (addSale is gone; no edit, delete or reset)", async ({ page }) => {
+    await open(page, "/");
+    // Wait for the hook object itself (not for addIncome), so a hook that
+    // still has the old addSale shows up below as the wrong list of names.
+    await page.waitForFunction((name) => typeof (window as unknown as Record<string, unknown>)[name] === "object", HOOK_NAME, {
+      timeout: HOOK_WAIT_MS,
+    });
+    const keys = await page.evaluate((name) => {
+      const hook = (window as unknown as Record<string, object>)[name];
+      return Object.keys(hook).sort();
+    }, HOOK_NAME);
+    expect(keys).toEqual(["addExpense", "addIncome"]);
   });
 });
 

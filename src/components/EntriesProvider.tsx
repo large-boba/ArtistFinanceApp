@@ -49,8 +49,8 @@ export default function EntriesProvider({ children }: { children: ReactNode }) {
       if (host === "localhost" || host === "127.0.0.1") {
         const w = window as unknown as Record<string, unknown>;
         w.__bentoTest = {
-          addSale: (sale: Extract<EntriesAction, { type: "add-sale" }>["sale"]) =>
-            dispatch({ type: "add-sale", id: crypto.randomUUID(), sale }),
+          addIncome: (income: Extract<EntriesAction, { type: "add-income" }>["income"]) =>
+            dispatch({ type: "add-income", id: crypto.randomUUID(), income }),
           addExpense: (expense: Extract<EntriesAction, { type: "add-expense" }>["expense"]) =>
             dispatch({ type: "add-expense", id: crypto.randomUUID(), expense }),
         };

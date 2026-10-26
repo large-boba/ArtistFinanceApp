@@ -1,6 +1,6 @@
 "use client";
 
-// Home's two running totals: today's sales and today's expenses. "Today" is the
+// Home's two running totals: today's income and today's expenses. "Today" is the
 // date on the device (guide §6). The figures come from totalsForDate; money is
 // only formatted here, never added up in this file.
 
@@ -35,7 +35,7 @@ export default function TodayTotals() {
   const money = (cents: number) => formatCents(cents, "AUD", device.locale);
 
   return (
-    // aria-live="polite": when a sale or expense is added, a screen reader
+    // aria-live="polite": when an income or expense is added, a screen reader
     // reads the changed line when it is next free, without interrupting.
     <div aria-live="polite" className="mt-6 flex flex-col gap-1">
       <p className="text-xl font-semibold break-words">{todaySalesText(salesCents, salesCount, device.locale)}</p>

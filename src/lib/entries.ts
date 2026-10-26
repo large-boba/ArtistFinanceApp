@@ -1,5 +1,7 @@
-// The pretend-entries store logic for Stage 1 (T1.5): expenses and sales kept
-// in memory only, lost on refresh on purpose.
+// The pretend-entries store logic for Stage 1 (T1.5, T1.10): expenses and
+// income kept in memory only, lost on refresh on purpose. The app tracks
+// money after the fact (owner, 2026-10-25), so an income entry is "money that
+// came in on this date, from this income stream", not a live sale.
 //
 // Everything in this file is "pure": no clock, no random ids, no saving or
 // loading. Given the same inputs it always gives the same answer and never
@@ -10,11 +12,13 @@
 // Rules: dates are "YYYY-MM-DD" strings (guide §6); money is whole cents
 // (guide §7), never a decimal number; every category belongs to exactly one
 // group, and only event & venue costs may point at an event (guide §7);
-// a sale's payment method left out defaults to cash (guide §10). The detailed
-// decisions are written at the top of src/lib/entries.test.ts.
+// every income belongs to one of the seven income streams, always says how it
+// was paid (there is no default), and only "Sales at events" and "Vendor shelf
+// rental" income may point at an event (guide §10). The detailed decisions are
+// written at the top of src/lib/entries.test.ts.
 
 import { isIsoDate } from "@/lib/dates";
-import { DRAFT_CATEGORIES } from "@/lib/pretend-data";
+import { DRAFT_CATEGORIES, INCOME_STREAMS } from "@/lib/pretend-data";
 
 export const EXPENSE_GROUPS = ["production", "event_venue", "operating"] as const;
 export type ExpenseGroup = (typeof EXPENSE_GROUPS)[number];
@@ -34,16 +38,18 @@ export type ExpenseEntry = {
   notes: string; // trimmed, may be ""
 };
 
-export type SaleEntry = {
-  kind: "sale";
+export type IncomeEntry = {
+  kind: "income";
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD, the day the money came in (cash basis, guide §10)
+  streamId: string; // an INCOME_STREAMS id (pretend-data.ts)
   amountCents: number; // whole cents, 0 or more
   paymentMethod: PaymentMethod;
   eventId: string | null;
+  notes: string; // trimmed, may be ""
 };
 
-export type Entry = ExpenseEntry | SaleEntry;
+export type Entry = ExpenseEntry | IncomeEntry;
 
 export type EntriesState = {
   entries: readonly Entry[]; // in the order they were added
@@ -59,17 +65,19 @@ export type ExpenseInput = {
   notes?: string;
 };
 
-export type SaleInput = {
+export type IncomeInput = {
   date: string;
+  streamId: string; // required: no default stream
   amountCents: number;
-  paymentMethod?: PaymentMethod;
+  paymentMethod: PaymentMethod; // required: no default payment method
   eventId?: string | null;
+  notes?: string;
 };
 
 export type EntriesAction =
   | { type: "add-expense"; id: string; expense: ExpenseInput }
-  | { type: "add-sale"; id: string; sale: SaleInput }
-  | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<SaleInput> }
+  | { type: "add-income"; id: string; income: IncomeInput }
+  | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<IncomeInput> }
   | { type: "delete"; id: string };
 
 // The only fields each kind of entry may be given or changed. Anything else
@@ -82,7 +90,22 @@ const EXPENSE_FIELDS: ReadonlySet<string> = new Set([
   "eventId",
   "notes",
 ]);
-const SALE_FIELDS: ReadonlySet<string> = new Set(["date", "amountCents", "paymentMethod", "eventId"]);
+const INCOME_FIELDS: ReadonlySet<string> = new Set([
+  "date",
+  "streamId",
+  "amountCents",
+  "paymentMethod",
+  "eventId",
+  "notes",
+]);
+
+/**
+ * The only income streams whose income may be linked to an event (guide §10:
+ * takings at a market or convention, and money from a vendor shelf). Income
+ * from the other five streams (online sales, wholesale, ...) has no event.
+ * Forms can use this to decide whether to offer an Event field.
+ */
+export const STREAMS_WITH_EVENTS: readonly string[] = Object.freeze(["sales-at-events", "vendor-shelf-rental"]);
 
 /**
  * The starting state: no entries, and the events entries may point at.
@@ -130,11 +153,18 @@ function groupOf(categoryId: unknown): ExpenseGroup {
   return category.group;
 }
 
+/** Required: there is no default payment method, so a missing one is refused too. */
 function checkPaymentMethod(value: unknown): PaymentMethod {
-  if (value === undefined) return "cash";
   const found = PAYMENT_METHODS.find((m) => m === value);
   if (found === undefined) throw new RangeError("unknown payment method");
   return found;
+}
+
+/** Required: must be exactly one of the INCOME_STREAMS ids (not a name such as "Online sales"). */
+function checkStreamId(value: unknown): string {
+  const found = INCOME_STREAMS.find((s) => s.id === value);
+  if (found === undefined) throw new RangeError("unknown income stream");
+  return found.id;
 }
 
 /** null means "no event"; anything else must be one of the state's events. */
@@ -178,15 +208,25 @@ function buildExpense(id: string, input: Record<string, unknown>, eventIds: read
   };
 }
 
-/** Builds a complete, checked sale entry. Used for adding and for editing. */
-function buildSale(id: string, input: Record<string, unknown>, eventIds: readonly string[]): SaleEntry {
+/** Builds a complete, checked income entry. Used for adding and for editing. */
+function buildIncome(id: string, input: Record<string, unknown>, eventIds: readonly string[]): IncomeEntry {
+  const streamId = checkStreamId(input.streamId);
+  const eventId = checkEventId(input.eventId, eventIds);
+  // Guide §10: only event takings and shelf income belong to an event.
+  // (Whether the event's usual stream matches isn't checked: the usual stream
+  // is a smart default for forms, not a rule.)
+  if (!STREAMS_WITH_EVENTS.includes(streamId) && eventId !== null) {
+    throw new RangeError("only Sales at events and Vendor shelf rental income can be linked to an event");
+  }
   return {
-    kind: "sale",
+    kind: "income",
     id,
     date: checkDate(input.date),
+    streamId,
     amountCents: checkAmountCents(input.amountCents),
     paymentMethod: checkPaymentMethod(input.paymentMethod),
-    eventId: checkEventId(input.eventId, eventIds),
+    eventId,
+    notes: checkText(input.notes, "notes"),
   };
 }
 
@@ -213,10 +253,10 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       return { ...state, entries: [...state.entries, entry] };
     }
 
-    case "add-sale": {
+    case "add-income": {
       const id = checkNewId(state, action.id);
-      const input = checkFields(action.sale, SALE_FIELDS);
-      const entry = buildSale(id, input, state.eventIds);
+      const input = checkFields(action.income, INCOME_FIELDS);
+      const entry = buildIncome(id, input, state.eventIds);
       return { ...state, entries: [...state.entries, entry] };
     }
 
@@ -225,7 +265,7 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       if (index === -1) throw new RangeError("there is no entry with this id to edit");
       const current = state.entries[index];
 
-      const changes = checkFields(action.changes, current.kind === "expense" ? EXPENSE_FIELDS : SALE_FIELDS);
+      const changes = checkFields(action.changes, current.kind === "expense" ? EXPENSE_FIELDS : INCOME_FIELDS);
       // To leave a field as it is, leave it out. An explicit undefined is
       // refused (use null for "no event").
       for (const [key, value] of Object.entries(changes)) {
@@ -233,14 +273,16 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       }
 
       // Rebuild the whole entry as it would be after the change, so every rule
-      // (including the group and event rules) is checked on the end result.
+      // (including the group, stream and event rules) is checked on the end
+      // result. So moving an income with an event to a stream without events
+      // is refused, unless the same edit also sets eventId: null.
       // The builders read only the editable fields, so the kind and id stay
       // as they were and the group is looked up again from the category.
       const merged: Record<string, unknown> = { ...current, ...changes };
       const updated =
         current.kind === "expense"
           ? buildExpense(current.id, merged, state.eventIds)
-          : buildSale(current.id, merged, state.eventIds);
+          : buildIncome(current.id, merged, state.eventIds);
 
       const entries = state.entries.map((e, i) => (i === index ? updated : e));
       return { ...state, entries };
@@ -262,11 +304,13 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
 // ─── Reading the entries ─────────────────────────────────────────────────────
 
 /**
- * Totals for one calendar day: the sales in cents, how many sales (zero-amount
- * sales count), and the expenses in cents. Exact whole-cent sums. Throws
- * RangeError for a bad date, or if a total would go past
- * Number.MAX_SAFE_INTEGER cents (beyond that it could no longer be exact).
- * Negative amounts are rejected for now; refunds arrive in Stage 4 as linked negative income rows, and real totals move to SQL (§12).
+ * Totals for one calendar day: the income in cents (every stream), how many
+ * income rows (zero-amount ones count), and the expenses in cents. The names
+ * salesCents and salesCount stay until T1.18 replaces Home's "today" wording.
+ * Exact whole-cent sums. Throws RangeError for a bad date, or if a total would
+ * go past Number.MAX_SAFE_INTEGER cents (beyond that it could no longer be
+ * exact). Negative amounts are rejected for now; refunds arrive in Stage 4 as
+ * linked negative income rows, and real totals move to SQL (§12).
  */
 export function totalsForDate(
   entries: readonly Entry[],
@@ -290,7 +334,7 @@ export function totalsForDate(
 
   for (const entry of entries) {
     if (entry.date !== date) continue;
-    if (entry.kind === "sale") {
+    if (entry.kind === "income") {
       salesCents = add(salesCents, entry.amountCents);
       salesCount += 1;
     } else {

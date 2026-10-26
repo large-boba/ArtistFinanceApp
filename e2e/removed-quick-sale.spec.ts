@@ -29,10 +29,11 @@
 // R3. No uncaught errors and no React hydration errors during any test in
 //     this file (same fixture as entries-list.spec.ts D9 and expense-form F10).
 //
-// NOT claimed here (still true until T1.10 replaces them, and covered by
-// entries-list.spec.ts): the store's "sale" entries, the add-sale action and
-// the window.__bentoTest.addSale seam stay. The new "+" button, navigation and
-// income forms are later cards and aren't anticipated.
+// NOT claimed here: the store's entries and the window.__bentoTest seam
+// (T1.10 replaced the "sale" entries, the add-sale action and addSale with
+// "income" entries, add-income and addIncome; covered by entries.test.ts and
+// entries-list.spec.ts). The new "+" button, navigation and income forms are
+// later cards and aren't anticipated.
 
 import { expect, test as base, type Page } from "@playwright/test";
 
