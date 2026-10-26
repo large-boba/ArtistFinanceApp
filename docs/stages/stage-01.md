@@ -293,7 +293,7 @@ Evidence:
   - `CI=1 npx playwright test` gave **834 passed, 0 failed** (308 by-project skips);
   - the builder's Cloudflare build plus the grep found no `__bentoTest` in `.open-next`; CI repeats this on push.
 
-### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: review
+### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: done
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
 Guide: §10 "Two styles, one table", §7; DECISIONS.md "Event takings", "Linking costs to events and streams", "Event 'Other costs'".
 Outcome:
@@ -307,8 +307,16 @@ Lead decisions (2026-10-26), written into the `entries.test.ts` header as decisi
 - **Other costs:** a plain object keyed by event id. Setting it again replaces the whole figure (the note becomes "" if none is sent; the form always sends the current note). Clearing an event with no figure does nothing; an unknown event is refused.
 - 11 T1.10 tests were reshaped only to add the new empty fields (`streamId: null`, `otherCosts: {}`). Their behaviour is unchanged; the lead accepted this.
 Evidence:
+- **Tests first** (test engineer), in `entries.test.ts` (decisions 12–14). Red run: 81 failures for the intended reasons. 18 deliberate bugs planted in a scratch implementation were all caught.
+- **Built** (backend engineer): `src/lib/entries.ts`. Commit 04eb114.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 718/718, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **834 passed, 0 failed**.
+- **Code review: ACCEPT, no blocking findings.** The reviewer fuzzed 6,000 random actions on frozen states: 0 production costs with a stream or event, 0 changed inputs, 0 duplicate ids, and every accepted takings action added exactly 2 rows. Four optional findings, all taken in T1.10c (tests first):
+  1. pin `toBe(before)` when clearing an event with no figure;
+  2. `toStrictEqual` for other costs kept across the other actions;
+  3. rename the set action's `note` to `notes`, matching every other input;
+  4. make the field whitelist refuse objects with an inherited prototype (inherited values were checked anyway, so this was harmless).
 
-### T1.10c — Summaries: by event, by stream, by date range   Status: todo
+### T1.10c — Summaries: by event, by stream, by date range   Status: tests
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
 Guide: §12 "By event or venue", "By income stream"; DECISIONS.md "Event 'Other costs'".
 Outcome: pure selectors that do all the adding up:
