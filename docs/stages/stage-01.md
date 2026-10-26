@@ -353,10 +353,15 @@ Evidence:
     - direct tests for `addCents`/`subtractCents`, both signs and both edges.
 - **Lead re-ran:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61), before and after the small fixes. `CI=1 npx playwright test` gave **834 passed, 0 failed**.
 
-### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright; update app-shell and entries-list specs)   Security review: no
-Guide: §17 Stage 1 step 2; DECISIONS.md "Navigation". Keeps T1.3/T1.3b's rules: 44px targets, pinned only when ≤25% of the screen height, works at 200% text.
-Outcome: the five tabs in that order. Expenses and Income are simple pages for now (filled in by T1.16 and T1.17). Transactions and Reports leave the nav and their routes are removed; the entries list moves under Expenses and Income in later cards.
+### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright; update the app-shell spec)   Security review: no
+Guide: §17 Stage 1 step 2; DECISIONS.md "Navigation". Keeps T1.3/T1.3b's rules: 44px targets, pinned only when ≤25% of the screen height, works at 200% text, `aria-current` on the current tab.
+Outcome:
+- The bottom tabs are exactly **Home (/), Events (/events), Expenses (/expenses), Income (/income), Settings (/settings)**, in that order, each with an icon.
+- `/expenses` and `/income` are new simple pages: one heading and a short "coming next" note. T1.16 and T1.17 fill them in.
+- **`/reports` is removed** (a 404). Report figures move to Home and to the event and stream pages.
+- Lead decision: **`/transactions` stays reachable, but leaves the tabs**, until T1.16 and T1.17 split its list into Income and Expenses. Then it's removed. This keeps each change small, and the entries-list tests keep working meanwhile.
+Out of scope: the "+" button, forms and page content (later cards).
 Done when: the updated Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
 
