@@ -383,7 +383,7 @@ Evidence:
   - Done: T1.10's note that "the Reports page wording goes when T1.11 removes it".
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **884 passed, 0 failed** (308 by-project skips).
 
-### T1.12 — Income form                                     Status: building
+### T1.12 — Income form                                     Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data). The `back` address is checked as an internal path; see below.
 Guide: §10 (streams, cash basis), §6 (native date picker, show the interpreted amount); DECISIONS.md "Event takings", "The '+' button".
 Outcome: a new page `/income/new` ("Add income"), in the same style as the expense form: labels, 16px fields, 44px targets, errors only after Save, focus on the first bad field, and "Reads as $X" feedback.
@@ -409,6 +409,27 @@ Lead decisions (2026-10-26), from the test engineer's questions; the full spec i
 - **Cancel** goes to the same place as Save (the safe `back`, otherwise Home).
 - The safe-`back` check is a small shared function in `src/lib`, so the expense form and the "+" button can reuse it.
 Evidence:
+- **Tests first** (test engineer): new `e2e/income-form.spec.ts` (I1–I12, 380 tests). Red run: 365 failures, all because the page didn't exist yet. A scratch form passed the full suite (1249), and 9 planted bugs were all caught.
+- **Built** (frontend engineer):
+  - new `src/components/IncomeForm.tsx`;
+  - `src/app/income/new/page.tsx` (form inside Suspense, static route);
+  - `src/lib/navigation.ts` (`safeBackPath`).
+  - Lead viewed the phone screenshot: Sales at events pre-filled with the market, "Reads as" on Cash and Card, "Total $3,000.50".
+- **Code review: ACCEPT.** Money, dates, store use, the double-tap guard and pre-fill all checked.
+- **Security review: SECURE.** Over 70 bypass attempts on `safeBackPath` all failed: protocol-relative and backslash paths, control characters, Unicode lookalike slashes, single and double percent-encoding, dot segments, schemes, and non-strings. Stream and event values are only ever looked up in the known lists.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1249 passed, 0 failed** (323 by-project skips).
+- **Taken into T1.12b** (a small follow-up, tests first):
+  - errors don't show on fields that appear when the form changes shape;
+  - the form resets when `back` points at the form itself;
+  - the payment error is also linked from each radio;
+  - the comment wording;
+  - a length cap of 200 on `back`;
+  - unit tests for `safeBackPath` with the security reviewer's attack list;
+  - tests for keeping the event between the two event streams, and for amounts not carrying over.
+- **Logged:**
+  - **for T1.13:** shared form parts (class strings, `Field`, error texts, payment labels) and one decision for both forms on which "Reads as" lines are live regions (check with a screen reader at T1.9);
+  - notes on saved rows get tested when a list shows notes (T1.16);
+  - **before the first route handler (Stage 2):** turn `back` into a route-pattern allow-list, or refuse `/api` and `/auth` (DECISIONS follow-ups).
 
 ### T1.13 — Expense form: stream tag and pre-fill             Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend expense-form spec)   Security review: no
