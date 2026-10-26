@@ -1,9 +1,10 @@
-// The pretend-entries store logic for Stage 1 (T1.5, T1.10, T1.10b): expenses
+// The pretend-entries store logic for Stage 1 (T1.5, T1.10, T1.10b, T1.10c): expenses
 // and income kept in memory only, lost on refresh on purpose. The app tracks
 // money after the fact (owner, 2026-10-25), so an income entry is "money that
 // came in on this date, from this income stream", not a live sale. T1.10b adds
 // a day's event takings (saved as a cash row and a card row), an optional
-// income-stream tag on costs, and one "Other costs" figure per event.
+// income-stream tag on costs, and one "Other costs" figure per event. T1.10c
+// adds the exact whole-cent adding helpers that src/lib/summaries.ts shares.
 //
 // Everything in this file is "pure": no clock, no random ids, no saving or
 // loading. Given the same inputs it always gives the same answer and never
@@ -63,7 +64,7 @@ export type Entry = ExpenseEntry | IncomeEntry;
  */
 export type OtherCosts = {
   amountCents: number; // whole cents, 0 or more
-  note: string; // trimmed, may be ""
+  notes: string; // trimmed, may be "" ("notes", plural, like every other input)
 };
 
 export type EntriesState = {
@@ -113,7 +114,7 @@ export type EntriesAction =
   | { type: "add-event-takings"; cashId: string; cardId: string; takings: EventTakingsInput }
   | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<IncomeInput> }
   | { type: "delete"; id: string }
-  | { type: "set-event-other-costs"; eventId: string; amountCents: number; note?: string }
+  | { type: "set-event-other-costs"; eventId: string; amountCents: number; notes?: string }
   | { type: "clear-event-other-costs"; eventId: string };
 
 // The only fields each kind of entry may be given or changed. Anything else
@@ -145,6 +146,10 @@ const TAKINGS_FIELDS: ReadonlySet<string> = new Set([
   "cardCents",
   "notes",
 ]);
+// The "set-event-other-costs" action itself: the figure's fields sit directly
+// on the action, so the action is checked like an input. A misspelt field
+// (such as the old name "note") is refused rather than quietly ignored.
+const OTHER_COSTS_ACTION_FIELDS: ReadonlySet<string> = new Set(["type", "eventId", "amountCents", "notes"]);
 
 /**
  * The only income streams whose income may be linked to an event (guide §10:
@@ -234,10 +239,23 @@ function checkEventId(value: unknown, eventIds: readonly string[]): string | nul
   return checkKnownEventId(value, eventIds);
 }
 
-/** The input must be a plain object holding only the allowed fields. */
+/**
+ * The input must be a plain object holding only the allowed fields.
+ *
+ * "Plain" means made with `{ ... }` (its prototype is Object.prototype) or
+ * with Object.create(null) (no prototype at all). Anything else is refused:
+ * an array, a class instance, or Object.create({ amountCents: 1 }). The last
+ * one matters most: its fields are inherited, not its own, so the "only these
+ * fields" loop below (which looks at own fields) would never see them, yet
+ * the builders would still read them.
+ */
 function checkFields(input: unknown, allowed: ReadonlySet<string>): Record<string, unknown> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+  if (typeof input !== "object" || input === null) {
     throw new RangeError("expected an object of entry fields");
+  }
+  const prototype: unknown = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new RangeError("expected a plain object");
   }
   for (const key of Object.keys(input)) {
     if (!allowed.has(key)) throw new RangeError(`the field ${key} isn't allowed here`);
@@ -405,12 +423,14 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
     }
 
     case "set-event-other-costs": {
-      // Sets or replaces the whole figure: a missing note means "", not "keep
-      // the old note". This is a figure on the event, never an entry.
+      // Sets or replaces the whole figure: missing notes mean "", not "keep
+      // the old notes". This is a figure on the event, never an entry.
+      // The action may hold only type, eventId, amountCents and notes.
+      checkFields(action, OTHER_COSTS_ACTION_FIELDS);
       const eventId = checkKnownEventId(action.eventId, state.eventIds);
       const figure: OtherCosts = {
         amountCents: checkAmountCents(action.amountCents),
-        note: checkText(action.note, "note"),
+        notes: checkText(action.notes, "notes"),
       };
       return { ...state, otherCosts: { ...state.otherCosts, [eventId]: figure } };
     }
@@ -430,6 +450,44 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       throw new RangeError(`unknown action type: ${String((unknown as { type?: unknown }).type)}`);
     }
   }
+}
+
+// ─── Exact whole-cent sums ───────────────────────────────────────────────────
+//
+// JavaScript numbers hold whole numbers exactly only up to
+// Number.MAX_SAFE_INTEGER (9,007,199,254,740,991) either way. Past that, adding
+// 1 can quietly give the same number back. So every money total goes through
+// these two helpers, which refuse (RangeError) instead of giving a wrong
+// answer. They take signed numbers because a result can be a loss (negative).
+//
+// The overflow test is done BEFORE adding, and only with numbers that are
+// themselves exact (e.g. "is a > MAX - b?"), so it can't be fooled by rounding
+// the way checking "a + b" afterwards could.
+
+const MAX_CENTS = Number.MAX_SAFE_INTEGER;
+
+function checkWholeCents(value: number): void {
+  if (!Number.isSafeInteger(value)) throw new RangeError("amounts must be whole numbers of cents");
+}
+
+/** a + b in whole cents. Throws RangeError if the answer would pass ±MAX_SAFE_INTEGER. */
+export function addCents(a: number, b: number): number {
+  checkWholeCents(a);
+  checkWholeCents(b);
+  if (b > 0 ? a > MAX_CENTS - b : a < -MAX_CENTS - b) {
+    throw new RangeError("the total is too large to add up exactly");
+  }
+  return a + b;
+}
+
+/** a − b in whole cents. Throws RangeError if the answer would pass ±MAX_SAFE_INTEGER. */
+export function subtractCents(a: number, b: number): number {
+  checkWholeCents(a);
+  checkWholeCents(b);
+  if (b > 0 ? a < -MAX_CENTS + b : a > MAX_CENTS + b) {
+    throw new RangeError("the result is too large to work out exactly");
+  }
+  return a - b;
 }
 
 // ─── Reading the entries ─────────────────────────────────────────────────────
@@ -452,16 +510,8 @@ export function totalsForDate(
   let salesCount = 0;
   let expensesCents = 0;
 
-  // Adds two whole-cent amounts, refusing a result past the exact limit.
-  // The test "amount > MAX - total" uses only exact numbers, so it can't be
-  // fooled by rounding the way checking "total + amount" afterwards could.
-  const add = (total: number, amount: number): number => {
-    checkAmountCents(amount);
-    if (amount > Number.MAX_SAFE_INTEGER - total) {
-      throw new RangeError("the total is too large to add up exactly");
-    }
-    return total + amount;
-  };
+  // Adds one entry's amount (refusing a negative one for now) to a total.
+  const add = (total: number, amount: number): number => addCents(total, checkAmountCents(amount));
 
   for (const entry of entries) {
     if (entry.date !== date) continue;

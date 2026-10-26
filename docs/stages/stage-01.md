@@ -316,7 +316,7 @@ Evidence:
   3. rename the set action's `note` to `notes`, matching every other input;
   4. make the field whitelist refuse objects with an inherited prototype (inherited values were checked anyway, so this was harmless).
 
-### T1.10c — Summaries: by event, by stream, by date range   Status: tests
+### T1.10c — Summaries: by event, by stream, by date range   Status: done
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
 Guide: §12 "By event or venue", "By income stream"; DECISIONS.md "Event 'Other costs'".
 Outcome: pure selectors that do all the adding up:
@@ -327,6 +327,31 @@ Outcome: pure selectors that do all the adding up:
 "Other costs" never enters stream or range totals.
 Done when: the Vitest tests pass, including the owner's example: takings $1,000 + $2,000 + $1,500 = $4,500; event costs $500 + $299 + $200 = $999; result $3,501; with $600 other costs, $2,901. `npm run check` exits 0.
 Evidence:
+- **Tests first** (test engineer):
+  - `src/lib/summaries.test.ts` (new; decisions A–H, with the owner's worked example checked to the cent);
+  - `entries.test.ts` decisions 14–16, covering the four T1.10b review findings.
+  - Red run: 29 failures in entries, plus summaries failing to load because the module didn't exist yet. 24 deliberate bugs planted in a scratch implementation were all caught.
+- **Built** (backend engineer):
+  - new `src/lib/summaries.ts`: `eventSummary`, `streamSummary`, `rangeTotals`;
+  - `entries.ts`: the other-costs field renamed `notes` (its fields are checked), plain-object input only, and exact signed `addCents`/`subtractCents`.
+- **Owner's example, as the tests prove it:**
+  - convention takings $1,000 + $2,000 + $1,500 = $4,500;
+  - event costs $500 + $299 + $200 = $999;
+  - result $3,501;
+  - with $600 other costs, $2,901;
+  - the Sales at events stream shows the same $3,501;
+  - June's total leaves the $600 out.
+- **Code review: ACCEPT, no blocking findings.**
+  - The reviewer fuzzed 3,000 random states (33,000 summary calls) against a BigInt reference: 0 mismatches.
+  - `addCents`/`subtractCents` were checked against BigInt over 361,914 pairs: 0 mismatches.
+  - **Optional, taken by the lead:**
+    - the "ONLY place" comment corrected, since `totalsForDate` stays until T1.18;
+    - the neutral error message "expected a plain object";
+    - the summary lists typed `readonly`, so a screen can't change the store by accident.
+  - **Optional, for the test engineer at the next test round (T1.15):**
+    - pin that the summary lists hold the store's own objects (decision H);
+    - direct tests for `addCents`/`subtractCents`, both signs and both edges.
+- **Lead re-ran:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61), before and after the small fixes. `CI=1 npx playwright test` gave **834 passed, 0 failed**.
 
 ### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; update app-shell and entries-list specs)   Security review: no

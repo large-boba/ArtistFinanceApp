@@ -45,7 +45,7 @@
 //   };
 //   export type Entry = ExpenseEntry | IncomeEntry;
 //   (SaleEntry and SaleInput are gone; there is no "sale" kind any more.)
-//   export type OtherCosts = { amountCents: number; note: string };   (T1.10b)
+//   export type OtherCosts = { amountCents: number; notes: string };  (T1.10b; "notes" since T1.10c)
 //   export type EntriesState = {
 //     entries: readonly Entry[];    // in insertion order
 //     eventIds: readonly string[];  // the events entries may point at (decision 9)
@@ -72,7 +72,7 @@
 //         takings: EventTakingsInput }
 //     | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<IncomeInput> }
 //     | { type: "delete"; id: string }
-//     | { type: "set-event-other-costs"; eventId: string; amountCents: number; note?: string }  (T1.10b)
+//     | { type: "set-event-other-costs"; eventId: string; amountCents: number; notes?: string } (T1.10b)
 //     | { type: "clear-event-other-costs"; eventId: string };                                 (T1.10b)
 //   export type EventTakingsInput = {                                 (T1.10b)
 //     date: string; streamId: string; eventId?: string | null;   // missing → null
@@ -144,7 +144,8 @@
 //     ids (pretend-data.test.ts pins them). A stream's display name ("Online
 //     sales"), "" or null is not an id and throws RangeError.
 //
-// T1.10b — LEAD'S DECISIONS (2026-10-26):
+// T1.10b — LEAD'S DECISIONS (2026-10-26), with the T1.10c review changes
+// (decisions 15 and 16, and "note" renamed to "notes" in 14):
 // 12. Event takings: "add-event-takings" adds EXACTLY TWO income rows, in this
 //     order: cash first (id cashId, paymentMethod "cash", amount cashCents),
 //     then card (id cardId, paymentMethod "card", amount cardCents). Both share
@@ -169,18 +170,32 @@
 //     unchanged). Explicit undefined in an edit is refused, as for every field.
 //     Any stream may tag an event & venue or operating cost; nothing ties it to
 //     an event's usual stream.
-// 14. Event "Other costs": state.otherCosts maps event id → { amountCents, note }
+// 14. Event "Other costs": state.otherCosts maps event id → { amountCents, notes }
 //     and starts empty. "set-event-other-costs" sets or replaces one event's
 //     figure: the event must be in the state's event list, the amount is whole
-//     cents of 0 or more (the same check as entries), the note is optional and
-//     stored trimmed ("" when missing). "clear-event-other-costs" removes it;
-//     clearing an event that has none changes nothing, but an unknown event id
-//     is a RangeError. Other costs are never entries, so totalsForDate and
+//     cents of 0 or more (the same check as entries), the notes are optional and
+//     stored trimmed ("" when missing, also when replacing: "set" replaces the
+//     whole figure). The field is "notes", plural like every other input (lead,
+//     T1.10c review); the action may hold ONLY type, eventId, amountCents and
+//     notes, so the old "note" or any other key is a RangeError.
+//     "clear-event-other-costs" removes it; clearing an event that has none
+//     returns the VERY SAME state object (like deleting a missing id), but an
+//     unknown event id is a RangeError. Other costs are never entries, so totalsForDate and
 //     entriesNewestFirst never see them, and every other action keeps them as
 //     they were. The reducer stays pure: the old state never changes.
 //     Test engineer's reading: otherCosts is a plain object (so it compares
-//     with toStrictEqual and copies with JSON), and a note that isn't a string
-//     is a RangeError, like expense notes.
+//     with toStrictEqual and copies with JSON), and notes that aren't a string
+//     are a RangeError, like expense notes.
+// 15. Every action keeps the other figures EXACTLY (toStrictEqual), except
+//     the set/clear of that same event (T1.10c review).
+// 16. Plain objects only (T1.10c review). Every input object — expense,
+//     income and takings input, and edit changes — must be a plain object: its
+//     prototype is Object.prototype, or null (Object.create(null)). Anything
+//     else is a RangeError: e.g. Object.create({ date, amountCents, ... })
+//     would otherwise smuggle in fields that the "only these fields" check
+//     (decision 4) never sees, because they're inherited, not the object's own.
+//     (Test engineer's call, allowed by the lead: null-prototype objects pass,
+//     since they can't inherit anything.)
 //
 // Every expected value was worked out by hand (sums written in the comments).
 // None comes from the code under test.
@@ -2209,20 +2224,20 @@ describe("expense stream tag on edit: checked on the entry after the change (dec
 // ─── Event "Other costs" (decision 14) ──────────────────────────────────────
 
 /** A set-event-other-costs action. */
-const setOther = (eventId: unknown, amountCents: unknown, note?: unknown): EntriesAction =>
-  (note === undefined
+const setOther = (eventId: unknown, amountCents: unknown, notes?: unknown): EntriesAction =>
+  (notes === undefined
     ? { type: "set-event-other-costs", eventId, amountCents }
-    : { type: "set-event-other-costs", eventId, amountCents, note }) as unknown as EntriesAction;
+    : { type: "set-event-other-costs", eventId, amountCents, notes }) as unknown as EntriesAction;
 
 const clearOther = (eventId: unknown): EntriesAction =>
   ({ type: "clear-event-other-costs", eventId }) as unknown as EntriesAction;
 
 describe("set-event-other-costs (T1.10b, decision 14)", () => {
-  it("sets one event's figure with its note trimmed, and nothing else changes", () => {
+  it("sets one event's figure with its notes trimmed, and nothing else changes", () => {
     const state = run(addExpense("e0", TODAY, 100), setOther(CONVENTION, 60000, "  Stock sold at the con "));
     expect(state).toStrictEqual({
       eventIds: [...EVENT_IDS],
-      otherCosts: { [CONVENTION]: { amountCents: 60000, note: "Stock sold at the con" } },
+      otherCosts: { [CONVENTION]: { amountCents: 60000, notes: "Stock sold at the con" } },
       entries: [
         {
           kind: "expense",
@@ -2240,33 +2255,33 @@ describe("set-event-other-costs (T1.10b, decision 14)", () => {
     });
   });
 
-  it("stores a missing note as \"\"", () => {
-    expect(run(setOther(MARKET, 1500)).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, note: "" } });
+  it("stores missing notes as \"\"", () => {
+    expect(run(setOther(MARKET, 1500)).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, notes: "" } });
   });
 
-  it("stores a whitespace-only note as \"\"", () => {
-    expect(run(setOther(MARKET, 1500, "  ")).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, note: "" } });
+  it("stores whitespace-only notes as \"\"", () => {
+    expect(run(setOther(MARKET, 1500, "  ")).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, notes: "" } });
   });
 
   it("allows 0 cents", () => {
-    expect(run(setOther(SHELF, 0, "nothing sold")).otherCosts).toStrictEqual({ [SHELF]: { amountCents: 0, note: "nothing sold" } });
+    expect(run(setOther(SHELF, 0, "nothing sold")).otherCosts).toStrictEqual({ [SHELF]: { amountCents: 0, notes: "nothing sold" } });
   });
 
-  it("replaces the figure when set again (60000 → 45000, new note)", () => {
+  it("replaces the figure when set again (60000 → 45000, new notes)", () => {
     const state = run(setOther(CONVENTION, 60000, "first guess"), setOther(CONVENTION, 45000, "recounted"));
-    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, note: "recounted" } });
+    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, notes: "recounted" } });
   });
 
-  it("replacing without a note leaves the note \"\" (not the old note)", () => {
+  it("replacing without notes leaves the notes \"\" (not the old notes)", () => {
     const state = run(setOther(CONVENTION, 60000, "first guess"), setOther(CONVENTION, 45000));
-    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, note: "" } });
+    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, notes: "" } });
   });
 
   it("keeps each event's figure separately", () => {
     const state = run(setOther(CONVENTION, 60000, "con stock"), setOther(SHELF, 12000, "shelf stock"));
     expect(state.otherCosts).toStrictEqual({
-      [CONVENTION]: { amountCents: 60000, note: "con stock" },
-      [SHELF]: { amountCents: 12000, note: "shelf stock" },
+      [CONVENTION]: { amountCents: 60000, notes: "con stock" },
+      [SHELF]: { amountCents: 12000, notes: "shelf stock" },
     });
   });
 
@@ -2280,7 +2295,7 @@ describe("set-event-other-costs (T1.10b, decision 14)", () => {
   it("doesn't change the earlier figure's state when replaced", () => {
     const first = frozenState(setOther(CONVENTION, 60000, "first"));
     entriesReducer(first, setOther(CONVENTION, 45000, "second"));
-    expect(first.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 60000, note: "first" } });
+    expect(first.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 60000, notes: "first" } });
   });
 
   const badAmounts: Array<[unknown, string]> = [
@@ -2318,9 +2333,29 @@ describe("set-event-other-costs (T1.10b, decision 14)", () => {
     expect(() => entriesReducer(deepFreeze(createEntriesState([])), setOther(CONVENTION, 100))).toThrow(RangeError);
   });
 
-  it("refuses a note that isn't text (42)", () => {
+  it("refuses notes that aren't text (42)", () => {
     expect(() => run(setOther(CONVENTION, 100, 42))).toThrow(RangeError);
   });
+
+  it("refuses the old field name \"note\" (it's \"notes\", like every other input), leaving the state as it was", () => {
+    const before = frozenState(setOther(CONVENTION, 60000, "kept"));
+    const copy = snapshot(before);
+    const old = { type: "set-event-other-costs", eventId: CONVENTION, amountCents: 100, note: "x" } as unknown as EntriesAction;
+    expect(() => entriesReducer(before, old)).toThrow(RangeError);
+    expect(before).toStrictEqual(copy);
+  });
+
+  for (const [field, value] of [
+    ["currency", "AUD"],
+    ["date", "2026-06-22"],
+    ["id", "x1"],
+    ["streamId", "sales-at-events"],
+  ] as Array<[string, unknown]>) {
+    it(`refuses an extra field ${field} in the action (only type, eventId, amountCents and notes)`, () => {
+      const action = { type: "set-event-other-costs", eventId: CONVENTION, amountCents: 100, [field]: value };
+      expect(() => run(action as unknown as EntriesAction)).toThrow(RangeError);
+    });
+  }
 });
 
 describe("clear-event-other-costs (decision 14)", () => {
@@ -2328,7 +2363,7 @@ describe("clear-event-other-costs (decision 14)", () => {
 
   it("removes only that event's figure", () => {
     const after = entriesReducer(start(), clearOther(CONVENTION));
-    expect(after.otherCosts).toStrictEqual({ [SHELF]: { amountCents: 12000, note: "shelf stock" } });
+    expect(after.otherCosts).toStrictEqual({ [SHELF]: { amountCents: 12000, notes: "shelf stock" } });
   });
 
   it("removing the last figure leaves otherCosts empty", () => {
@@ -2340,6 +2375,11 @@ describe("clear-event-other-costs (decision 14)", () => {
     const before = start();
     const copy = snapshot(before);
     expect(entriesReducer(before, clearOther(MARKET))).toStrictEqual(copy);
+  });
+
+  it("clearing a known event that has no figure hands back the very same state object", () => {
+    const before = start();
+    expect(entriesReducer(before, clearOther(MARKET))).toBe(before);
   });
 
   it("refuses an unknown event", () => {
@@ -2371,7 +2411,8 @@ describe("other costs are never entries and survive every other action (decision
       },
       setOther(CONVENTION, 60000, "stock"),
     );
-  const OTHER = { [CONVENTION]: { amountCents: 60000, note: "stock" } };
+  const OTHER = { [CONVENTION]: { amountCents: 60000, notes: "stock" } };
+  const OTHER_AND_SHELF = { ...OTHER, [SHELF]: { amountCents: 5, notes: "" } };
 
   it("totalsForDate ignores them: 100000 from 2 income rows, expenses 50000 (not 110000)", () => {
     expect(totalsForDate(start().entries, TODAY)).toStrictEqual({ salesCents: 100000, salesCount: 2, expensesCents: 50000 });
@@ -2385,23 +2426,100 @@ describe("other costs are never entries and survive every other action (decision
     expect(ids(entriesNewestFirst(start().entries))).toStrictEqual(["v1", "k1", "c1"]);
   });
 
+  // Decision 15: exactly the same figures afterwards (toStrictEqual), so an
+  // action can't quietly add, drop or reshape a figure.
   const others: Array<[string, EntriesAction]> = [
     ["add-expense", addExpense("e9", TODAY, 1)],
     ["add-income", addIncome("i9", TODAY, 1)],
     ["add-event-takings", addTakings("c9", "k9")],
     ["edit", { type: "edit", id: "v1", changes: { amountCents: 50001 } }],
     ["delete", { type: "delete", id: "v1" }],
-    ["set for another event", setOther(SHELF, 5)],
-    ["clear for another event", clearOther(MARKET)],
+    ["clear for another event (which has no figure)", clearOther(MARKET)],
   ];
   for (const [name, action] of others) {
-    it(`${name} keeps the convention's other costs exactly as they were`, () => {
-      expect(entriesReducer(start(), action).otherCosts).toMatchObject(OTHER);
+    it(`${name} keeps the other costs exactly as they were`, () => {
+      expect(entriesReducer(start(), action).otherCosts).toStrictEqual(OTHER);
     });
   }
+
+  it("set for another event keeps the convention's figure and adds only the shelf's", () => {
+    expect(entriesReducer(start(), setOther(SHELF, 5)).otherCosts).toStrictEqual(OTHER_AND_SHELF);
+  });
 
   it("deleting an entry linked to the event doesn't clear the event's other costs", () => {
     const after = entriesReducer(start(), { type: "delete", id: "v1" });
     expect(after.otherCosts).toStrictEqual(OTHER);
+  });
+});
+
+// ─── Plain objects only (decision 16, T1.10c review) ────────────────────────
+
+describe("inputs must be plain objects: inherited fields can't slip past the field check", () => {
+  const EXPENSE = { date: TODAY, supplier: "Officeworks", amountCents: 2350, categoryId: PRINTING };
+  const INCOME = { date: TODAY, streamId: ONLINE_SALES, amountCents: 2599, paymentMethod: "online" };
+  const TAKINGS = { date: "2026-06-22", streamId: SALES_AT_EVENTS, cashCents: 40000, cardCents: 60000 };
+
+  /** Checks a refused action leaves the state exactly as it was. */
+  const expectRefused = (action: EntriesAction) => {
+    const before = frozenState(addExpense("e0", TODAY, 100));
+    const copy = snapshot(before);
+    expect(() => entriesReducer(before, action)).toThrow(RangeError);
+    expect(before).toStrictEqual(copy);
+  };
+
+  it("refuses an expense whose fields are all inherited (Object.create({...}))", () => {
+    expectRefused({ type: "add-expense", id: "e1", expense: Object.create(EXPENSE) });
+  });
+
+  it("refuses an expense with its own valid fields but an inherited extra field (group)", () => {
+    const sneaky = Object.assign(Object.create({ group: "operating" }), EXPENSE);
+    expectRefused({ type: "add-expense", id: "e1", expense: sneaky });
+  });
+
+  it("refuses an income whose fields are all inherited", () => {
+    expectRefused({ type: "add-income", id: "i1", income: Object.create(INCOME) });
+  });
+
+  it("refuses event takings whose fields are all inherited", () => {
+    expectRefused({ type: "add-event-takings", cashId: "c1", cardId: "k1", takings: Object.create(TAKINGS) });
+  });
+
+  it("refuses edit changes whose fields are inherited (Object.create({ amountCents: 1 }))", () => {
+    expectRefused({ type: "edit", id: "e0", changes: Object.create({ amountCents: 1 }) });
+  });
+
+  it("refuses an instance of a class, even with the right own fields", () => {
+    class ExpenseLike {
+      date = TODAY;
+      supplier = "Officeworks";
+      amountCents = 2350;
+      categoryId = PRINTING;
+    }
+    expectRefused({ type: "add-expense", id: "e1", expense: new ExpenseLike() });
+  });
+
+  it("accepts an object with no prototype at all (Object.create(null)) holding valid fields", () => {
+    const bare = Object.assign(Object.create(null), EXPENSE);
+    expect(run({ type: "add-expense", id: "e1", expense: bare }).entries[0]).toStrictEqual({
+      kind: "expense",
+      id: "e1",
+      date: TODAY,
+      supplier: "Officeworks",
+      amountCents: 2350,
+      categoryId: PRINTING,
+      group: "production",
+      eventId: null,
+      streamId: null,
+      notes: "",
+    });
+  });
+
+  it("accepts null-prototype edit changes too", () => {
+    const after = entriesReducer(frozenState(addExpense("e0", TODAY, 100)), {
+      type: "edit",
+      id: "e0",
+      changes: Object.assign(Object.create(null), { amountCents: 250 }),
+    });
+    expect(after.entries[0]).toMatchObject({ id: "e0", amountCents: 250 });
   });
 });
