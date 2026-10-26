@@ -24,7 +24,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { isIsoDate } from "@/lib/dates";
 import { addCents, PAYMENT_METHODS, STREAMS_WITH_EVENTS, type PaymentMethod } from "@/lib/entries";
 import { formatCents, parseAmountToCents } from "@/lib/money";
@@ -32,35 +32,32 @@ import { safeBackPath } from "@/lib/navigation";
 import { INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
+import {
+  badBorder,
+  cancelClass,
+  describe,
+  ERROR_AMOUNT_EMPTY,
+  ERROR_AMOUNT_INVALID,
+  ERROR_DATE,
+  errorClass,
+  Field,
+  fieldClass,
+  labelClass,
+  LoadingMessage,
+  okBorder,
+  PAYMENT_LABELS,
+  readsAsClass,
+  readsAsText,
+  saveClass,
+  LOADING_FORM,
+} from "./form-parts";
 
 const SALES_AT_EVENTS = "sales-at-events";
 
-const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  cash: "Cash",
-  card: "Card",
-  online: "Online",
-  bank_transfer: "Bank transfer",
-  other: "Other",
-};
-
-const ERROR_DATE = "Choose a date.";
 const ERROR_STREAM = "Choose an income stream.";
 const ERROR_CASH_EMPTY = "Enter the cash amount, or 0 if there was none.";
 const ERROR_CARD_EMPTY = "Enter the card amount, or 0 if there was none.";
-const ERROR_AMOUNT_EMPTY = "Enter an amount.";
-const ERROR_AMOUNT_INVALID =
-  "Enter an amount like 12.50 or $1,234.50, with no minus sign and at most 2 decimal places.";
 const ERROR_PAYMENT = "Choose a payment method.";
-
-// 48px tall (at least the 44px minimum), 16px text so iPhones don't zoom in,
-// and a clear focus ring. min-w-0 lets a field shrink inside a narrow screen.
-const fieldClass =
-  "block min-h-12 w-full min-w-0 rounded-lg border-2 bg-white px-3 py-2 text-base text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus-visible:outline-indigo-300 ";
-const okBorder = "border-zinc-500 dark:border-zinc-400";
-const badBorder = "border-red-700 dark:border-red-400";
-const labelClass = "block text-base font-semibold break-words";
-const errorClass = "mt-1 text-base font-semibold break-words text-red-800 dark:text-red-300";
-const readsAsClass = "mt-1 text-base font-semibold break-words";
 
 type Errors = {
   date?: string;
@@ -114,7 +111,7 @@ export default function IncomeForm() {
   // Loading state: the device's language and today's date aren't known until
   // the page has woken up in the browser (see useDevice). The form only
   // mounts after that, so its starting date is read at the moment it opens.
-  if (device === null) return <LoadingForm />;
+  if (device === null) return <LoadingMessage text={LOADING_FORM} />;
 
   const streamParam = params.get("stream");
   const eventParam = params.get("event");
@@ -132,14 +129,6 @@ export default function IncomeForm() {
       start={startingChoice(streamParam, eventParam, device.today)}
       back={safeBackPath(params.get("back"))}
     />
-  );
-}
-
-export function LoadingForm() {
-  return (
-    <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300" role="status">
-      Loading the form…
-    </p>
   );
 }
 
@@ -203,8 +192,6 @@ function FormFields({
   }
   const shown: Errors = tried ? found : {};
 
-  const readsAs = (cents: number | null) => (cents === null ? "" : `Reads as ${formatCents(cents, "AUD", locale)}`);
-
   // The total is exact whole-cent addition, and only shows while both amounts
   // are valid, so it can never be a stale sum.
   let total = "";
@@ -266,8 +253,6 @@ function FormFields({
     // replace, not push: Back afterwards shouldn't reopen an empty form.
     router.replace(back);
   }
-
-  const describe = (...ids: (string | false | undefined)[]) => ids.filter(Boolean).join(" ") || undefined;
 
   const eventField = asksForEvent && (
     <Field id="income-event" label="Event">
@@ -349,10 +334,13 @@ function FormFields({
               aria-describedby={describe(cashRead.cents !== null && "income-cash-reads", shown.cash && "income-cash-error")}
               className={fieldClass + (shown.cash ? badBorder : okBorder)}
             />
-            {/* Always on the page, empty unless the amount is valid, so a
-                screen reader notices when it fills in. */}
-            <p id="income-cash-reads" aria-live="polite" className={readsAsClass}>
-              {readsAs(cashRead.cents)}
+            {/* The "Reads as" lines (Cash, Card, Amount) are not live regions
+                on purpose: a screen reader reads them when their field is
+                focused (aria-describedby above), so announcing every
+                keystroke would only be noise. Always on the page, empty
+                unless the amount is valid. */}
+            <p id="income-cash-reads" className={readsAsClass}>
+              {readsAsText(cashRead.cents, locale)}
             </p>
             {shown.cash && <p id="income-cash-error" className={errorClass}>{shown.cash}</p>}
           </Field>
@@ -370,13 +358,15 @@ function FormFields({
               aria-describedby={describe(cardRead.cents !== null && "income-card-reads", shown.card && "income-card-error")}
               className={fieldClass + (shown.card ? badBorder : okBorder)}
             />
-            <p id="income-card-reads" aria-live="polite" className={readsAsClass}>
-              {readsAs(cardRead.cents)}
+            <p id="income-card-reads" className={readsAsClass}>
+              {readsAsText(cardRead.cents, locale)}
             </p>
             {shown.card && <p id="income-card-error" className={errorClass}>{shown.card}</p>}
           </Field>
 
-          {/* The total is its own polite live region, empty until both amounts are valid. */}
+          {/* Unlike "Reads as", the total STAYS a polite live region: it belongs
+              to no single field, so this is the only way a screen reader hears
+              the sum. Empty until both amounts are valid. */}
           <p aria-live="polite" className="text-xl font-bold break-words">
             {total}
           </p>
@@ -398,8 +388,8 @@ function FormFields({
               aria-describedby={describe(amountRead.cents !== null && "income-amount-reads", shown.amount && "income-amount-error")}
               className={fieldClass + (shown.amount ? badBorder : okBorder)}
             />
-            <p id="income-amount-reads" aria-live="polite" className={readsAsClass}>
-              {readsAs(amountRead.cents)}
+            <p id="income-amount-reads" className={readsAsClass}>
+              {readsAsText(amountRead.cents, locale)}
             </p>
             {shown.amount && <p id="income-amount-error" className={errorClass}>{shown.amount}</p>}
           </Field>
@@ -451,29 +441,17 @@ function FormFields({
       <div className="flex flex-col gap-3">
         <button
           type="submit"
-          className="flex min-h-14 w-full items-center justify-center rounded-xl bg-indigo-800 px-4 text-xl font-bold text-white active:bg-indigo-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300"
+          className={saveClass}
         >
           Save
         </button>
         <Link
           href={back}
-          className="flex min-h-12 w-full items-center justify-center rounded-xl px-4 text-lg font-semibold text-indigo-900 underline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:text-indigo-200 dark:focus-visible:outline-indigo-300"
+          className={cancelClass}
         >
           Cancel
         </Link>
       </div>
     </form>
-  );
-}
-
-/** One labelled field: the label is tied to its control by `id`. */
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <label htmlFor={id} className={labelClass + " mb-1"}>
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

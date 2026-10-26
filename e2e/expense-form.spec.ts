@@ -64,6 +64,13 @@
 //       updated on every keystroke and linked to the Amount input through
 //       aria-describedby. While the text is empty or invalid, NO "Reads as"
 //       text is shown anywhere in <main> (never a stale value).
+//       CHANGED (T1.13a, lead's decision): "Live" means it updates as you
+//       type; it is NOT a live region. The "Reads as" element has no
+//       aria-live, no role status, log, alert, marquee or timer, isn't an
+//       <output>, and has no live ancestor; in fact the form holds no live
+//       region at all. The Amount field's accessible description includes
+//       the "Reads as" text, so a screen reader reads it when the field is
+//       focused, instead of on every keystroke (T1.7 review finding).
 //     - Errors appear when Save is pressed (not while typing). Each is an
 //       element whose whole text is exactly the message, linked to its field
 //       through aria-describedby, and the field gets aria-invalid="true":
@@ -1492,5 +1499,72 @@ test.describe("items carried over from T1.6", () => {
     await open(page, "/");
     await expect(mainNav(page).locator("ul, ol")).toHaveCount(1);
     await expect(mainNav(page).locator("ul, ol")).toHaveAttribute("role", "list");
+  });
+});
+
+// ═══ T1.13a. "Reads as" is not a live region (lead's decision) ══════════════
+
+/**
+ * Describes every live region among `el` and its ancestors: aria-live other
+ * than "off", a live role (status, log, alert, marquee, timer), or <output>.
+ * An empty list means nothing announces changes to this element on its own.
+ */
+function liveSelfOrAncestors(locator: Locator): Promise<string[]> {
+  return locator.evaluate((el) => {
+    const found: string[] = [];
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const live = node.getAttribute("aria-live");
+      const role = node.getAttribute("role");
+      if (
+        (live !== null && live !== "off") ||
+        ["status", "log", "alert", "marquee", "timer"].includes(role ?? "") ||
+        node.tagName === "OUTPUT"
+      ) {
+        found.push(`${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""} aria-live=${live} role=${role}`);
+      }
+    }
+    return found;
+  });
+}
+
+/** Describes every live region inside (or being) the element. */
+function liveRegionsWithin(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) =>
+    [root, ...Array.from(root.querySelectorAll("*"))]
+      .filter((node) => {
+        const live = node.getAttribute("aria-live");
+        const role = node.getAttribute("role");
+        return (
+          (live !== null && live !== "off") ||
+          ["status", "log", "alert", "marquee", "timer"].includes(role ?? "") ||
+          node.tagName === "OUTPUT"
+        );
+      })
+      .map((node) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""} "${(node.textContent ?? "").trim()}"`),
+  );
+}
+
+test.describe("T1.13a: the Amount's \"Reads as\" is not a live region", () => {
+  test('"Reads as $12.50" has no live region on itself or any ancestor', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "12.5" });
+    await expect(exactText(page, "Reads as $12.50")).toBeVisible();
+    expect(await liveSelfOrAncestors(exactText(page, "Reads as $12.50"))).toEqual([]);
+  });
+
+  test("the form holds no live region, with the amount empty or valid", async ({ page }) => {
+    await openForm(page);
+    const form = main(page).locator("form");
+    await expect(form).toHaveCount(1);
+    expect(await liveRegionsWithin(form), "live regions with the amount empty").toEqual([]);
+    await fillForm(page, { amount: "12.5", category: "Parking" });
+    await expect(exactText(page, "Reads as $12.50")).toBeVisible();
+    expect(await liveRegionsWithin(form), "live regions with a valid amount").toEqual([]);
+  });
+
+  test('the Amount field\'s accessible description includes "Reads as $12.50"', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "12.5" });
+    await expect(amountField(page)).toHaveAccessibleDescription(/(^|\s)Reads as \$12\.50(\s|$)/);
   });
 });

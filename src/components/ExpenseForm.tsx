@@ -15,13 +15,30 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { isIsoDate } from "@/lib/dates";
-import { formatCents, parseAmountToCents } from "@/lib/money";
+import { parseAmountToCents } from "@/lib/money";
 import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
 import type { ExpenseGroup } from "@/lib/entries";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
+import {
+  badBorder,
+  cancelClass,
+  describe,
+  ERROR_AMOUNT_EMPTY,
+  ERROR_AMOUNT_INVALID,
+  ERROR_DATE,
+  errorClass,
+  Field,
+  fieldClass,
+  LoadingMessage,
+  okBorder,
+  readsAsClass,
+  readsAsText,
+  saveClass,
+  LOADING_FORM,
+} from "./form-parts";
 
 const GROUP_LABELS: { group: ExpenseGroup; label: string }[] = [
   { group: "production", label: "Production" },
@@ -29,20 +46,7 @@ const GROUP_LABELS: { group: ExpenseGroup; label: string }[] = [
   { group: "operating", label: "Operating" },
 ];
 
-const ERROR_AMOUNT_EMPTY = "Enter an amount.";
-const ERROR_AMOUNT_INVALID =
-  "Enter an amount like 12.50 or $1,234.50, with no minus sign and at most 2 decimal places.";
 const ERROR_CATEGORY = "Choose a category.";
-const ERROR_DATE = "Choose a date.";
-
-// 48px tall (at least the 44px minimum), 16px text so iPhones don't zoom in,
-// and a clear focus ring. min-w-0 lets a field shrink inside a narrow screen.
-const fieldClass =
-  "block min-h-12 w-full min-w-0 rounded-lg border-2 bg-white px-3 py-2 text-base text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus-visible:outline-indigo-300 ";
-const okBorder = "border-zinc-500 dark:border-zinc-400";
-const badBorder = "border-red-700 dark:border-red-400";
-const labelClass = "block text-base font-semibold break-words";
-const errorClass = "mt-1 text-base font-semibold break-words text-red-800 dark:text-red-300";
 
 type Errors = { date?: string; amount?: string; category?: string };
 
@@ -53,11 +57,7 @@ export default function ExpenseForm() {
   // the page has woken up in the browser (see useDevice). The form only
   // mounts after that, so its starting date is read at the moment it opens.
   if (device === null) {
-    return (
-      <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300" role="status">
-        Loading the form…
-      </p>
-    );
+    return <LoadingMessage text={LOADING_FORM} />;
   }
   return <FormFields locale={device.locale} today={device.today} />;
 }
@@ -94,7 +94,7 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
   if (category === undefined) found.category = ERROR_CATEGORY;
   const shown: Errors = tried ? found : {};
 
-  const readsAs = cents === null ? "" : `Reads as ${formatCents(cents, "AUD", locale)}`;
+  const readsAs = readsAsText(cents, locale);
   const events = pretendEvents(today);
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -132,8 +132,6 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
     // replace, not push: Back from Home shouldn't reopen an empty form.
     router.replace("/");
   }
-
-  const describe = (...ids: (string | false | undefined)[]) => ids.filter(Boolean).join(" ") || undefined;
 
   return (
     <form onSubmit={onSubmit} noValidate className="mt-4 flex flex-col gap-5">
@@ -175,9 +173,11 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
           aria-describedby={describe(readsAs !== "" && "expense-amount-reads", shown.amount && "expense-amount-error")}
           className={fieldClass + (shown.amount ? badBorder : okBorder)}
         />
-        {/* Always on the page, empty unless the amount is valid, so a screen
-            reader notices when it fills in. */}
-        <p id="expense-amount-reads" aria-live="polite" className="mt-1 text-base font-semibold break-words">
+        {/* Not a live region on purpose: a screen reader reads this line when
+            the field is focused (aria-describedby above), so announcing it on
+            every keystroke would only be noise. Always on the page, empty
+            unless the amount is valid. */}
+        <p id="expense-amount-reads" className={readsAsClass}>
           {readsAs}
         </p>
         {shown.amount && <p id="expense-amount-error" className={errorClass}>{shown.amount}</p>}
@@ -243,29 +243,17 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
       <div className="flex flex-col gap-3">
         <button
           type="submit"
-          className="flex min-h-14 w-full items-center justify-center rounded-xl bg-indigo-800 px-4 text-xl font-bold text-white active:bg-indigo-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300"
+          className={saveClass}
         >
           Save
         </button>
         <Link
           href="/"
-          className="flex min-h-12 w-full items-center justify-center rounded-xl px-4 text-lg font-semibold text-indigo-900 underline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:text-indigo-200 dark:focus-visible:outline-indigo-300"
+          className={cancelClass}
         >
           Cancel
         </Link>
       </div>
     </form>
-  );
-}
-
-/** One labelled field: the label is tied to its control by `id`. */
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <label htmlFor={id} className={labelClass + " mb-1"}>
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

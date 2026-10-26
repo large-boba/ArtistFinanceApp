@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import IncomeForm, { LoadingForm } from "@/components/IncomeForm";
+import IncomeForm from "@/components/IncomeForm";
+import { LOADING_FORM, LoadingMessage } from "@/components/form-parts";
 
 // The layout adds " · BentoBudget" after this title.
 export const metadata: Metadata = { title: "Add income" };
@@ -13,7 +14,7 @@ export default function NewIncomePage() {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">Add income</h1>
-      <Suspense fallback={<LoadingForm />}>
+      <Suspense fallback={<LoadingMessage text={LOADING_FORM} />}>
         <IncomeForm />
       </Suspense>
     </>

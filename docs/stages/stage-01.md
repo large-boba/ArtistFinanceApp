@@ -463,7 +463,7 @@ Evidence:
     - for T1.9: a screen reader may read the payment error twice (it's linked from the group and from each radio).
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1295 passed, 0 failed**.
 
-### T1.13a — Shared form parts                              Status: tests
+### T1.13a — Shared form parts                              Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; small additions)   Security review: no
 Guide: §6 (show the interpreted amount). Source: the T1.12 code review (finding 5) and the T1.7/T1.12 live-region findings.
 Outcome:
@@ -483,6 +483,20 @@ Outcome:
 Out of scope: new fields or behaviour (T1.13).
 Done when: all existing tests still pass, plus the new ones; `npm run check` exits 0.
 Evidence:
+- **Tests first** (test engineer):
+  - the expense-form F4 note, plus 3 tests: no live region, and "Reads as" is in the field's description;
+  - the income-form I18 (live regions: only "Total" is live), I19 (a one-amount stream switch keeps the errors) and I20 (both forms match at 390×844).
+  - Red run: 16 live-region failures, as intended. Proof: 1322 passed with the change.
+- **Built** (frontend engineer):
+  - new `src/components/form-parts.tsx` (class strings, `Field`, `describe`, error texts, `readsAsText`, `PAYMENT_LABELS`, `LoadingMessage`);
+  - ExpenseForm, IncomeForm, EntriesList and the income page use it, and both forms got shorter;
+  - "Reads as" lines are no longer live regions; "Total" stays polite.
+- **Code review: ACCEPT.** The class strings, ids, error texts and focus order are byte for byte the same as before.
+  - Optional, taken by the lead: one shared `LOADING_FORM` text.
+  - Logged:
+    - `PAYMENT_LABELS` could move to `src/lib` later;
+    - if a later card adds a status line to the expense form, update the "no live region" test rather than avoid the feature.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1322 passed, 0 failed**. After the `LOADING_FORM` tidy-up, which leaves the text on screen unchanged, `npm run check` exited 0 again.
 
 ### T1.13 — Expense form: stream tag, pre-fill and safe back   Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend the expense-form spec)   Security review: no (reuses `safeBackPath`, already reviewed)

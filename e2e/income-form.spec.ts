@@ -85,11 +85,18 @@
 //       ""), then the three pretend events in pretendEvents()'s order:
 //       "Pretend comic convention", "Pretend weekend market (today)",
 //       "Pretend gallery shelf". Optional.
-//     - Cash and Card are both required; $0 is allowed. Each has its own live
+//     - Cash and Card are both required; $0 is allowed. Each has its own
 //       "Reads as <formatCents(cents, "AUD", locale)>" feedback, exactly as
 //       expense-form F4 describes for Amount: an element whose whole text is
 //       "Reads as $1,000.00", linked to ITS field through aria-describedby,
 //       shown only while that field's text is a valid amount.
+//       CHANGED (T1.13a, lead's decision): "Reads as" lines (Cash, Card and
+//       Amount) are NOT live regions: no aria-live, no role status, log,
+//       alert, marquee or timer, no <output>, and no live ancestor. A screen
+//       reader reads them when their field is focused (through
+//       aria-describedby), instead of chattering on every keystroke. The
+//       Total below stays a polite live region: in the takings shape it is
+//       the ONLY live region in the form; the one-amount shape has none.
 //     - Total. While BOTH Cash and Card are valid amounts, an element in
 //       <main> whose whole text is exactly "Total <formatCents(cash + card)>"
 //       (en-AU "Total $3,000.50"; en-US "Total A$3,000.50"; one plain space,
@@ -232,6 +239,22 @@
 //       typed, switched to Wholesale, shows an empty Amount and no "Reads as".
 //       (What a round trip back to the first shape shows isn't decided, so it
 //       isn't tested.)
+//
+// ─── Added for T1.13a (shared form parts) ──────────────────────────────────
+//
+// I18. Live regions (lead's decision): see the CHANGED (T1.13a) note in I5.
+//     No "Reads as" line is a live region, each stays in its field's
+//     accessible description, and the Total is the only live region.
+//
+// I19. Moving between two one-amount streams is NOT a shape change (T1.12b
+//     review): after a blocked Save on Online sales, switching to Wholesale
+//     and then to Vendor shelf rental keeps "Enter an amount." and
+//     "Choose a payment method." showing, and Amount keeps
+//     aria-invalid="true".
+//
+// I20. The two forms still look alike (a cheap guard for the shared module):
+//     on a phone at 390×844, the Amount field has the same measured height in
+//     both forms, and Save has the same measured height and font size.
 //
 // ═══ HAND-WORKED VALUES ═════════════════════════════════════════════════════
 //
@@ -2628,5 +2651,164 @@ test.describe("T1.12b: typed amounts don't carry over when the shape changes", (
     await expect(amountField(page)).toHaveValue("");
     await expect(readsAs(page)).toHaveCount(0);
     await expect(totalText(page)).toHaveCount(0);
+  });
+});
+
+// ═══ T1.13a ═════════════════════════════════════════════════════════════════
+
+/** Describes every live region among `el` and its ancestors (aria-live not "off", a live role, or <output>). */
+function liveSelfOrAncestors(locator: Locator): Promise<string[]> {
+  return locator.evaluate((el) => {
+    const found: string[] = [];
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const live = node.getAttribute("aria-live");
+      const role = node.getAttribute("role");
+      if (
+        (live !== null && live !== "off") ||
+        ["status", "log", "alert", "marquee", "timer"].includes(role ?? "") ||
+        node.tagName === "OUTPUT"
+      ) {
+        found.push(`${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""} aria-live=${live} role=${role}`);
+      }
+    }
+    return found;
+  });
+}
+
+/** The text of every live region inside (or being) the element. */
+function liveRegionTextsWithin(locator: Locator): Promise<string[]> {
+  return locator.evaluate((root) =>
+    [root, ...Array.from(root.querySelectorAll("*"))]
+      .filter((node) => {
+        const live = node.getAttribute("aria-live");
+        const role = node.getAttribute("role");
+        return (
+          (live !== null && live !== "off") ||
+          ["status", "log", "alert", "marquee", "timer"].includes(role ?? "") ||
+          node.tagName === "OUTPUT"
+        );
+      })
+      .map((node) => (node.textContent ?? "").replace(/\s+/g, " ").trim()),
+  );
+}
+
+// ─── I18. "Reads as" is not a live region; the Total still is ───────────────
+
+test.describe('T1.13a: "Reads as" lines are not live regions', () => {
+  for (const [label, locate, typed, shown] of [
+    [LABEL_CASH, cashField, "100", "Reads as $100.00"],
+    [LABEL_CARD, cardField, "250", "Reads as $250.00"],
+  ] as const) {
+    test(`${label}'s "${shown}" has no live region on itself or any ancestor`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { stream: SALES_AT_EVENTS });
+      await locate(page).fill(typed);
+      await expect(exactText(page, shown)).toBeVisible();
+      expect(await liveSelfOrAncestors(exactText(page, shown))).toEqual([]);
+    });
+
+    test(`${label}'s accessible description includes "${shown}"`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { stream: SALES_AT_EVENTS });
+      await locate(page).fill(typed);
+      await expect(locate(page)).toHaveAccessibleDescription(
+        new RegExp(`(^|\\s)${escapeRegExp(shown)}(\\s|$)`),
+      );
+    });
+  }
+
+  test('Amount\'s "Reads as $12.50" has no live region on itself or any ancestor', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales", amount: "12.5" });
+    await expect(exactText(page, "Reads as $12.50")).toBeVisible();
+    expect(await liveSelfOrAncestors(exactText(page, "Reads as $12.50"))).toEqual([]);
+  });
+
+  test('Amount\'s accessible description includes "Reads as $12.50"', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales", amount: "12.5" });
+    await expect(amountField(page)).toHaveAccessibleDescription(/(^|\s)Reads as \$12\.50(\s|$)/);
+  });
+
+  test("in the one-amount shape the form holds no live region, with the amount empty or valid", async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales" });
+    const form = main(page).locator("form");
+    expect(await liveRegionTextsWithin(form), "with the amount empty").toEqual([]);
+    await fillForm(page, { amount: "12.5" });
+    await expect(exactText(page, "Reads as $12.50")).toBeVisible();
+    expect(await liveRegionTextsWithin(form), "with a valid amount").toEqual([]);
+  });
+
+  test('with Cash and Card valid, the form\'s only live region holds exactly "Total $350.00"', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
+    await expect(exactText(page, "Total $350.00")).toBeVisible();
+    expect(await liveRegionTextsWithin(main(page).locator("form"))).toEqual(["Total $350.00"]);
+  });
+
+  test("with only Cash valid, the form has at most one live region and none holds a \"Reads as\"", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, cash: "12.5" });
+    await expect(exactText(page, "Reads as $12.50")).toBeVisible();
+    const texts = await liveRegionTextsWithin(main(page).locator("form"));
+    expect(texts.length, `live regions: ${JSON.stringify(texts)}`).toBeLessThanOrEqual(1);
+    expect(texts.filter((t) => /Reads as/.test(t))).toEqual([]);
+  });
+});
+
+// ─── I19. Between two one-amount streams, errors stay ───────────────────────
+
+test.describe("T1.13a: switching between one-amount streams keeps the errors", () => {
+  test("after a blocked Save on Online sales, Wholesale then Vendor shelf rental keep both errors and Amount's aria-invalid", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toBeVisible();
+    await expect(exactText(page, ERROR_PAYMENT)).toBeVisible();
+    for (const stream of ["Wholesale", VENDOR_SHELF]) {
+      await fillForm(page, { stream });
+      await expect(exactText(page, ERROR_AMOUNT_EMPTY), `after switching to ${stream}`).toBeVisible();
+      await expect(exactText(page, ERROR_PAYMENT), `after switching to ${stream}`).toBeVisible();
+      await expect(amountField(page), `after switching to ${stream}`).toHaveAttribute("aria-invalid", "true");
+    }
+  });
+});
+
+// ─── I20. The two forms still look alike ────────────────────────────────────
+
+test.describe("T1.13a: the expense and income forms look alike", () => {
+  /** Amount's height, Save's height and Save's font size on the page now. */
+  function measure(page: Page) {
+    return main(page).evaluate((m) => {
+      const amount = Array.from(m.querySelectorAll("label"))
+        .find((l) => l.textContent?.trim() === "Amount")
+        ?.control?.getBoundingClientRect().height;
+      const save = Array.from(m.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Save");
+      return {
+        amountHeight: amount ?? null,
+        saveHeight: save?.getBoundingClientRect().height ?? null,
+        saveFontSize: save ? getComputedStyle(save).fontSize : null,
+      };
+    });
+  }
+
+  test("on a phone at 390×844, Amount's height and Save's height and font size are the same in both forms", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales" });
+    const income = await measure(page);
+    await open(page, "/expenses/new");
+    await expect(main(page).getByRole("textbox", { name: LABEL_AMOUNT, exact: true })).toBeVisible();
+    const expense = await measure(page);
+    expect(income.amountHeight, "income Amount height (px)").not.toBeNull();
+    expect(income.saveHeight, "income Save height (px)").not.toBeNull();
+    expect(income).toEqual(expense);
   });
 });

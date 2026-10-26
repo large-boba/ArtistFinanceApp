@@ -10,17 +10,10 @@
 import { DRAFT_CATEGORIES, INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
-import { entriesNewestFirst, type Entry, type PaymentMethod } from "@/lib/entries";
+import { entriesNewestFirst, type Entry } from "@/lib/entries";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
-
-const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  cash: "Cash",
-  card: "Card",
-  online: "Online",
-  bank_transfer: "Bank transfer",
-  other: "Other",
-};
+import { LoadingMessage, PAYMENT_LABELS } from "./form-parts";
 
 export default function EntriesList() {
   const device = useDevice();
@@ -33,11 +26,7 @@ export default function EntriesList() {
 
   // Loading state: dates and amounts need the device's language (see useDevice).
   if (device === null) {
-    return (
-      <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300" role="status">
-        Loading entries…
-      </p>
-    );
+    return <LoadingMessage text="Loading entries…" />;
   }
 
   const events = pretendEvents(device.today);
