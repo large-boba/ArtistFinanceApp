@@ -632,15 +632,27 @@ Evidence:
   - No separate security review was run; the card says why. The event id from the address is only matched against three fixed ids; any other is a real 404.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1949 passed, 0 failed**. After the three small fixes: `npm run check` exit 0, and the events, add-button and app-shell specs gave **923 passed, 0 failed**.
 
-### T1.16 — Income tab and stream pages                     Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §10 (seven default streams), §12 "By income stream".
+### T1.16 — Income tab and stream pages                     Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright + small Vitest additions)   Security review: no (the stream id from the address is only matched against a fixed list)
+Guide: §10 (seven default streams), §12 "By income stream"; DECISIONS.md "Linking costs to events and streams", "The '+' button".
 Outcome:
-- **Income tab:** the 7 streams, each with its total.
-- **Stream page:** its income entries, tagged costs, the result, and the "+" button pre-filled with this stream.
-
-"Sales at events" also lists its events.
-Done when: the Playwright tests pass; `npm run check` exits 0.
+- **`/income`** replaces its "coming next" note with the 7 streams, in order. Each stream is a link showing its **Income** and **Result** (from `streamSummary`). "+ Add" stays at the top.
+- **`/income/<stream-id>`** for each stream. An unknown id is a 404. The page has:
+  - **heading and "+ Add":** the stream name as the h1, and "+ Add" pre-filled with this stream (Save comes back here);
+  - **Income:** each row with its date, its event (or payment method), its notes when set, and its amount, newest first, then an **Income** total;
+  - **Costs:** costs counted toward this stream, with their date, category, supplier and amount, then a **Costs** total. One line explains which costs count: tagged with this stream, or linked to an event whose usual stream this is. Production costs never count;
+  - **Result**;
+  - **Events:** for streams that have events (Sales at events, Vendor shelf rental), a list of the events whose usual stream this is, linking to their pages;
+  - **empty states.**
+- **All money comes from `streamSummary`.**
+- **Test items carried over:**
+  - the summary lists hold the store's own entries (T1.10c decision H);
+  - direct unit tests for `addCents`/`subtractCents`;
+  - focus after Cancel, Save and Clear in Other costs (T1.15);
+  - `event-dates` moves to `src/lib` with a unit test (T1.15);
+  - income notes are stored and shown (T1.12).
+Out of scope: removing `/transactions` and the Expenses tab (T1.17); renaming or archiving streams (later stage).
+Done when: the Playwright and Vitest tests pass, including the owner's example on Sales at events (income $4,500.00; costs $999.00 through the convention's usual stream; Result $3,501.00). `npm run check` exits 0.
 Evidence:
 
 ### T1.17 — Expenses tab                                    Status: todo
