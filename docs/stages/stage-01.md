@@ -570,19 +570,32 @@ Evidence:
   - Logged for the T1.15 test round: Escape should also close the group when focus isn't inside it (Safari doesn't focus a button clicked with the mouse), using a document keydown listener while open. Also refresh the stale claim-8 wording in app-shell.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1717 passed, 0 failed**. Two leftover dev servers from earlier tasks were stopped.
 
-### T1.15 — Events tab and event page                      Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §12 "By event or venue" (with its note that production costs aren't included), §7; DECISIONS.md "Event 'Other costs'".
+### T1.15 — Events tab and event page                      Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data; the event id from the address is only looked up in a fixed list)
+Guide: §12 "By event or venue" (with its note that production costs aren't included), §7, §6; DECISIONS.md "Event takings", "Event 'Other costs'", "The '+' button".
 Outcome:
-- **Events list:** each event with its dates and result.
-- **Event page:**
-  - takings by day (cash, card, total);
-  - event & venue costs;
-  - the result;
-  - the optional "Other costs" figure (add, change, clear) and the result after it;
-  - a note that production costs aren't included;
-  - the "+" button, pre-filled with this event.
-Done when: the Playwright tests pass, including the owner's worked example; `npm run check` exits 0.
+- **`/events`** replaces its "coming later" note with the list of pretend events:
+  - each shows its name, its dates (a shelf rental shows "from <date>, ongoing") and its **Result** (from `eventSummary`);
+  - each links to its page;
+  - "+ Add" stays at the top.
+- **`/events/<id>`** for each pretend event. An unknown id is a 404. The page has:
+  - **heading and "+ Add":** the event name as the h1, its dates, and "+ Add" pre-filled with this event (Save comes back here);
+  - **takings by day:** each day shows its date, Cash, Card and Total (Other only when there is some), then a **Takings** total;
+  - **event & venue costs:** each cost with its date, category and supplier, then an **Event costs** total;
+  - **Result** (takings − event costs);
+  - **Other costs** (owner): an optional amount and note, with Add, Change and Clear. When set, the page shows **Result after other costs**. The page explains in one line that this is an estimate, such as stock (COGS), and isn't added to any other totals;
+  - **a note:** "Production costs aren't included here." (§12);
+  - **empty states** for no takings and no costs.
+- **All money comes from `eventSummary`.** The screen adds nothing up itself.
+- **Carried over from the T1.14 review:** Escape closes "+ Add" even when focus isn't inside it.
+Out of scope: creating, editing or deleting events (Stage 4); editing entries.
+Done when: the Playwright tests pass, including the owner's worked example on the convention's page:
+- takings $1,000 + $2,000 + $1,500 = **$4,500**;
+- costs $500 + $299 + $200 = **$999**;
+- Result **$3,501**;
+- with $600 other costs, **$2,901**.
+
+`npm run check` exits 0.
 Evidence:
 
 ### T1.16 — Income tab and stream pages                     Status: todo
