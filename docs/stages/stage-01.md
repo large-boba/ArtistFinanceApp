@@ -537,11 +537,26 @@ Evidence:
     - **for T1.9 with a screen reader:** fields vanish without an announcement when switching to a production category.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1509 passed, 0 failed**. After the two tidy-ups, `npm run check` exited 0 again.
 
-### T1.14 — The "+" button: Income or Expense                Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+### T1.14 — The "+" button: Income or Expense                Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (it builds addresses for forms that already check `back` with `safeBackPath`)
 Guide: DECISIONS.md "The '+' button".
-Outcome: one shared "+" button component. Tapping it offers **Income** and **Expense** (keyboard and screen-reader friendly, 44px targets, reachable above the nav). Each choice opens its form, pre-filled with the page's event or stream. On Home nothing is pre-filled.
-Done when: the Playwright tests pass; `npm run check` exits 0.
+Outcome:
+- **One shared component, `AddButton`.**
+  - A big, full-width **"+ Add"** button near the top of the page, under the heading. It's a disclosure: a button with `aria-expanded` that controls a group holding two big links.
+  - **"Add income"** goes to `/income/new`; **"Add expense"** goes to `/expenses/new`.
+  - **Lead design choice (the owner may change it):** a page-top button rather than a floating one, so it never overlaps the bottom tabs or large text.
+- **Links:** each carries the page's pre-fill (`event`, `stream`, from props) and `back` = the current page's path, so Save returns there.
+- **Behaviour:**
+  - Escape closes the group and returns focus to "+ Add";
+  - tapping outside closes it;
+  - 44px targets; works at 320px with 200% text.
+- **Where it goes now:**
+  - **Home** (no pre-fill; it replaces "+ Expense");
+  - **Events** (`/events`), **Expenses** (`/expenses`) and **Income** (`/income`), each with no pre-fill.
+  - The event and stream pages (T1.15/T1.16) add it with their pre-fill.
+- **Test carried over from the T1.13 review:** picking an event by hand in the expense form leaves the stream alone.
+Out of scope: event and stream pages; editing entries.
+Done when: the Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
 
 ### T1.15 — Events tab and event page                      Status: todo
