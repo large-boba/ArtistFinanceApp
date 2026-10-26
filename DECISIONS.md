@@ -46,7 +46,7 @@ Rules for what's accepted:
 - Commas must be real thousands groups in the whole-number part.
 - Leading zeros are allowed.
 - Whitespace is trimmed around the input only.
-- Above `Number.MAX_SAFE_INTEGER` cents is rejected; no business maximum yet.
+- **Business maximum: $9,999,999.99 per entry (999,999,999 cents)** (owner, 2026-10-26). Anything larger is rejected with its own clear message. Before this, only amounts above `Number.MAX_SAFE_INTEGER` cents were rejected.
 
 Formatting is exact to the cent, with no float division. | §6, §7 |
 | What the app is for | **Tracking and organising, not live selling** (owner, 2026-10-25). Artists record how an event went after the fact (e.g. day 1 $1,000, day 2 $2,000, day 3 $1,500; table $500, hotel $299, food $200), plus their other income streams. **This replaces the guide's live cash-sale design (§10 "Designing cash-sale entry for a busy stall", §19 "a cash sale can be logged in a few seconds with one hand").** The new everyday-use test: a day's takings can be entered in under a minute. | §10, §19 |
@@ -109,6 +109,7 @@ To be filled in as providers and fields are added: what personal data, why, wher
   - the docs now state the Stage 2, `profiles` and `fx_rates` policy exceptions.
 
   Owner to turn on GitHub branch protection for `main` (T0.4).
+- 2026-10-26 — **Amount cap (owner):** every typed amount is at most $9,999,999.99 per entry. The store refuses larger amounts too. This keeps totals far from JavaScript's exact-number limit, so a page can't crash on an absurd amount (T1.15 code review).
 - 2026-10-25 — **Change of direction (owner):** the app tracks how events went, and organises all income streams, instead of logging live sales. Removed: the quick-sale pad (T1.8) and Stage 10. Added: per-day cash/card event takings, a context-aware "+" button (Income/Expense), the tabs Home/Events/Expenses/Income/Settings, stream tags on non-production costs, and an event "Other costs" figure. Stage 1 re-planned in `docs/stages/stage-01.md`. Paused T1.8 review fixes kept as a local stash and patch, not committed.
 - 2026-10-25 — Stage 0 signed off by the owner (T0.3, T0.4 and the questions carried over). Stage 1 opened. Live app at https://artistfinanceapp.michaelz110897.workers.dev.
 - 2026-10-25 — Cloudflare worker renamed from `bentobudget` to `artistfinanceapp` (owner request) in `wrangler.jsonc`, to match the Cloudflare project and the repo name.

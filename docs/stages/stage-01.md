@@ -655,6 +655,16 @@ Out of scope: removing `/transactions` and the Expenses tab (T1.17); renaming or
 Done when: the Playwright and Vitest tests pass, including the owner's example on Sales at events (income $4,500.00; costs $999.00 through the convention's usual stream; Result $3,501.00). `npm run check` exits 0.
 Evidence:
 
+### T1.16b — Amount cap: $9,999,999.99 per entry              Status: todo
+Owner agent: backend-engineer (`src/lib`), then frontend-engineer (form messages)   Tests: test-engineer (Vitest + Playwright)   Security review: no
+Guide: §7; DECISIONS.md "Typed amounts: detailed rules" (owner, 2026-10-26: business maximum $9,999,999.99).
+Outcome:
+- `parseAmountToCents` accepts at most 999,999,999 cents, and the store refuses larger amounts too.
+- Every amount field (expense, income cash, card and amount, and Other costs) shows its own message for a too-large amount: "Enter an amount up to $9,999,999.99." (the lead's wording; the owner may reword it). The format message is used only for format mistakes.
+- Totals stay far from the exact-number limit, so a page can't crash on an extreme amount (T1.15 review).
+Done when: the unit and browser tests pass, including $9,999,999.99 (accepted) and $10,000,000.00 (rejected with the new message) in every amount field; `npm run check` exits 0.
+Evidence:
+
 ### T1.17 — Expenses tab                                    Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Guide: §7, §12.
