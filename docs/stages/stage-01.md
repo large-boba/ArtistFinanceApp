@@ -293,7 +293,7 @@ Evidence:
   - `CI=1 npx playwright test` gave **834 passed, 0 failed** (308 by-project skips);
   - the builder's Cloudflare build plus the grep found no `__bentoTest` in `.open-next`; CI repeats this on push.
 
-### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: todo
+### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: building
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
 Guide: §10 "Two styles, one table", §7; DECISIONS.md "Event takings", "Linking costs to events and streams", "Event 'Other costs'".
 Outcome:
@@ -301,6 +301,11 @@ Outcome:
 - Expenses get an optional **stream tag**, allowed only for event & venue and operating costs. Production costs never carry an event or a stream, including after an edit.
 - Each event can have one "Other costs" figure (amount and short note), which can be set, changed or cleared.
 Done when: the Vitest tests pass with hand-worked values; `npm run check` exits 0.
+Lead decisions (2026-10-26), written into the `entries.test.ts` header as decisions 12–14:
+- **Takings:** `add-event-takings` adds a cash row then a card row. The stream must be in `STREAMS_WITH_EVENTS` (the form pre-fills the event's usual stream). The event is optional (missing means not assigned yet). The ids are new and different from each other. Only the 6 fields are allowed. **All or nothing:** on any error, no row is added. Each row is afterwards an ordinary income entry, with no grouping id in Stage 1.
+- **Stream tags:** checked after merging an edit, so moving a tagged cost to production needs `streamId: null` in the same edit.
+- **Other costs:** a plain object keyed by event id. Setting it again replaces the whole figure (the note becomes "" if none is sent; the form always sends the current note). Clearing an event with no figure does nothing; an unknown event is refused.
+- 11 T1.10 tests were reshaped only to add the new empty fields (`streamId: null`, `otherCosts: {}`). Their behaviour is unchanged; the lead accepted this.
 Evidence:
 
 ### T1.10c — Summaries: by event, by stream, by date range   Status: todo
