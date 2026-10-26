@@ -4,7 +4,12 @@
 //   - T1.10 ("Income entries and income streams (replacing 'sales')"): the
 //     "sale" entry becomes an "income" entry with an income stream, a
 //     required payment method and notes (owner's change of direction,
-//     2026-10-25: the app tracks and organises income after the fact).
+//     2026-10-25: the app tracks and organises income after the fact);
+//   - T1.10b ("Event takings, stream tags on costs, event 'Other costs'"):
+//     one action adds a day's event takings as two income rows (cash and
+//     card); event & venue and operating costs can carry an income-stream
+//     tag; each event can hold one "Other costs" figure. DECISIONS.md "Event
+//     takings", "Linking costs to events and streams", "Event 'Other costs'".
 //
 // Written by test-engineer BEFORE the code. The builder must not edit this
 // file; disputes go to the project lead.
@@ -28,7 +33,9 @@
 //   export type ExpenseEntry = {
 //     kind: "expense"; id: string; date: string; supplier: string;   // trimmed, may be ""
 //     amountCents: number; categoryId: string; group: ExpenseGroup;
-//     eventId: string | null; notes: string;                          // notes trimmed
+//     eventId: string | null;
+//     streamId: string | null;           // T1.10b: an INCOME_STREAMS id or null
+//     notes: string;                                                  // notes trimmed
 //   };
 //   export type IncomeEntry = {                                       (T1.10)
 //     kind: "income"; id: string; date: string;
@@ -38,17 +45,20 @@
 //   };
 //   export type Entry = ExpenseEntry | IncomeEntry;
 //   (SaleEntry and SaleInput are gone; there is no "sale" kind any more.)
+//   export type OtherCosts = { amountCents: number; note: string };   (T1.10b)
 //   export type EntriesState = {
 //     entries: readonly Entry[];    // in insertion order
 //     eventIds: readonly string[];  // the events entries may point at (decision 9)
+//     otherCosts: Readonly<Record<string, OtherCosts>>;   // T1.10b, decision 14:
+//                                   // a PLAIN OBJECT keyed by event id (not a Map)
 //   };
 //   export function createEntriesState(eventIds: readonly string[]): EntriesState
-//     → { entries: [], eventIds: <a copy of eventIds> }. Throws RangeError for an
-//     empty or duplicate event id.
+//     → { entries: [], eventIds: <a copy of eventIds>, otherCosts: {} }. Throws
+//     RangeError for an empty or duplicate event id.
 //
 //   export type ExpenseInput = {
 //     date: string; supplier?: string; amountCents: number; categoryId: string;
-//     eventId?: string | null; notes?: string;
+//     eventId?: string | null; streamId?: string | null; notes?: string;   // streamId: T1.10b
 //   };
 //   export type IncomeInput = {                                       (T1.10)
 //     date: string; streamId: string; amountCents: number;
@@ -58,8 +68,16 @@
 //   export type EntriesAction =
 //     | { type: "add-expense"; id: string; expense: ExpenseInput }
 //     | { type: "add-income"; id: string; income: IncomeInput }        (T1.10)
+//     | { type: "add-event-takings"; cashId: string; cardId: string;  (T1.10b)
+//         takings: EventTakingsInput }
 //     | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<IncomeInput> }
-//     | { type: "delete"; id: string };
+//     | { type: "delete"; id: string }
+//     | { type: "set-event-other-costs"; eventId: string; amountCents: number; note?: string }  (T1.10b)
+//     | { type: "clear-event-other-costs"; eventId: string };                                 (T1.10b)
+//   export type EventTakingsInput = {                                 (T1.10b)
+//     date: string; streamId: string; eventId?: string | null;   // missing → null
+//     cashCents: number; cardCents: number; notes?: string;
+//   };
 //
 //   export function entriesReducer(state: EntriesState, action: EntriesAction): EntriesState
 //   export function totalsForDate(entries: readonly Entry[], date: string):
@@ -86,12 +104,13 @@
 //  3. Delete of an id that isn't there returns the SAME state object, so a
 //     double-tapped "undo" is harmless.
 //  4. Only these fields may be given (when adding) or changed (when editing):
-//       expense: date, supplier, amountCents, categoryId, eventId, notes
+//       expense: date, supplier, amountCents, categoryId, eventId, streamId, notes
 //       income:  date, streamId, amountCents, paymentMethod, eventId, notes
+//       takings: date, streamId, eventId, cashCents, cardCents, notes (T1.10b)
 //     `group` is never given: it is always looked up from the category in
 //     DRAFT_CATEGORIES, also when an edit changes the category. Passing `group`,
 //     `id`, `kind` or a field from the other kind throws RangeError.
-//  5. Defaults: expense supplier → "", eventId → null, notes → "";
+//  5. Defaults: expense supplier → "", eventId → null, streamId → null, notes → "";
 //     income eventId → null, notes → "". Income has NO default payment method
 //     and no default stream (T1.10, lead): leaving either out throws.
 //  6. Edit keeps the entry's place in insertion order (and its id and kind).
@@ -125,6 +144,44 @@
 //     ids (pretend-data.test.ts pins them). A stream's display name ("Online
 //     sales"), "" or null is not an id and throws RangeError.
 //
+// T1.10b — LEAD'S DECISIONS (2026-10-26):
+// 12. Event takings: "add-event-takings" adds EXACTLY TWO income rows, in this
+//     order: cash first (id cashId, paymentMethod "cash", amount cashCents),
+//     then card (id cardId, paymentMethod "card", amount cardCents). Both share
+//     date, streamId, eventId and notes (trimmed; missing → ""). BOTH ROWS ARE
+//     ALWAYS SAVED, EVEN WHEN AN AMOUNT IS 0 (owner, "Event takings").
+//     streamId is required and must be one of STREAMS_WITH_EVENTS
+//     ("sales-at-events", "vendor-shelf-rental"); the form pre-fills it from the
+//     event's usual stream, the store doesn't look that up. eventId is
+//     optional: missing or null means "not assigned yet" (lead, 2026-10-26);
+//     otherwise it must be a known event. Both ids must be new and differ
+//     from each other. ALL OR NOTHING: if anything is wrong, RangeError and
+//     neither row is added. Afterwards each row is an ordinary income entry:
+//     edit and delete work on one row at a time (no grouping id in Stage 1).
+//     Test engineer's reading: the takings object may hold only the six fields
+//     in decision 4 (anything else, e.g. paymentMethod, is refused).
+// 13. Expense stream tag: streamId is null or a known INCOME_STREAMS id, and
+//     may be non-null only for event & venue and operating costs (the
+//     category's group). A production cost with a stream is a RangeError on
+//     add AND edit; edits are checked after merging, so moving a tagged cost to
+//     a production category is refused unless the same edit sets
+//     streamId: null (and eventId: null, if it has an event: the event rule is
+//     unchanged). Explicit undefined in an edit is refused, as for every field.
+//     Any stream may tag an event & venue or operating cost; nothing ties it to
+//     an event's usual stream.
+// 14. Event "Other costs": state.otherCosts maps event id → { amountCents, note }
+//     and starts empty. "set-event-other-costs" sets or replaces one event's
+//     figure: the event must be in the state's event list, the amount is whole
+//     cents of 0 or more (the same check as entries), the note is optional and
+//     stored trimmed ("" when missing). "clear-event-other-costs" removes it;
+//     clearing an event that has none changes nothing, but an unknown event id
+//     is a RangeError. Other costs are never entries, so totalsForDate and
+//     entriesNewestFirst never see them, and every other action keeps them as
+//     they were. The reducer stays pure: the old state never changes.
+//     Test engineer's reading: otherCosts is a plain object (so it compares
+//     with toStrictEqual and copies with JSON), and a note that isn't a string
+//     is a RangeError, like expense notes.
+//
 // Every expected value was worked out by hand (sums written in the comments).
 // None comes from the code under test.
 
@@ -138,6 +195,7 @@ import {
   type EntriesAction,
   type EntriesState,
   type Entry,
+  type EventTakingsInput,
   type IncomeInput,
 } from "@/lib/entries";
 import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
@@ -241,11 +299,11 @@ const ids = (entries: readonly Entry[]) => entries.map((e) => e.id);
 
 describe("initial state and fixed lists", () => {
   it("starts with no entries and the given event ids", () => {
-    expect(createEntriesState(EVENT_IDS)).toStrictEqual({ entries: [], eventIds: [...EVENT_IDS] });
+    expect(createEntriesState(EVENT_IDS)).toStrictEqual({ entries: [], eventIds: [...EVENT_IDS], otherCosts: {} });
   });
 
   it("starts with no entries and no events when given none", () => {
-    expect(createEntriesState([])).toStrictEqual({ entries: [], eventIds: [] });
+    expect(createEntriesState([])).toStrictEqual({ entries: [], eventIds: [], otherCosts: {} });
   });
 
   it("throws RangeError for a duplicate event id", () => {
@@ -283,6 +341,7 @@ describe("add-expense", () => {
     });
     expect(state).toStrictEqual({
       eventIds: [...EVENT_IDS],
+      otherCosts: {},
       entries: [
         {
           kind: "expense",
@@ -293,6 +352,7 @@ describe("add-expense", () => {
           categoryId: PRINTING,
           group: "production",
           eventId: null,
+          streamId: null,
           notes: "Zine reprint",
         },
       ],
@@ -310,6 +370,7 @@ describe("add-expense", () => {
       categoryId: PRINTING,
       group: "production",
       eventId: null,
+      streamId: null,
       notes: "",
     });
   });
@@ -462,6 +523,7 @@ describe("add-income", () => {
     });
     expect(state).toStrictEqual({
       eventIds: [...EVENT_IDS],
+      otherCosts: {},
       entries: [
         {
           kind: "income",
@@ -798,6 +860,7 @@ describe("edit", () => {
       categoryId: PRINTING,
       group: "production",
       eventId: null,
+      streamId: null,
       notes: "A3 prints",
     });
   });
@@ -956,6 +1019,7 @@ describe("delete", () => {
     const after = entriesReducer(start(), { type: "delete", id: "e1" });
     expect(after).toStrictEqual({
       eventIds: [...EVENT_IDS],
+      otherCosts: {},
       entries: [incomeRow("i1", TODAY, 1000), incomeRow("i2", TODAY, 3000)],
     });
   });
@@ -1025,6 +1089,7 @@ describe("events on add: expenses (unchanged by T1.10)", () => {
     expect(run(expenseWith(STALL_FEES, CONVENTION)).entries[0]).toMatchObject({
       group: "event_venue",
       eventId: CONVENTION,
+      streamId: null,
     });
   });
 
@@ -1158,6 +1223,7 @@ describe("events on edit: the rules apply to the entry as it would be after the 
       categoryId: PRINTING,
       group: "production",
       eventId: null,
+      streamId: null,
       notes: "",
     });
   });
@@ -1275,6 +1341,7 @@ describe("supplier and notes are optional and stored trimmed (expenses)", () => 
       categoryId: PRINTING,
       group: "production",
       eventId: null,
+      streamId: null,
       notes: "",
     });
   });
@@ -1376,7 +1443,7 @@ describe("explicit undefined: rejected on edit, a default on add", () => {
       addIncome("i1", TODAY, 500, { paymentMethod: "card", eventId: MARKET, notes: "Day 1" }),
     );
 
-  for (const field of ["date", "supplier", "amountCents", "categoryId", "eventId", "notes"] as const) {
+  for (const field of ["date", "supplier", "amountCents", "categoryId", "eventId", "streamId", "notes"] as const) {
     it(`edit of an expense throws RangeError for ${field}: undefined and leaves the state unchanged`, () => {
       const before = start();
       const copy = snapshot(before);
@@ -1403,11 +1470,11 @@ describe("explicit undefined: rejected on edit, a default on add", () => {
     expect(after.entries[1]).toStrictEqual(incomeRow("i1", TODAY, 500, { paymentMethod: "card", notes: "Day 1" }));
   });
 
-  it("add-expense with supplier, eventId and notes all undefined stores the defaults \"\", null and \"\"", () => {
+  it("add-expense with supplier, eventId, streamId and notes all undefined stores the defaults \"\", null, null and \"\"", () => {
     const state = run({
       type: "add-expense",
       id: "e1",
-      expense: { date: TODAY, supplier: undefined, amountCents: 100, categoryId: PRINTING, eventId: undefined, notes: undefined },
+      expense: { date: TODAY, supplier: undefined, amountCents: 100, categoryId: PRINTING, eventId: undefined, streamId: undefined, notes: undefined },
     });
     expect(state.entries[0]).toStrictEqual({
       kind: "expense",
@@ -1418,6 +1485,7 @@ describe("explicit undefined: rejected on edit, a default on add", () => {
       categoryId: PRINTING,
       group: "production",
       eventId: null,
+      streamId: null,
       notes: "",
     });
   });
@@ -1518,7 +1586,7 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("updates after a delete: removing i4 (2250) leaves 7100 − 2250 = 4850 from 4", () => {
-    const after = entriesReducer(deepFreeze({ entries: dataset(), eventIds: [...EVENT_IDS] }), { type: "delete", id: "i4" });
+    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), { type: "delete", id: "i4" });
     expect(totalsForDate(after.entries, "2026-07-01")).toStrictEqual({
       salesCents: 4850,
       salesCount: 4,
@@ -1527,7 +1595,7 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("updates after an edit: i1 1500 → 1999 gives 7100 + 499 = 7599", () => {
-    const after = entriesReducer(deepFreeze({ entries: dataset(), eventIds: [...EVENT_IDS] }), {
+    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
       type: "edit",
       id: "i1",
       changes: { amountCents: 1999 },
@@ -1540,7 +1608,7 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("an income's stream change doesn't change the day's total: i4 Commissions → Wholesale is still 7100 from 5", () => {
-    const after = entriesReducer(deepFreeze({ entries: dataset(), eventIds: [...EVENT_IDS] }), {
+    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
       type: "edit",
       id: "i4",
       changes: { streamId: WHOLESALE },
@@ -1553,7 +1621,7 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("moves an entry between days when its date is edited: e1 (4000) to 30 June", () => {
-    const after = entriesReducer(deepFreeze({ entries: dataset(), eventIds: [...EVENT_IDS] }), {
+    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
       type: "edit",
       id: "e1",
       changes: { date: "2026-06-30" },
@@ -1564,7 +1632,7 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("moves an income between days when its date is edited: i6 (3333) to 30 June", () => {
-    const after = entriesReducer(deepFreeze({ entries: dataset(), eventIds: [...EVENT_IDS] }), {
+    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
       type: "edit",
       id: "i6",
       changes: { date: "2026-06-30" },
@@ -1654,5 +1722,686 @@ describe("entriesNewestFirst", () => {
 
   it("returns an empty list for no entries", () => {
     expect(entriesNewestFirst([])).toStrictEqual([]);
+  });
+});
+
+// ═══ T1.10b ═════════════════════════════════════════════════════════════════
+
+// ─── Event takings: one day, two income rows (decision 12) ──────────────────
+//
+// The owner's example (DECISIONS.md "What the app is for"): a 3-day convention
+// took $1,000, $2,000 and $1,500. With TODAY = 2026-07-01 the pretend
+// convention runs 2026-06-22 to 2026-06-24 (today − 9 to today − 7,
+// pretend-data.test.ts). Split by hand into cash and card:
+//   day 1, 22 Jun: cash 40000 + card  60000 = 100000 cents ($1,000)
+//   day 2, 23 Jun: cash 50000 + card 150000 = 200000 cents ($2,000)
+//   day 3, 24 Jun: cash     0 + card 150000 = 150000 cents ($1,500; no cash that day)
+
+/** An add-event-takings action. Unless `extra` says otherwise: day 1 of the convention, Sales at events. */
+const addTakings = (cashId: string, cardId: string, extra: Partial<EventTakingsInput> = {}): EntriesAction => ({
+  type: "add-event-takings",
+  cashId,
+  cardId,
+  takings: {
+    date: "2026-06-22",
+    streamId: SALES_AT_EVENTS,
+    eventId: CONVENTION,
+    cashCents: 40000,
+    cardCents: 60000,
+    ...extra,
+  },
+});
+
+/** The same action with any takings object at all (for refused inputs). */
+const addRawTakings = (cashId: unknown, cardId: unknown, takings: unknown): EntriesAction =>
+  ({ type: "add-event-takings", cashId, cardId, takings }) as unknown as EntriesAction;
+
+const DAY_1 = { date: "2026-06-22", streamId: SALES_AT_EVENTS, eventId: CONVENTION, cashCents: 40000, cardCents: 60000 };
+
+describe("add-event-takings: two rows, cash then card (T1.10b, decision 12)", () => {
+  it("adds exactly two income rows, cash first then card, sharing date, stream, event and trimmed notes", () => {
+    const state = run(addTakings("c1", "k1", { notes: "  Day 1, busy  " }));
+    expect(state).toStrictEqual({
+      eventIds: [...EVENT_IDS],
+      otherCosts: {},
+      entries: [
+        {
+          kind: "income",
+          id: "c1",
+          date: "2026-06-22",
+          streamId: SALES_AT_EVENTS,
+          amountCents: 40000,
+          paymentMethod: "cash",
+          eventId: CONVENTION,
+          notes: "Day 1, busy",
+        },
+        {
+          kind: "income",
+          id: "k1",
+          date: "2026-06-22",
+          streamId: SALES_AT_EVENTS,
+          amountCents: 60000,
+          paymentMethod: "card",
+          eventId: CONVENTION,
+          notes: "Day 1, busy",
+        },
+      ],
+    });
+  });
+
+  it("adds the two rows after the entries already there", () => {
+    const state = run(addExpense("e0", TODAY, 100), addTakings("c1", "k1"));
+    expect(ids(state.entries)).toStrictEqual(["e0", "c1", "k1"]);
+  });
+
+  it("stores missing notes as \"\" on both rows", () => {
+    const [cash, card] = run(addTakings("c1", "k1")).entries;
+    expect([cash.notes, card.notes]).toStrictEqual(["", ""]);
+  });
+
+  it("stores whitespace-only notes as \"\" on both rows", () => {
+    const [cash, card] = run(addTakings("c1", "k1", { notes: " \t\n" })).entries;
+    expect([cash.notes, card.notes]).toStrictEqual(["", ""]);
+  });
+
+  it("saves BOTH rows when there was no cash: day 3 is cash 0 and card 150000", () => {
+    const state = run(addTakings("c3", "k3", { date: "2026-06-24", cashCents: 0, cardCents: 150000 }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c3", "2026-06-24", 0, { paymentMethod: "cash", eventId: CONVENTION }),
+      incomeRow("k3", "2026-06-24", 150000, { paymentMethod: "card", eventId: CONVENTION }),
+    ]);
+  });
+
+  it("saves BOTH rows when there was no card: cash 2500 and card 0", () => {
+    const state = run(addTakings("c1", "k1", { cashCents: 2500, cardCents: 0 }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 2500, { paymentMethod: "cash", eventId: CONVENTION }),
+      incomeRow("k1", "2026-06-22", 0, { paymentMethod: "card", eventId: CONVENTION }),
+    ]);
+  });
+
+  it("saves BOTH rows even when both are 0 (a day with no takings)", () => {
+    const state = run(addTakings("c1", "k1", { cashCents: 0, cardCents: 0 }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 0, { paymentMethod: "cash", eventId: CONVENTION }),
+      incomeRow("k1", "2026-06-22", 0, { paymentMethod: "card", eventId: CONVENTION }),
+    ]);
+  });
+
+  it("allows the largest exact amounts, Number.MAX_SAFE_INTEGER cents in each row", () => {
+    const state = run(addTakings("c1", "k1", { cashCents: Number.MAX_SAFE_INTEGER, cardCents: Number.MAX_SAFE_INTEGER }));
+    expect(state.entries.map((e) => e.amountCents)).toStrictEqual([9007199254740991, 9007199254740991]);
+  });
+
+  it("takes the Vendor shelf rental stream for the shelf", () => {
+    const state = run(addTakings("c1", "k1", { streamId: VENDOR_SHELF, eventId: SHELF, cashCents: 0, cardCents: 8800 }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 0, { streamId: VENDOR_SHELF, paymentMethod: "cash", eventId: SHELF }),
+      incomeRow("k1", "2026-06-22", 8800, { streamId: VENDOR_SHELF, paymentMethod: "card", eventId: SHELF }),
+    ]);
+  });
+
+  it("allows eventId null (\"not assigned yet\") on both rows", () => {
+    const state = run(addTakings("c1", "k1", { eventId: null }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 40000, { paymentMethod: "cash" }),
+      incomeRow("k1", "2026-06-22", 60000, { paymentMethod: "card" }),
+    ]);
+  });
+
+  it("treats a missing eventId as null (\"not assigned yet\") on both rows", () => {
+    const noEvent: Record<string, unknown> = { ...DAY_1 };
+    delete noEvent.eventId;
+    const state = run(addRawTakings("c1", "k1", noEvent));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 40000, { paymentMethod: "cash" }),
+      incomeRow("k1", "2026-06-22", 60000, { paymentMethod: "card" }),
+    ]);
+  });
+
+  it("doesn't change the state it was given", () => {
+    const before = frozenState(addExpense("e0", TODAY, 100));
+    const copy = snapshot(before);
+    entriesReducer(before, addTakings("c1", "k1"));
+    expect(before).toStrictEqual(copy);
+  });
+});
+
+describe("add-event-takings: all or nothing — RangeError and no row added (decision 12)", () => {
+  /** Runs one refused takings action against a frozen state and checks nothing changed. */
+  const expectRefused = (action: EntriesAction) => {
+    const before = frozenState(addExpense("e0", TODAY, 100), addIncome("used", TODAY, 100));
+    const copy = snapshot(before);
+    expect(() => entriesReducer(before, action)).toThrow(RangeError);
+    expect(before).toStrictEqual(copy);
+  };
+
+  for (const streamId of STREAMS_WITHOUT_EVENTS) {
+    it(`refuses the stream ${streamId}, even with no event (takings are only for the two event streams)`, () => {
+      expectRefused(addTakings("c1", "k1", { streamId, eventId: null }));
+    });
+  }
+
+  const badStreams: Array<[unknown, string]> = [
+    ["etsy", "not a stream"],
+    ["Sales at events", "a name, not an id"],
+    ["", "empty"],
+    [null, "null"],
+  ];
+  for (const [streamId, why] of badStreams) {
+    it(`refuses the stream ${JSON.stringify(streamId)} (${why})`, () => {
+      expectRefused(addRawTakings("c1", "k1", { ...DAY_1, streamId }));
+    });
+  }
+
+  it("refuses takings with no stream (the store doesn't look up the event's usual stream)", () => {
+    const noStream: Record<string, unknown> = { ...DAY_1 };
+    delete noStream.streamId;
+    expectRefused(addRawTakings("c1", "k1", noStream));
+  });
+
+  it("refuses an unknown event", () => {
+    expectRefused(addTakings("c1", "k1", { eventId: UNKNOWN_EVENT_ID }));
+  });
+
+  it("refuses eventId \"\" (only null means no event)", () => {
+    expectRefused(addTakings("c1", "k1", { eventId: "" }));
+  });
+
+  for (const date of ["2026-02-29", "2026-6-22", "22/06/2026", ""]) {
+    it(`refuses the date ${JSON.stringify(date)}`, () => {
+      expectRefused(addTakings("c1", "k1", { date }));
+    });
+  }
+
+  const badAmounts: Array<[unknown, string]> = [
+    [-1, "negative"],
+    [-0, "negative zero"],
+    [10.5, "a fraction of a cent"],
+    [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER"],
+    [Number.NaN, "NaN"],
+    ["40000", "a string"],
+    [null, "null"],
+    [undefined, "missing"],
+  ];
+  const show = (amount: unknown) => (Object.is(amount, -0) ? "-0" : String(amount));
+  for (const [amount, why] of badAmounts) {
+    it(`refuses cashCents ${show(amount)} (${why}), so the good card row isn't added either`, () => {
+      expectRefused(addRawTakings("c1", "k1", { ...DAY_1, cashCents: amount }));
+    });
+
+    it(`refuses cardCents ${show(amount)} (${why}), so the good cash row isn't added either`, () => {
+      expectRefused(addRawTakings("c1", "k1", { ...DAY_1, cardCents: amount }));
+    });
+  }
+
+  it("refuses the same id for both rows", () => {
+    expectRefused(addTakings("same", "same"));
+  });
+
+  it("refuses a cashId that is already used", () => {
+    expectRefused(addTakings("used", "k1"));
+  });
+
+  it("refuses a cardId that is already used, so the cash row isn't added either", () => {
+    expectRefused(addTakings("c1", "used"));
+  });
+
+  it("refuses an empty cashId", () => {
+    expectRefused(addTakings("", "k1"));
+  });
+
+  it("refuses an empty cardId", () => {
+    expectRefused(addTakings("c1", ""));
+  });
+
+  it("refuses a missing cardId", () => {
+    expectRefused(addRawTakings("c1", undefined, DAY_1));
+  });
+
+  for (const field of ["paymentMethod", "amountCents", "categoryId", "supplier", "id"] as const) {
+    it(`refuses an extra field ${field} in the takings`, () => {
+      expectRefused(addRawTakings("c1", "k1", { ...DAY_1, [field]: field === "amountCents" ? 100 : "card" }));
+    });
+  }
+
+  it("refuses notes that aren't text (42)", () => {
+    expectRefused(addRawTakings("c1", "k1", { ...DAY_1, notes: 42 }));
+  });
+
+  it("refuses takings that aren't an object (null)", () => {
+    expectRefused(addRawTakings("c1", "k1", null));
+  });
+});
+
+describe("event takings rows are ordinary income entries afterwards (decision 12)", () => {
+  const start = () => frozenState(addTakings("c1", "k1"), addTakings("c2", "k2", { date: "2026-06-23", cashCents: 50000, cardCents: 150000 }));
+
+  it("an edit changes only the one row: day 1 card 60000 → 65000, its cash row stays 40000", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "k1", changes: { amountCents: 65000 } });
+    expect(after.entries.slice(0, 2)).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 40000, { paymentMethod: "cash", eventId: CONVENTION }),
+      incomeRow("k1", "2026-06-22", 65000, { paymentMethod: "card", eventId: CONVENTION }),
+    ]);
+  });
+
+  it("a delete removes only the one row: deleting day 1's cash row keeps its card row", () => {
+    const after = entriesReducer(start(), { type: "delete", id: "c1" });
+    expect(ids(after.entries)).toStrictEqual(["k1", "c2", "k2"]);
+  });
+
+  it("the normal income rules still apply: moving a row with an event to Online sales is refused", () => {
+    expect(() => entriesReducer(start(), { type: "edit", id: "c1", changes: { streamId: ONLINE_SALES } })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("a row's payment method can be corrected like any income (cash → other)", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "c2", changes: { paymentMethod: "other" } });
+    expect(after.entries[2]).toStrictEqual(
+      incomeRow("c2", "2026-06-23", 50000, { paymentMethod: "other", eventId: CONVENTION }),
+    );
+  });
+
+  it("newest first: day 2 card, day 2 cash, day 1 card, day 1 cash", () => {
+    expect(ids(entriesNewestFirst(start().entries))).toStrictEqual(["k2", "c2", "k1", "c1"]);
+  });
+});
+
+describe("totalsForDate with event takings: both rows count (the owner's 3-day example)", () => {
+  const convention = () =>
+    frozenState(
+      addTakings("c1", "k1"), // 22 Jun: 40000 + 60000
+      addTakings("c2", "k2", { date: "2026-06-23", cashCents: 50000, cardCents: 150000 }),
+      addTakings("c3", "k3", { date: "2026-06-24", cashCents: 0, cardCents: 150000 }),
+    ).entries;
+
+  it("day 1: 40000 + 60000 = 100000 cents ($1,000) from 2 rows", () => {
+    expect(totalsForDate(convention(), "2026-06-22")).toStrictEqual({ salesCents: 100000, salesCount: 2, expensesCents: 0 });
+  });
+
+  it("day 2: 50000 + 150000 = 200000 cents ($2,000) from 2 rows", () => {
+    expect(totalsForDate(convention(), "2026-06-23")).toStrictEqual({ salesCents: 200000, salesCount: 2, expensesCents: 0 });
+  });
+
+  it("day 3: 0 + 150000 = 150000 cents ($1,500) from 2 rows (the $0 cash row counts)", () => {
+    expect(totalsForDate(convention(), "2026-06-24")).toStrictEqual({ salesCents: 150000, salesCount: 2, expensesCents: 0 });
+  });
+});
+
+// ─── Stream tags on costs (decision 13) ─────────────────────────────────────
+
+describe("expense stream tag on add: event & venue and operating only (T1.10b, decision 13)", () => {
+  const expenseWith = (categoryId: string, streamId: unknown, eventId: string | null = null): EntriesAction => ({
+    type: "add-expense",
+    id: "e1",
+    expense: { date: TODAY, supplier: "S", amountCents: 100, categoryId, eventId, streamId: streamId as string | null },
+  });
+
+  it("stores an operating cost tagged Online sales, every field exact", () => {
+    const state = run({
+      type: "add-expense",
+      id: "e1",
+      expense: { date: TODAY, supplier: "Etsy", amountCents: 1950, categoryId: categoryId("Payment fees"), streamId: ONLINE_SALES },
+    });
+    expect(state.entries[0]).toStrictEqual({
+      kind: "expense",
+      id: "e1",
+      date: TODAY,
+      supplier: "Etsy",
+      amountCents: 1950,
+      categoryId: categoryId("Payment fees"),
+      group: "operating",
+      eventId: null,
+      streamId: ONLINE_SALES,
+      notes: "",
+    });
+  });
+
+  it("stores an event & venue cost with both an event and a stream (table at the convention)", () => {
+    expect(run(expenseWith(STALL_FEES, SALES_AT_EVENTS, CONVENTION)).entries[0]).toMatchObject({
+      group: "event_venue",
+      eventId: CONVENTION,
+      streamId: SALES_AT_EVENTS,
+    });
+  });
+
+  it("allows any stream, even one that isn't the event's usual stream (market cost tagged Wholesale)", () => {
+    expect(run(expenseWith(STALL_FEES, WHOLESALE, MARKET)).entries[0]).toMatchObject({ eventId: MARKET, streamId: WHOLESALE });
+  });
+
+  for (const streamId of ALL_STREAMS) {
+    it(`allows the stream ${streamId} on an operating cost`, () => {
+      expect(run(expenseWith(SOFTWARE, streamId)).entries[0]).toMatchObject({ group: "operating", streamId });
+    });
+
+    it(`refuses the stream ${streamId} on a production cost (production costs stay unlinked)`, () => {
+      expect(() => run(expenseWith(PRINTING, streamId))).toThrow(RangeError);
+    });
+  }
+
+  it("stores a production cost with streamId null", () => {
+    expect(run(expenseWith(PRINTING, null)).entries[0]).toMatchObject({ group: "production", streamId: null });
+  });
+
+  it("stores a cost with no streamId given as streamId null", () => {
+    expect(run(addExpense("e1", TODAY, 100)).entries[0]).toMatchObject({ streamId: null });
+  });
+
+  const badStreams: Array<[unknown, string]> = [
+    ["etsy", "not a stream"],
+    ["Online sales", "a name, not an id"],
+    ["", "empty (only null means no stream)"],
+    [1, "a number"],
+  ];
+  for (const [streamId, why] of badStreams) {
+    it(`refuses the stream ${JSON.stringify(streamId)} on an operating cost (${why})`, () => {
+      expect(() => run(expenseWith(SOFTWARE, streamId))).toThrow(RangeError);
+    });
+  }
+
+  it("keeps the event rule: an operating cost with a stream still can't have an event", () => {
+    expect(() => run(expenseWith(SOFTWARE, ONLINE_SALES, MARKET))).toThrow(RangeError);
+  });
+});
+
+describe("expense stream tag on edit: checked on the entry after the change (decision 13)", () => {
+  // o1: operating, tagged Online sales. v1: event & venue at the convention, tagged
+  // Sales at events. p1: production, no tag.
+  const start = () =>
+    frozenState(
+      {
+        type: "add-expense",
+        id: "o1",
+        expense: { date: TODAY, supplier: "Etsy", amountCents: 1950, categoryId: SOFTWARE, streamId: ONLINE_SALES },
+      },
+      {
+        type: "add-expense",
+        id: "v1",
+        expense: { date: TODAY, supplier: "Con HQ", amountCents: 50000, categoryId: STALL_FEES, eventId: CONVENTION, streamId: SALES_AT_EVENTS },
+      },
+      addExpense("p1", TODAY, 2350),
+    );
+
+  it("changes an operating cost's stream (Online sales → Commissions)", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "o1", changes: { streamId: COMMISSIONS } });
+    expect(after.entries[0]).toMatchObject({ streamId: COMMISSIONS });
+  });
+
+  it("clears a stream with streamId: null", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "o1", changes: { streamId: null } });
+    expect(after.entries[0]).toMatchObject({ group: "operating", streamId: null });
+  });
+
+  it("refuses giving a production cost a stream", () => {
+    expect(() => entriesReducer(start(), { type: "edit", id: "p1", changes: { streamId: ONLINE_SALES } })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("refuses moving a tagged operating cost to a production category while it keeps its stream", () => {
+    expect(() => entriesReducer(start(), { type: "edit", id: "o1", changes: { categoryId: PRINTING } })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("allows that move when the same edit clears the stream", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "o1", changes: { categoryId: PRINTING, streamId: null } });
+    expect(after.entries[0]).toStrictEqual({
+      kind: "expense",
+      id: "o1",
+      date: TODAY,
+      supplier: "Etsy",
+      amountCents: 1950,
+      categoryId: PRINTING,
+      group: "production",
+      eventId: null,
+      streamId: null,
+      notes: "",
+    });
+  });
+
+  it("refuses moving a cost with an event and a stream to production when the edit clears only the stream", () => {
+    expect(() =>
+      entriesReducer(start(), { type: "edit", id: "v1", changes: { categoryId: PRINTING, streamId: null } }),
+    ).toThrow(RangeError);
+  });
+
+  it("refuses moving a cost with an event and a stream to production when the edit clears only the event", () => {
+    expect(() =>
+      entriesReducer(start(), { type: "edit", id: "v1", changes: { categoryId: PRINTING, eventId: null } }),
+    ).toThrow(RangeError);
+  });
+
+  it("allows moving it to production when the edit clears both", () => {
+    const after = entriesReducer(start(), {
+      type: "edit",
+      id: "v1",
+      changes: { categoryId: PRINTING, eventId: null, streamId: null },
+    });
+    expect(after.entries[1]).toMatchObject({ group: "production", eventId: null, streamId: null });
+  });
+
+  it("keeps the stream when an operating cost becomes an event & venue cost (Software → Stall fees)", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "o1", changes: { categoryId: STALL_FEES } });
+    expect(after.entries[0]).toMatchObject({ group: "event_venue", eventId: null, streamId: ONLINE_SALES });
+  });
+
+  it("keeps the stream when an event & venue cost becomes operating and drops its event", () => {
+    const after = entriesReducer(start(), { type: "edit", id: "v1", changes: { categoryId: SOFTWARE, eventId: null } });
+    expect(after.entries[1]).toMatchObject({ group: "operating", eventId: null, streamId: SALES_AT_EVENTS });
+  });
+
+  it("refuses an edit to an unknown stream", () => {
+    expect(() => entriesReducer(start(), { type: "edit", id: "o1", changes: { streamId: "etsy" } })).toThrow(RangeError);
+  });
+
+  it("leaves the state exactly as it was after a refused stream edit", () => {
+    const before = start();
+    const copy = snapshot(before);
+    expect(() => entriesReducer(before, { type: "edit", id: "o1", changes: { categoryId: PRINTING } })).toThrow(
+      RangeError,
+    );
+    expect(before).toStrictEqual(copy);
+  });
+});
+
+// ─── Event "Other costs" (decision 14) ──────────────────────────────────────
+
+/** A set-event-other-costs action. */
+const setOther = (eventId: unknown, amountCents: unknown, note?: unknown): EntriesAction =>
+  (note === undefined
+    ? { type: "set-event-other-costs", eventId, amountCents }
+    : { type: "set-event-other-costs", eventId, amountCents, note }) as unknown as EntriesAction;
+
+const clearOther = (eventId: unknown): EntriesAction =>
+  ({ type: "clear-event-other-costs", eventId }) as unknown as EntriesAction;
+
+describe("set-event-other-costs (T1.10b, decision 14)", () => {
+  it("sets one event's figure with its note trimmed, and nothing else changes", () => {
+    const state = run(addExpense("e0", TODAY, 100), setOther(CONVENTION, 60000, "  Stock sold at the con "));
+    expect(state).toStrictEqual({
+      eventIds: [...EVENT_IDS],
+      otherCosts: { [CONVENTION]: { amountCents: 60000, note: "Stock sold at the con" } },
+      entries: [
+        {
+          kind: "expense",
+          id: "e0",
+          date: TODAY,
+          supplier: "Officeworks",
+          amountCents: 100,
+          categoryId: PRINTING,
+          group: "production",
+          eventId: null,
+          streamId: null,
+          notes: "",
+        },
+      ],
+    });
+  });
+
+  it("stores a missing note as \"\"", () => {
+    expect(run(setOther(MARKET, 1500)).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, note: "" } });
+  });
+
+  it("stores a whitespace-only note as \"\"", () => {
+    expect(run(setOther(MARKET, 1500, "  ")).otherCosts).toStrictEqual({ [MARKET]: { amountCents: 1500, note: "" } });
+  });
+
+  it("allows 0 cents", () => {
+    expect(run(setOther(SHELF, 0, "nothing sold")).otherCosts).toStrictEqual({ [SHELF]: { amountCents: 0, note: "nothing sold" } });
+  });
+
+  it("replaces the figure when set again (60000 → 45000, new note)", () => {
+    const state = run(setOther(CONVENTION, 60000, "first guess"), setOther(CONVENTION, 45000, "recounted"));
+    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, note: "recounted" } });
+  });
+
+  it("replacing without a note leaves the note \"\" (not the old note)", () => {
+    const state = run(setOther(CONVENTION, 60000, "first guess"), setOther(CONVENTION, 45000));
+    expect(state.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 45000, note: "" } });
+  });
+
+  it("keeps each event's figure separately", () => {
+    const state = run(setOther(CONVENTION, 60000, "con stock"), setOther(SHELF, 12000, "shelf stock"));
+    expect(state.otherCosts).toStrictEqual({
+      [CONVENTION]: { amountCents: 60000, note: "con stock" },
+      [SHELF]: { amountCents: 12000, note: "shelf stock" },
+    });
+  });
+
+  it("doesn't change the state it was given (its otherCosts stay empty)", () => {
+    const before = frozenState(addExpense("e0", TODAY, 100));
+    const copy = snapshot(before);
+    entriesReducer(before, setOther(CONVENTION, 60000, "x"));
+    expect(before).toStrictEqual(copy);
+  });
+
+  it("doesn't change the earlier figure's state when replaced", () => {
+    const first = frozenState(setOther(CONVENTION, 60000, "first"));
+    entriesReducer(first, setOther(CONVENTION, 45000, "second"));
+    expect(first.otherCosts).toStrictEqual({ [CONVENTION]: { amountCents: 60000, note: "first" } });
+  });
+
+  const badAmounts: Array<[unknown, string]> = [
+    [-1, "negative"],
+    [-0, "negative zero"],
+    [0.5, "half a cent"],
+    [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER"],
+    [Number.POSITIVE_INFINITY, "Infinity"],
+    ["600", "a string"],
+    [null, "null"],
+    [undefined, "missing"],
+  ];
+  const show = (amount: unknown) => (Object.is(amount, -0) ? "-0" : String(amount));
+  for (const [amount, why] of badAmounts) {
+    it(`refuses amountCents ${show(amount)} (${why}) and leaves the state as it was`, () => {
+      const before = frozenState(setOther(CONVENTION, 60000, "kept"));
+      const copy = snapshot(before);
+      expect(() => entriesReducer(before, setOther(CONVENTION, amount, "new"))).toThrow(RangeError);
+      expect(before).toStrictEqual(copy);
+    });
+  }
+
+  for (const [eventId, why] of [
+    [UNKNOWN_EVENT_ID, "an unknown event"],
+    ["", "empty"],
+    [null, "null"],
+    ["Pretend comic convention", "the event's name, not its id"],
+  ] as Array<[unknown, string]>) {
+    it(`refuses ${JSON.stringify(eventId)} as the event (${why})`, () => {
+      expect(() => run(setOther(eventId, 100))).toThrow(RangeError);
+    });
+  }
+
+  it("checks against the state's own event list: with no events, a pretend event id is unknown", () => {
+    expect(() => entriesReducer(deepFreeze(createEntriesState([])), setOther(CONVENTION, 100))).toThrow(RangeError);
+  });
+
+  it("refuses a note that isn't text (42)", () => {
+    expect(() => run(setOther(CONVENTION, 100, 42))).toThrow(RangeError);
+  });
+});
+
+describe("clear-event-other-costs (decision 14)", () => {
+  const start = () => frozenState(setOther(CONVENTION, 60000, "con stock"), setOther(SHELF, 12000, "shelf stock"));
+
+  it("removes only that event's figure", () => {
+    const after = entriesReducer(start(), clearOther(CONVENTION));
+    expect(after.otherCosts).toStrictEqual({ [SHELF]: { amountCents: 12000, note: "shelf stock" } });
+  });
+
+  it("removing the last figure leaves otherCosts empty", () => {
+    const after = entriesReducer(frozenState(setOther(MARKET, 100)), clearOther(MARKET));
+    expect(after.otherCosts).toStrictEqual({});
+  });
+
+  it("clearing a known event that has no figure changes nothing", () => {
+    const before = start();
+    const copy = snapshot(before);
+    expect(entriesReducer(before, clearOther(MARKET))).toStrictEqual(copy);
+  });
+
+  it("refuses an unknown event", () => {
+    expect(() => entriesReducer(start(), clearOther(UNKNOWN_EVENT_ID))).toThrow(RangeError);
+  });
+
+  it("refuses an empty event id", () => {
+    expect(() => entriesReducer(start(), clearOther(""))).toThrow(RangeError);
+  });
+
+  it("doesn't change the state it was given", () => {
+    const before = start();
+    const copy = snapshot(before);
+    entriesReducer(before, clearOther(CONVENTION));
+    expect(before).toStrictEqual(copy);
+  });
+});
+
+describe("other costs are never entries and survive every other action (decision 14)", () => {
+  // TODAY: takings cash 40000 + card 60000 = 100000 from 2 rows; table 50000.
+  // The convention's other costs (60000) must never show up in any of these.
+  const start = () =>
+    frozenState(
+      addTakings("c1", "k1", { date: TODAY }),
+      {
+        type: "add-expense",
+        id: "v1",
+        expense: { date: TODAY, supplier: "Con HQ", amountCents: 50000, categoryId: STALL_FEES, eventId: CONVENTION },
+      },
+      setOther(CONVENTION, 60000, "stock"),
+    );
+  const OTHER = { [CONVENTION]: { amountCents: 60000, note: "stock" } };
+
+  it("totalsForDate ignores them: 100000 from 2 income rows, expenses 50000 (not 110000)", () => {
+    expect(totalsForDate(start().entries, TODAY)).toStrictEqual({ salesCents: 100000, salesCount: 2, expensesCents: 50000 });
+  });
+
+  it("setting them adds no entry: still exactly c1, k1, v1", () => {
+    expect(ids(start().entries)).toStrictEqual(["c1", "k1", "v1"]);
+  });
+
+  it("entriesNewestFirst lists only the 3 entries", () => {
+    expect(ids(entriesNewestFirst(start().entries))).toStrictEqual(["v1", "k1", "c1"]);
+  });
+
+  const others: Array<[string, EntriesAction]> = [
+    ["add-expense", addExpense("e9", TODAY, 1)],
+    ["add-income", addIncome("i9", TODAY, 1)],
+    ["add-event-takings", addTakings("c9", "k9")],
+    ["edit", { type: "edit", id: "v1", changes: { amountCents: 50001 } }],
+    ["delete", { type: "delete", id: "v1" }],
+    ["set for another event", setOther(SHELF, 5)],
+    ["clear for another event", clearOther(MARKET)],
+  ];
+  for (const [name, action] of others) {
+    it(`${name} keeps the convention's other costs exactly as they were`, () => {
+      expect(entriesReducer(start(), action).otherCosts).toMatchObject(OTHER);
+    });
+  }
+
+  it("deleting an entry linked to the event doesn't clear the event's other costs", () => {
+    const after = entriesReducer(start(), { type: "delete", id: "v1" });
+    expect(after.otherCosts).toStrictEqual(OTHER);
   });
 });

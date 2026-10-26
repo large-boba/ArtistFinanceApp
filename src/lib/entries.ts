@@ -1,7 +1,9 @@
-// The pretend-entries store logic for Stage 1 (T1.5, T1.10): expenses and
-// income kept in memory only, lost on refresh on purpose. The app tracks
+// The pretend-entries store logic for Stage 1 (T1.5, T1.10, T1.10b): expenses
+// and income kept in memory only, lost on refresh on purpose. The app tracks
 // money after the fact (owner, 2026-10-25), so an income entry is "money that
-// came in on this date, from this income stream", not a live sale.
+// came in on this date, from this income stream", not a live sale. T1.10b adds
+// a day's event takings (saved as a cash row and a card row), an optional
+// income-stream tag on costs, and one "Other costs" figure per event.
 //
 // Everything in this file is "pure": no clock, no random ids, no saving or
 // loading. Given the same inputs it always gives the same answer and never
@@ -14,8 +16,10 @@
 // group, and only event & venue costs may point at an event (guide §7);
 // every income belongs to one of the seven income streams, always says how it
 // was paid (there is no default), and only "Sales at events" and "Vendor shelf
-// rental" income may point at an event (guide §10). The detailed decisions are
-// written at the top of src/lib/entries.test.ts.
+// rental" income may point at an event (guide §10); production costs never
+// carry an event or a stream tag (guide §7, DECISIONS.md "Linking costs to
+// events and streams"). The detailed decisions are written at the top of
+// src/lib/entries.test.ts.
 
 import { isIsoDate } from "@/lib/dates";
 import { DRAFT_CATEGORIES, INCOME_STREAMS } from "@/lib/pretend-data";
@@ -35,6 +39,7 @@ export type ExpenseEntry = {
   categoryId: string;
   group: ExpenseGroup; // always looked up from the category
   eventId: string | null;
+  streamId: string | null; // an INCOME_STREAMS id the cost counts toward, or null (never for production)
   notes: string; // trimmed, may be ""
 };
 
@@ -51,9 +56,22 @@ export type IncomeEntry = {
 
 export type Entry = ExpenseEntry | IncomeEntry;
 
+/**
+ * An event's "Other costs" figure (DECISIONS.md "Event 'Other costs'"), e.g.
+ * what the stock sold there cost. It is shown only in that event's result and
+ * is never an entry: the stock was already counted once as a production cost.
+ */
+export type OtherCosts = {
+  amountCents: number; // whole cents, 0 or more
+  note: string; // trimmed, may be ""
+};
+
 export type EntriesState = {
   entries: readonly Entry[]; // in the order they were added
   eventIds: readonly string[]; // the events entries may point at
+  // event id → that event's "Other costs" figure. A plain object (not a Map),
+  // so it compares and copies like the rest of the state. Most events have none.
+  otherCosts: Readonly<Record<string, OtherCosts>>;
 };
 
 export type ExpenseInput = {
@@ -62,6 +80,7 @@ export type ExpenseInput = {
   amountCents: number;
   categoryId: string;
   eventId?: string | null;
+  streamId?: string | null; // only for event & venue and operating costs
   notes?: string;
 };
 
@@ -74,11 +93,28 @@ export type IncomeInput = {
   notes?: string;
 };
 
+/**
+ * One day's takings at an event, as the artist counts them at the end of the
+ * day: the cash and the card amounts (DECISIONS.md "Event takings"). Saved as
+ * two income rows that share the date, stream, event and notes.
+ */
+export type EventTakingsInput = {
+  date: string;
+  streamId: string; // required: "sales-at-events" or "vendor-shelf-rental"
+  eventId?: string | null; // missing or null means "not assigned yet"
+  cashCents: number; // 0 allowed
+  cardCents: number; // 0 allowed
+  notes?: string;
+};
+
 export type EntriesAction =
   | { type: "add-expense"; id: string; expense: ExpenseInput }
   | { type: "add-income"; id: string; income: IncomeInput }
+  | { type: "add-event-takings"; cashId: string; cardId: string; takings: EventTakingsInput }
   | { type: "edit"; id: string; changes: Partial<ExpenseInput> | Partial<IncomeInput> }
-  | { type: "delete"; id: string };
+  | { type: "delete"; id: string }
+  | { type: "set-event-other-costs"; eventId: string; amountCents: number; note?: string }
+  | { type: "clear-event-other-costs"; eventId: string };
 
 // The only fields each kind of entry may be given or changed. Anything else
 // (`group`, `id`, `kind`, or a field from the other kind) is refused.
@@ -88,6 +124,7 @@ const EXPENSE_FIELDS: ReadonlySet<string> = new Set([
   "amountCents",
   "categoryId",
   "eventId",
+  "streamId",
   "notes",
 ]);
 const INCOME_FIELDS: ReadonlySet<string> = new Set([
@@ -96,6 +133,16 @@ const INCOME_FIELDS: ReadonlySet<string> = new Set([
   "amountCents",
   "paymentMethod",
   "eventId",
+  "notes",
+]);
+// Event takings: no paymentMethod or amountCents, because the action itself
+// makes one "cash" row from cashCents and one "card" row from cardCents.
+const TAKINGS_FIELDS: ReadonlySet<string> = new Set([
+  "date",
+  "streamId",
+  "eventId",
+  "cashCents",
+  "cardCents",
   "notes",
 ]);
 
@@ -118,7 +165,7 @@ export function createEntriesState(eventIds: readonly string[]): EntriesState {
     if (seen.has(id)) throw new RangeError("event ids must be unique");
     seen.add(id);
   }
-  return { entries: [], eventIds: [...eventIds] };
+  return { entries: [], eventIds: [...eventIds], otherCosts: {} };
 }
 
 // ─── Checks shared by adding and editing ─────────────────────────────────────
@@ -128,9 +175,9 @@ export function createEntriesState(eventIds: readonly string[]): EntriesState {
  * -0 is refused too: `-0 < 0` is false, so it needs its own check
  * (Object.is tells -0 and 0 apart).
  */
-function checkAmountCents(value: unknown): number {
+function checkAmountCents(value: unknown, field = "amountCents"): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
-    throw new RangeError("amountCents must be a whole number of cents, 0 or more");
+    throw new RangeError(`${field} must be a whole number of cents, 0 or more`);
   }
   return value;
 }
@@ -167,13 +214,24 @@ function checkStreamId(value: unknown): string {
   return found.id;
 }
 
-/** null means "no event"; anything else must be one of the state's events. */
-function checkEventId(value: unknown, eventIds: readonly string[]): string | null {
+/** Optional stream tag on a cost: missing or null means "no stream"; anything else must be a known stream id. */
+function checkStreamTag(value: unknown): string | null {
   if (value === undefined || value === null) return null;
+  return checkStreamId(value);
+}
+
+/** Required: must be one of the state's events (null and "" are refused). */
+function checkKnownEventId(value: unknown, eventIds: readonly string[]): string {
   if (typeof value !== "string" || !eventIds.includes(value)) {
     throw new RangeError("unknown event");
   }
   return value;
+}
+
+/** null means "no event"; anything else must be one of the state's events. */
+function checkEventId(value: unknown, eventIds: readonly string[]): string | null {
+  if (value === undefined || value === null) return null;
+  return checkKnownEventId(value, eventIds);
 }
 
 /** The input must be a plain object holding only the allowed fields. */
@@ -195,6 +253,13 @@ function buildExpense(id: string, input: Record<string, unknown>, eventIds: read
   if (group !== "event_venue" && eventId !== null) {
     throw new RangeError("only event & venue expenses can be linked to an event");
   }
+  const streamId = checkStreamTag(input.streamId);
+  // DECISIONS.md "Linking costs to events and streams": production costs stay
+  // unlinked from streams too. Any stream may tag the other two groups; it
+  // doesn't have to be the linked event's usual stream.
+  if (group === "production" && streamId !== null) {
+    throw new RangeError("production expenses can't be tagged with an income stream");
+  }
   return {
     kind: "expense",
     id,
@@ -204,6 +269,7 @@ function buildExpense(id: string, input: Record<string, unknown>, eventIds: read
     categoryId: input.categoryId as string, // groupOf found it, so it's a known id
     group,
     eventId,
+    streamId,
     notes: checkText(input.notes, "notes"),
   };
 }
@@ -230,6 +296,35 @@ function buildIncome(id: string, input: Record<string, unknown>, eventIds: reado
   };
 }
 
+/**
+ * Builds the two income rows for one day of event takings: cash first, then
+ * card. Both are always built, even for $0, so "no cash today" is recorded
+ * rather than looking like "forgot to enter the cash".
+ */
+function buildTakings(
+  cashId: string,
+  cardId: string,
+  takings: Record<string, unknown>,
+  eventIds: readonly string[],
+): [IncomeEntry, IncomeEntry] {
+  // Takings only make sense for the two streams that have events. The store
+  // doesn't look up the event's usual stream: the form pre-fills it.
+  const streamId = checkStreamId(takings.streamId);
+  if (!STREAMS_WITH_EVENTS.includes(streamId)) {
+    throw new RangeError("event takings must be Sales at events or Vendor shelf rental income");
+  }
+  // Check the two amounts here so a bad one names its own field.
+  const cashCents = checkAmountCents(takings.cashCents, "cashCents");
+  const cardCents = checkAmountCents(takings.cardCents, "cardCents");
+
+  // What the two rows share. buildIncome checks the date, event and notes.
+  const shared = { date: takings.date, streamId, eventId: takings.eventId, notes: takings.notes };
+  return [
+    buildIncome(cashId, { ...shared, amountCents: cashCents, paymentMethod: "cash" }, eventIds),
+    buildIncome(cardId, { ...shared, amountCents: cardCents, paymentMethod: "card" }, eventIds),
+  ];
+}
+
 function checkNewId(state: EntriesState, id: unknown): string {
   if (typeof id !== "string" || id === "") throw new RangeError("an entry needs a non-empty id");
   if (state.entries.some((e) => e.id === id)) throw new RangeError("an entry with this id already exists");
@@ -239,10 +334,12 @@ function checkNewId(state: EntriesState, id: unknown): string {
 // ─── The reducer ─────────────────────────────────────────────────────────────
 
 /**
- * Works out the next state from the current state and one action (add, edit
- * or delete). Never changes `state`; always returns a new object, except a
- * delete of an id that isn't there, which returns `state` itself.
+ * Works out the next state from the current state and one action (add, edit,
+ * delete, or set/clear an event's "Other costs"). Never changes `state`;
+ * always returns a new object, except a delete of an id that isn't there or a
+ * clear of a figure that isn't there, which return `state` itself.
  * Throws RangeError for anything invalid, leaving the state as it was.
+ * Every action keeps the parts of the state it isn't about (`...state`).
  */
 export function entriesReducer(state: EntriesState, action: EntriesAction): EntriesState {
   switch (action.type) {
@@ -260,6 +357,18 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       return { ...state, entries: [...state.entries, entry] };
     }
 
+    case "add-event-takings": {
+      // All or nothing: every check runs before anything is added, and the
+      // new state is only made once both rows are built. If anything throws,
+      // neither row is added.
+      const cashId = checkNewId(state, action.cashId);
+      const cardId = checkNewId(state, action.cardId);
+      if (cashId === cardId) throw new RangeError("the cash and card rows need different ids");
+      const takings = checkFields(action.takings, TAKINGS_FIELDS);
+      const [cash, card] = buildTakings(cashId, cardId, takings, state.eventIds);
+      return { ...state, entries: [...state.entries, cash, card] };
+    }
+
     case "edit": {
       const index = state.entries.findIndex((e) => e.id === action.id);
       if (index === -1) throw new RangeError("there is no entry with this id to edit");
@@ -275,7 +384,9 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
       // Rebuild the whole entry as it would be after the change, so every rule
       // (including the group, stream and event rules) is checked on the end
       // result. So moving an income with an event to a stream without events
-      // is refused, unless the same edit also sets eventId: null.
+      // is refused, unless the same edit also sets eventId: null. Likewise a
+      // cost with a stream tag can only move to a production category if the
+      // same edit also sets streamId: null.
       // The builders read only the editable fields, so the kind and id stay
       // as they were and the group is looked up again from the category.
       const merged: Record<string, unknown> = { ...current, ...changes };
@@ -291,6 +402,26 @@ export function entriesReducer(state: EntriesState, action: EntriesAction): Entr
     case "delete": {
       if (!state.entries.some((e) => e.id === action.id)) return state;
       return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
+    }
+
+    case "set-event-other-costs": {
+      // Sets or replaces the whole figure: a missing note means "", not "keep
+      // the old note". This is a figure on the event, never an entry.
+      const eventId = checkKnownEventId(action.eventId, state.eventIds);
+      const figure: OtherCosts = {
+        amountCents: checkAmountCents(action.amountCents),
+        note: checkText(action.note, "note"),
+      };
+      return { ...state, otherCosts: { ...state.otherCosts, [eventId]: figure } };
+    }
+
+    case "clear-event-other-costs": {
+      const eventId = checkKnownEventId(action.eventId, state.eventIds);
+      // Nothing to clear: hand back the same state, like deleting a missing id.
+      if (!Object.hasOwn(state.otherCosts, eventId)) return state;
+      // A new object without that one event (the old one isn't touched).
+      const otherCosts = Object.fromEntries(Object.entries(state.otherCosts).filter(([id]) => id !== eventId));
+      return { ...state, otherCosts };
     }
 
     default: {

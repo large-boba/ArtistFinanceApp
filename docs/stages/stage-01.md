@@ -293,7 +293,7 @@ Evidence:
   - `CI=1 npx playwright test` gave **834 passed, 0 failed** (308 by-project skips);
   - the builder's Cloudflare build plus the grep found no `__bentoTest` in `.open-next`; CI repeats this on push.
 
-### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: building
+### T1.10b — Event takings, stream tags on costs, event "Other costs"   Status: review
 Owner agent: backend-engineer   Tests: test-engineer (Vitest)   Security review: no
 Guide: §10 "Two styles, one table", §7; DECISIONS.md "Event takings", "Linking costs to events and streams", "Event 'Other costs'".
 Outcome:
