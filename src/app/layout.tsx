@@ -14,7 +14,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  // Home uses the default. Other pages set a short title (e.g. "Reports") and
+  // Home uses the default. Other pages set a short title (e.g. "Events") and
   // the template adds the app name, with a middle dot (U+00B7), after it.
   title: {
     default: "BentoBudget",

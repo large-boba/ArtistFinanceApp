@@ -353,7 +353,7 @@ Evidence:
     - direct tests for `addCents`/`subtractCents`, both signs and both edges.
 - **Lead re-ran:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61), before and after the small fixes. `CI=1 npx playwright test` gave **834 passed, 0 failed**.
 
-### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: tests
+### T1.11 — New bottom navigation: Home, Events, Expenses, Income, Settings   Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; update the app-shell spec)   Security review: no
 Guide: §17 Stage 1 step 2; DECISIONS.md "Navigation". Keeps T1.3/T1.3b's rules: 44px targets, pinned only when ≤25% of the screen height, works at 200% text, `aria-current` on the current tab.
 Outcome:
@@ -364,6 +364,24 @@ Outcome:
 Out of scope: the "+" button, forms and page content (later cards).
 Done when: the updated Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
+- **Tests first** (test engineer):
+  - `e2e/app-shell.spec.ts`: the new tabs, titles, headings, `aria-current`, 5 distinct icons, every size and pinning rule re-run, and claims 16–18 (/reports is a 404 on both builds; no nav link to /transactions; /transactions temporarily answers 200).
+  - `entries-list` and `expense-form` reach /transactions with a client-side move (`window.next.router.push`, test-only and temporary, with a check that the page didn't reload) instead of the removed tab.
+  - Red run: 250 failures for the intended reasons. A scratch build gave 884 passed, and 4 planted bugs were all caught.
+- **Built** (frontend engineer):
+  - `BottomNav.tsx`: the tabs, plus Expenses (down arrow) and Income (up arrow) icons;
+  - new `src/app/expenses/page.tsx` and `src/app/income/page.tsx`;
+  - `src/app/reports/` deleted.
+  - The lead viewed the phone screenshot: five tabs, distinct icons, Home current.
+- **Code review: ACCEPT, no blocking findings.** The nav's measuring, pinning, 44px and focus code is unchanged byte for byte.
+  - Optional, taken: the Income icon comment corrected.
+  - Logged:
+    - **for the owner's phone check (T1.9):** do the down and up arrows read as expenses and income? (They're also the usual download and upload icons.)
+    - decide whether a parent tab is current on sub-pages such as /expenses/new (T1.13/T1.17);
+    - the temporary /transactions block doesn't recheck its title or `<main>` (it goes away in T1.16/T1.17);
+    - the Events note "Coming in Stage 4" changes in T1.15.
+  - Done: T1.10's note that "the Reports page wording goes when T1.11 removes it".
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **884 passed, 0 failed** (308 by-project skips).
 
 ### T1.12 — Income form                                     Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no

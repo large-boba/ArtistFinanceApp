@@ -4,6 +4,18 @@
 // assigned yet"), §17 Stage 1 step 3, §19 "Everyday use" (big enough to tap,
 // works with a screen reader and keyboard).
 //
+// Updated for T1.11 (new bottom tabs: Home, Events, Expenses, Income,
+// Settings; DECISIONS.md "Navigation"): Transactions is no longer a tab, but
+// /transactions stays reachable until T1.16 and T1.17 split its list into the
+// Income and Expenses tabs (lead's decision on the T1.11 card). The tests
+// that tapped the "Transactions" tab after saving now use goToTransactions()
+// instead: a CLIENT-SIDE move (no reload) through Next.js's own router,
+// window.next.router.push("/transactions"), the same call a next/link link
+// makes. A plain page.goto("/transactions") would reload the page and wipe
+// the saved expense, which would break what those tests prove. The helper
+// also proves the move didn't reload the page. No assertion about the form
+// or the list changed.
+//
 // Written by the test engineer BEFORE the code. Builders must not edit this
 // file; report a disputed test to the project lead instead.
 //
@@ -394,13 +406,37 @@ async function saveAndExpectHome(page: Page, hasTouch: boolean): Promise<void> {
 /** Moves to a tab with the bottom navigation (a client-side move, no reload). */
 async function goToTab(
   page: Page,
-  name: "Home" | "Transactions",
-  path: "/" | "/transactions",
+  name: "Home",
+  path: "/",
   hasTouch: boolean,
 ): Promise<void> {
   await press(mainNav(page).getByRole("link", { name, exact: true }), hasTouch);
   await expect(page).toHaveURL(urlWithPath(path));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+}
+
+/**
+ * Moves to /transactions with a client-side move (no reload), without the
+ * bottom navigation: T1.11 took Transactions out of the tabs. It calls
+ * Next.js's own router, window.next.router.push, the same call a next/link
+ * link makes. A marker put on `window` first must still be there afterwards,
+ * which proves the page wasn't reloaded (a reload starts a fresh window).
+ */
+async function goToTransactions(page: Page): Promise<void> {
+  const routerReady = await page.evaluate(
+    () => typeof (window as unknown as { next?: { router?: { push?: unknown } } }).next?.router?.push === "function",
+  );
+  expect(routerReady, "Next.js's client router (window.next.router.push) is available").toBe(true);
+  await page.evaluate(() => {
+    (window as unknown as Record<string, unknown>).__t111SameDocument = true;
+    (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/transactions");
+  });
+  await expect(page).toHaveURL(urlWithPath("/transactions"));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Transactions");
+  expect(
+    await page.evaluate(() => (window as unknown as Record<string, unknown>).__t111SameDocument),
+    "the move to /transactions didn't reload the page",
+  ).toBe(true);
 }
 
 function rows(page: Page): Locator {
@@ -819,7 +855,7 @@ test.describe("the date", () => {
     await fillForm(page, { date: "2026-06-15", amount: "5", category: "Printing" });
     await expect(dateField(page)).toHaveValue("2026-06-15");
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).first().locator("time")).toHaveAttribute("datetime", "2026-06-15");
     await expect(rows(page).first().locator("time")).toHaveText("15/06/2026");
@@ -1195,7 +1231,7 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { amount: "0", category: "Website" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     expect(amountsIn(await rowText(rows(page).first()))).toEqual(["$0.00"]);
   });
@@ -1206,7 +1242,7 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { supplier: "Officeworks", amount: "23.50", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     const row = rows(page).first();
     const text = await rowText(row);
@@ -1221,7 +1257,7 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { amount: "150", category: "Accommodation" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     expect(await rowText(rows(page).first())).toMatch(/\bAccommodation\b/);
   });
@@ -1232,7 +1268,7 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { supplier: "    ", amount: "40", category: "Merch manufacturing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     expect(await rowText(rows(page).first())).toMatch(/\bMerch manufacturing\b/);
   });
@@ -1241,7 +1277,7 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { supplier: "  Officeworks  ", amount: "23.50", category: "Printing", notes: "  A3 prints  " });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     const raw = await rows(page).first().evaluate((el) => el.textContent ?? "");
     expect(raw).toContain("Officeworks");
@@ -1446,7 +1482,7 @@ test.describe("items carried over from T1.6", () => {
     await openForm(page);
     await fillForm(page, { amount: "5", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTab(page, "Transactions", "/transactions", touch(testInfo));
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(1);
     await expect(main(page).locator("ul, ol")).toHaveCount(1);
     await expect(main(page).locator("ul, ol")).toHaveAttribute("role", "list");

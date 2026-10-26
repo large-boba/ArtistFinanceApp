@@ -1,5 +1,12 @@
 // App shell tests (T1.3): the starter page is gone, and a bottom navigation
 // bar with five tabs works by touch, by mouse and by keyboard.
+// Updated for T1.11 ("New bottom navigation: Home, Events, Expenses, Income,
+// Settings"), following the owner's 2026-10-25 change of direction
+// (DECISIONS.md "What the app is for" and "Navigation"): the app tracks how
+// events went after the fact and organises income streams, so the tabs are
+// now Home, Events, Expenses, Income, Settings. Transactions leaves the tabs
+// and Reports is removed. Every decision changed for T1.11 is marked
+// "CHANGED (T1.11)" with the reason; 16–18 are new.
 // Written by the test engineer before the code. Builders must not edit this
 // file; report a disputed test to the project lead instead.
 //
@@ -12,22 +19,34 @@
 // DECISIONS THE BUILDER MUST FOLLOW (made here so the tests can be exact):
 //
 // 1. Routes. Each tab is its own page at these paths:
-//      Home → /    Transactions → /transactions    Events → /events
-//      Reports → /reports    Settings → /settings
+//      Home → /    Events → /events    Expenses → /expenses
+//      Income → /income    Settings → /settings
 //    Each answers HTTP 200.
+//    CHANGED (T1.11): was Home, Transactions, Events, Reports, Settings. The
+//    owner's new tabs (DECISIONS.md "Navigation") replace the guide's. The
+//    Transactions list will be split into the Expenses and Income tabs
+//    (T1.16, T1.17); report figures move to Home and to the event and stream
+//    pages. What happens to /reports and /transactions is in 16–18.
 //
 // 2. Page titles (lead's decision, WCAG 2.4.2: each page has its own title).
 //    Exact matches, not "starts with":
 //      Home → "BentoBudget"
 //      every other screen → "<Screen> · BentoBudget", with a middle dot
-//      (U+00B7) and one space on each side, e.g. "Reports · BentoBudget".
+//      (U+00B7) and one space on each side, e.g. "Expenses · BentoBudget"
+//      and "Income · BentoBudget".
+//    CHANGED (T1.11): only the example, because Reports is gone.
 //
 // 3. Navigation landmark. Exactly one `<nav>` whose accessible name is exactly
 //    "Main" (e.g. `<nav aria-label="Main">`), on every page. It contains
-//    exactly five links, in DOM order: Home, Transactions, Events, Reports,
+//    exactly five links, in DOM order: Home, Events, Expenses, Income,
 //    Settings. Each link's accessible name is exactly that word (icons must be
 //    `aria-hidden` so they don't add to the name), and its `href` is exactly
 //    the path above.
+//    CHANGED (T1.11): the new five tabs and their order (see 1).
+//    Icons (new in T1.11, from the card's "each with an icon"): each link
+//    holds exactly one <svg> with aria-hidden="true", drawn at least 16×16 px
+//    (T1.3's are 24×24 at 100% text), and the five icons are five different
+//    pictures (their markup differs), so no tab reuses another tab's icon.
 //
 // 4. Current tab. The link for the page you're on has `aria-current="page"`.
 //    The other four have no `aria-current` attribute at all. The current tab
@@ -36,14 +55,24 @@
 //    inside it differs from the other tabs, with no hover or focus involved.
 //
 // 5. Headings. Each page has exactly one level-1 heading, whose text is
-//    exactly the screen's name ("Home", "Transactions", ...).
+//    exactly the screen's name ("Home", "Events", "Expenses", "Income",
+//    "Settings").
+//    CHANGED (T1.11): the new screen names.
 //
 // 6. Main landmark. Each page has exactly one `<main>` for its content, and
 //    the navigation is outside it.
 //
-// 7. Empty screens. Events, Reports and Settings say they're coming later
-//    with a short note matching /coming in Stage \d+/i. (Transactions isn't
-//    checked here because T1.6 replaces its placeholder with the entries list.)
+// 7. Empty screens. Events and Settings say they're coming later with a
+//    short note matching /coming in Stage \d+/i.
+//    Expenses and Income are new, simple pages (T1.11): one heading and a
+//    short note in <main> containing the words "coming next" in any letter
+//    case (/\bcoming next\b/i, e.g. "Coming next."). They aren't told to say
+//    "Coming in Stage N" because T1.16 and T1.17 fill them in within Stage 1
+//    itself, and "Coming in Stage 1" would read oddly while Stage 1 is the
+//    current stage.
+//    CHANGED (T1.11): Reports is gone (see 16); Expenses and Income added.
+//    (Transactions was never checked here: T1.6 replaced its placeholder with
+//    the entries list.)
 //
 // 8. Home button. Home has exactly one control (a <button> or a link) whose
 //    accessible name is exactly "+ Expense". The name equals the visible
@@ -88,6 +117,7 @@
 //     setting scales everything sized in rem. Labels may wrap, shrink to an
 //     icon with an accessible name, or the bar may grow taller; all five tabs
 //     must stay reachable.
+//     T1.11: unchanged, and re-run for the new tabs on every new screen.
 //     Content must not hide behind a taller nav either, at 150% and 200% on
 //     every page: after scrolling to the very bottom, the lowest-ending
 //     element inside <main> ends at or above the nav's top edge (within
@@ -134,8 +164,36 @@
 //       including on a long page. Nav links are exempt.
 //     - At 320 px wide and 200% text, no page scrolls sideways
 //       (scrollWidth ≤ clientWidth), and each page's h1 text stays inside
-//       0–320 px (long words like "Transactions" must wrap, not overflow or
-//       get clipped).
+//       0–320 px (long words must wrap, not overflow or get clipped).
+//     T1.11: the rule is unchanged and every case is re-run for the new tabs.
+//     The hand-worked row counts next to PINNING_CASES are redone for the new
+//     labels ("Expenses" is the widest now); every expected outcome stays the
+//     same.
+//
+// 16. /reports is removed (NEW, T1.11; the card: "/reports is removed (a
+//     404)"). A browser opening it gets HTTP 404, and a plain GET that does
+//     NOT follow redirects gets 404 too, so sending people elsewhere (a 3xx
+//     to Home) doesn't count as removing it. This holds on both servers in
+//     playwright.config.ts: the test build (port 3000, the baseURL) and the
+//     build made without the test flag (port 3001, built the way Cloudflare
+//     builds the live app). Same method as removed-quick-sale.spec.ts R1.
+//     No link anywhere on any tab's page (nav or <main>) leads to /reports or
+//     anything under it, so nothing points at the missing page.
+//
+// 17. Transactions leaves the tabs (NEW, T1.11, lead's decision on the card).
+//     On every tab's page and on /transactions itself, the "Main" nav has no
+//     link whose path is /transactions or anything under it.
+//
+// 18. TEMPORARY (NEW, T1.11, lead's decision on the card): /transactions
+//     stays reachable by its address until T1.16 and T1.17 split its list
+//     into the Income and Expenses tabs; then those cards remove it and
+//     replace these tests. Until then: it answers HTTP 200, has exactly one
+//     level-1 heading, "Transactions", and still shows the "Main" nav with
+//     the five tabs of 3. Because /transactions isn't one of the tabs, no nav
+//     link there has aria-current at all (aria-current="page" on a tab would
+//     tell a screen reader you're on a page you aren't on).
+//     The entries-list and expense-form specs now reach /transactions with a
+//     client-side move that doesn't use the nav (see their headers).
 import {
   expect,
   test as base,
@@ -148,20 +206,35 @@ const MIN_TAP_TARGET_PX = 44;
 // The five tabs, in the order they must appear in the navigation bar.
 // `title` is written out by hand (not built from `name`) so the expected
 // value is a fixed known answer. "\u00B7" is the middle dot.
+// CHANGED (T1.11): the owner's new tabs (DECISIONS.md "Navigation").
 const SCREENS = [
   { name: "Home", path: "/", title: "BentoBudget" },
-  { name: "Transactions", path: "/transactions", title: "Transactions \u00B7 BentoBudget" },
   { name: "Events", path: "/events", title: "Events \u00B7 BentoBudget" },
-  { name: "Reports", path: "/reports", title: "Reports \u00B7 BentoBudget" },
+  { name: "Expenses", path: "/expenses", title: "Expenses \u00B7 BentoBudget" },
+  { name: "Income", path: "/income", title: "Income \u00B7 BentoBudget" },
   { name: "Settings", path: "/settings", title: "Settings \u00B7 BentoBudget" },
 ] as const;
 
 type Screen = (typeof SCREENS)[number];
 
-// Screens that stay empty for all of Stage 1, so they show a "coming" note.
+// Screens still empty until a later stage, so they show a "coming in Stage N"
+// note (claim 7). CHANGED (T1.11): Reports is gone.
 const PLACEHOLDER_SCREENS = SCREENS.filter((s) =>
-  ["Events", "Reports", "Settings"].includes(s.name),
+  ["Events", "Settings"].includes(s.name),
 );
+
+// The two new simple pages (claim 7, T1.11): a "coming next" note until
+// T1.16 (Income) and T1.17 (Expenses) fill them in.
+const COMING_NEXT_SCREENS = SCREENS.filter((s) =>
+  ["Expenses", "Income"].includes(s.name),
+);
+
+// Removed and de-tabbed pages (claims 16\u201318).
+const REPORTS_PATH = "/reports";
+const TRANSACTIONS_PATH = "/transactions";
+/** The second server, built without NEXT_PUBLIC_E2E (as Cloudflare builds it). */
+const FLAG_OFF_BASE_URL = "http://localhost:3001";
+const NOT_FOUND = 404;
 
 const STARTER_IMAGES = [
   "/next.svg",
@@ -349,7 +422,7 @@ test.describe("the starter page is gone", () => {
 
 test.describe("bottom navigation", () => {
   for (const screen of SCREENS) {
-    test(`on ${screen.name}, the "Main" navigation lists exactly Home, Transactions, Events, Reports, Settings in that order`, async ({
+    test(`on ${screen.name}, the "Main" navigation lists exactly Home, Events, Expenses, Income, Settings in that order`, async ({
       page,
     }) => {
       await open(page, screen.path);
@@ -454,6 +527,40 @@ test.describe("bottom navigation", () => {
       await expect(page.getByRole("main")).toContainText(/coming in Stage \d+/i);
     });
   }
+
+  for (const screen of COMING_NEXT_SCREENS) {
+    test(`${screen.name} shows a "coming next" note`, async ({ page }) => {
+      await open(page, screen.path);
+      await expect(page.getByRole("main")).toContainText(/\bcoming next\b/i);
+    });
+  }
+
+  // Claim 3, icons (T1.11: "each with an icon").
+  for (const screen of SCREENS) {
+    test(`the "${screen.name}" nav link holds exactly one aria-hidden icon, at least 16×16 px`, async ({
+      page,
+    }) => {
+      await open(page, "/");
+      const icon = navLink(page, screen.name).locator("svg");
+      await expect(icon).toHaveCount(1);
+      await expect(icon).toHaveAttribute("aria-hidden", "true");
+      const b = await box(icon);
+      expect(b.width, "icon width in CSS px").toBeGreaterThanOrEqual(16);
+      expect(b.height, "icon height in CSS px").toBeGreaterThanOrEqual(16);
+    });
+  }
+
+  test("the five nav icons are five different pictures", async ({ page }) => {
+    await open(page, "/");
+    const pictures: string[] = [];
+    for (const screen of SCREENS) {
+      const icon = navLink(page, screen.name).locator("svg");
+      await expect(icon).toHaveCount(1);
+      pictures.push(await icon.evaluate((svg) => svg.innerHTML.replace(/\s+/g, " ").trim()));
+    }
+    expect(pictures.every((p) => p !== ""), "every icon draws something").toBe(true);
+    expect(new Set(pictures).size, "number of different icons").toBe(SCREENS.length);
+  });
 });
 
 // ---------- 8. Home button ----------
@@ -597,7 +704,14 @@ test.describe("keyboard", () => {
       );
       if (index !== -1 && reached[reached.length - 1] !== index) reached.push(index);
     }
-    expect(reached.map((i) => SCREENS[i].name)).toEqual(SCREENS.map((s) => s.name));
+    // T1.11: compare each reached link's own visible label (icons are
+    // aria-hidden, so it equals the accessible name, claim 3), not just its
+    // position, so a nav with the old tabs can't pass this test.
+    const reachedNames: string[] = [];
+    for (const i of reached) {
+      reachedNames.push(((await handles[i].textContent()) ?? "").replace(/\s+/g, " ").trim());
+    }
+    expect(reachedNames).toEqual(SCREENS.map((s) => s.name));
   });
 
   for (const screen of SCREENS) {
@@ -850,12 +964,33 @@ type Pinning = "sticky" | "static";
 //
 // At 200% text (root 32 px): each row of tabs is 4rem = 128 px, so even one
 // row plus the border is 129 px. Labels are 0.75rem = 24 px text below 640 px
-// wide, so the tabs wrap:
-//   320 wide: 3 rows (Home+Transactions / Events+Reports / Settings)
-//             → 3 × 128 + 1 = 385 px
-//   375, 390 and 568 wide: 2 rows → 2 × 128 + 1 = 257 px
-//   844 wide: at 640 px and wider the labels are 0.875rem, and all five fit
-//             on 1 row → 129 px
+// wide, so the tabs wrap.
+// CHANGED (T1.11): the row counts below are redone for the new labels. The
+// label widths are Geist's own glyph widths, measured once in Chromium as
+// plain text (not the nav): at 24 px, regular weight, Home 64.6, Events 74.0,
+// Expenses 105.7, Income 80.9, Settings 90.8 px; bold (the current tab) adds
+// at most 8.2 px (Expenses 113.8). Each tab is its label plus 2 × 0.5rem =
+// 32 px of padding (the 1.5rem = 48 px icon is narrower than every label):
+//   Home 96.6, Events 106.0, Expenses 137.7, Income 112.9, Settings 122.8 px,
+//   all five = 576.0 px.
+//   320 wide: Home+Events = 202.6, + Expenses = 340.3 > 320 → row 1 is
+//             Home, Events; Expenses+Income = 250.6 (258.8 if one is bold),
+//             + Settings = 373.4 > 320 → row 2 is Expenses, Income; row 3 is
+//             Settings → 3 × 128 + 1 = 385 px
+//   375, 390 wide: Home+Events+Expenses = 340.3 (348.5 at most with bold),
+//             + Income = 453.2 > 390 → 2 rows → 2 × 128 + 1 = 257 px
+//   568 wide: all five = 576.0 > 568 → 2 rows (Settings wraps) → 257 px
+//   844 wide: at 640 px and wider the labels are 0.875rem = 28 px (Home 75.4,
+//             Events 86.3, Expenses 123.3, Income 94.4, Settings 106.0, plus
+//             32 each = 645.3 px ≤ 844), so all five fit on 1 row → 129 px
+// At 100% text the labels are 12 px (Home 32.3, Events 37.0, Expenses 52.8,
+// Income 40.5, Settings 45.4, plus 16 px padding each = 288.0 px, at most
+// 292.3 with bold), so all five fit on one row even at 320 wide.
+// None of this changes an outcome. At 390 wide or narrower, 1 row at 200% is
+// impossible whatever the labels (five tabs of at least 48 + 32 = 80 px =
+// 400 px > 390), so the nav is at least 257 px, over 25% of every height
+// tested at those widths (257 / 844 = 30.5%). At 568×320 and 844×390 even
+// 1 row (129 px) is over 25% (40.3% and 33.1%).
 //   320×568: 385 / 568 = 67.8% → static
 //   568×320: 257 / 320 = 80.3% → static (even 1 row would be 40.3%)
 //   390×844: 257 / 844 = 30.5% → static (T1.3 had sticky)
@@ -1394,6 +1529,108 @@ test.describe("on a phone, the nav publishes its measured height as --nav-h", ()
         message: `scroll-padding-bottom on <html> (px) vs the nav's ${after.navHeight} px`,
       })
       .toBeGreaterThanOrEqual(after.navHeight - CSS_NUMBER_TOLERANCE_PX);
+  });
+});
+
+// ---------- 16, 17, 18. /reports removed, /transactions out of the tabs ----------
+
+/**
+ * The resolved path of every link inside `scope` that is `prefix` itself or
+ * anything under it (e.g. "/reports", "/reports/2026"). Query strings and
+ * fragments don't hide a link: only the path is compared.
+ */
+function linkPathsUnder(scope: Locator, prefix: string): Promise<string[]> {
+  return scope.evaluate(
+    (root, p) =>
+      Array.from(root.querySelectorAll("a[href]"))
+        .map((a) => new URL((a as HTMLAnchorElement).href).pathname)
+        .filter((path) => path === p || path.startsWith(`${p}/`)),
+    prefix,
+  );
+}
+
+test.describe("/reports is removed (T1.11)", () => {
+  test("a browser opening /reports gets HTTP 404", async ({ page }) => {
+    const response = await page.goto(REPORTS_PATH);
+    expect(response?.status(), `HTTP status of ${REPORTS_PATH}`).toBe(NOT_FOUND);
+  });
+
+  test("GET /reports, without following redirects, answers HTTP 404", async ({ request }) => {
+    const response = await request.get(REPORTS_PATH, { maxRedirects: 0 });
+    expect(response.status(), `HTTP status of ${REPORTS_PATH}`).toBe(NOT_FOUND);
+  });
+
+  test("the build made without the test flag (port 3001) answers GET /reports with HTTP 404", async ({
+    request,
+  }) => {
+    const response = await request.get(`${FLAG_OFF_BASE_URL}${REPORTS_PATH}`, { maxRedirects: 0 });
+    expect(response.status(), `HTTP status of ${FLAG_OFF_BASE_URL}${REPORTS_PATH}`).toBe(NOT_FOUND);
+  });
+
+  for (const screen of SCREENS) {
+    test(`${screen.name} (${screen.path}) has no link anywhere that leads to /reports`, async ({
+      page,
+    }) => {
+      await open(page, screen.path);
+      expect(
+        await linkPathsUnder(page.locator("body"), REPORTS_PATH),
+        `links on ${screen.name} whose path is ${REPORTS_PATH} or under it`,
+      ).toEqual([]);
+    });
+  }
+});
+
+test.describe("Transactions is no longer a tab (T1.11)", () => {
+  for (const path of [...SCREENS.map((s) => s.path), TRANSACTIONS_PATH]) {
+    test(`on ${path}, the "Main" navigation has no link that leads to /transactions`, async ({
+      page,
+    }) => {
+      await open(page, path);
+      await expect(mainNav(page)).toHaveCount(1);
+      expect(
+        await linkPathsUnder(mainNav(page), TRANSACTIONS_PATH),
+        `nav links on ${path} whose path is ${TRANSACTIONS_PATH} or under it`,
+      ).toEqual([]);
+    });
+  }
+});
+
+// TEMPORARY (claim 18): T1.16 and T1.17 remove /transactions and replace
+// these tests.
+test.describe("TEMPORARY until T1.16/T1.17: /transactions is still reachable by its address", () => {
+  test("/transactions answers HTTP 200", async ({ page }) => {
+    const response = await page.goto(TRANSACTIONS_PATH);
+    expect(response?.status(), `HTTP status of ${TRANSACTIONS_PATH}`).toBe(200);
+  });
+
+  test('/transactions has exactly one level-1 heading, "Transactions"', async ({ page }) => {
+    await open(page, TRANSACTIONS_PATH);
+    const h1 = page.getByRole("heading", { level: 1 });
+    await expect(h1).toHaveCount(1);
+    await expect(h1).toHaveText("Transactions");
+  });
+
+  test("/transactions still shows the Main navigation with exactly Home, Events, Expenses, Income, Settings", async ({
+    page,
+  }) => {
+    await open(page, TRANSACTIONS_PATH);
+    await expect(mainNav(page)).toHaveCount(1);
+    const links = mainNav(page).getByRole("link");
+    await expect(links).toHaveCount(SCREENS.length);
+    for (let i = 0; i < SCREENS.length; i++) {
+      await expect(links.nth(i)).toHaveAccessibleName(SCREENS[i].name);
+    }
+  });
+
+  test("on /transactions, no nav link has aria-current", async ({ page }) => {
+    await open(page, TRANSACTIONS_PATH);
+    // Wait for hydration (the nav publishes --nav-h, claim 15), so a current
+    // tab set only in the browser would be seen too.
+    await page.waitForFunction(
+      () => document.documentElement.style.getPropertyValue("--nav-h") !== "",
+    );
+    await expect(mainNav(page).getByRole("link")).toHaveCount(SCREENS.length);
+    await expect(mainNav(page).locator("[aria-current]")).toHaveCount(0);
   });
 });
 

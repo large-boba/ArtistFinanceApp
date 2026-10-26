@@ -8,6 +8,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+// The five tabs, in order: Home, Events, Expenses, Income, Settings. (The
+// Transactions page still exists but is not a tab, so no tab is "current" there.)
 // Each tab: where it goes, its label, and a small picture. The pictures are
 // aria-hidden so a screen reader says just "Home", not "Home, icon".
 const TABS: { href: string; label: string; icon: ReactNode }[] = [
@@ -17,19 +19,21 @@ const TABS: { href: string; label: string; icon: ReactNode }[] = [
     icon: <path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10" />,
   },
   {
-    href: "/transactions",
-    label: "Transactions",
-    icon: <path d="M4 7h16M4 12h16M4 17h10" />,
-  },
-  {
     href: "/events",
     label: "Events",
     icon: <path d="M4 6.5h16V20H4zM4 11h16M8 3.5v5M16 3.5v5" />,
   },
   {
-    href: "/reports",
-    label: "Reports",
-    icon: <path d="M5 20V11M12 20V5M19 20v-7" />,
+    // Money going out: an arrow pointing down into a tray.
+    href: "/expenses",
+    label: "Expenses",
+    icon: <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14" />,
+  },
+  {
+    // Money coming in: an arrow pointing up to a bar.
+    href: "/income",
+    label: "Income",
+    icon: <path d="M12 20V9M7.5 13.5 12 9l4.5 4.5M5 4h14" />,
   },
   {
     href: "/settings",

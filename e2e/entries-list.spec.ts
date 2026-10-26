@@ -8,6 +8,18 @@
 // locally; screen reader and keyboard). DECISIONS.md "What the app is for"
 // (owner, 2026-10-25: tracking after the fact, not live selling).
 //
+// Updated for T1.11 (new bottom tabs: Home, Events, Expenses, Income,
+// Settings; DECISIONS.md "Navigation"): Transactions is no longer a tab, but
+// /transactions stays reachable until T1.16 and T1.17 split its list into the
+// Income and Expenses tabs (lead's decision on the T1.11 card). The tests
+// that tapped the "Transactions" tab now use goToTransactions() instead: a
+// CLIENT-SIDE move (no reload) through Next.js's own router,
+// window.next.router.push("/transactions"), which is the same call a
+// next/link link makes. A plain page.goto("/transactions") would reload the
+// page and wipe the entries, which would break what those tests prove (that
+// entries survive moving between screens). The helper also proves the move
+// didn't reload the page. No assertion about the list itself changed.
+//
 // Written by the test engineer BEFORE the code. Builders must not edit this
 // file; report a disputed test to the project lead instead.
 //
@@ -419,14 +431,38 @@ async function press(locator: Locator, hasTouch: boolean): Promise<void> {
 /** Moves to a tab with the bottom navigation (a client-side move, no reload). */
 async function goToTab(
   page: Page,
-  name: "Home" | "Transactions",
-  path: "/" | "/transactions",
+  name: "Home",
+  path: "/",
   hasTouch: boolean,
 ): Promise<void> {
   await press(mainNav(page).getByRole("link", { name, exact: true }), hasTouch);
   // Same server and host as before, only the path changes (works for every base URL).
   await expect(page).toHaveURL(new RegExp(`^https?://[^/]+${escapeRegExp(path)}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+}
+
+/**
+ * Moves to /transactions with a client-side move (no reload), without the
+ * bottom navigation: T1.11 took Transactions out of the tabs. It calls
+ * Next.js's own router, window.next.router.push, the same call a next/link
+ * link makes. A marker put on `window` first must still be there afterwards,
+ * which proves the page wasn't reloaded (a reload starts a fresh window).
+ */
+async function goToTransactions(page: Page): Promise<void> {
+  const routerReady = await page.evaluate(
+    () => typeof (window as unknown as { next?: { router?: { push?: unknown } } }).next?.router?.push === "function",
+  );
+  expect(routerReady, "Next.js's client router (window.next.router.push) is available").toBe(true);
+  await page.evaluate(() => {
+    (window as unknown as Record<string, unknown>).__t111SameDocument = true;
+    (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/transactions");
+  });
+  await expect(page).toHaveURL(new RegExp(`^https?://[^/]+${escapeRegExp("/transactions")}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Transactions");
+  expect(
+    await page.evaluate(() => (window as unknown as Record<string, unknown>).__t111SameDocument),
+    "the move to /transactions didn't reload the page",
+  ).toBe(true);
 }
 
 /** A row's text as laid out, with runs of whitespace collapsed to one space. */
@@ -700,11 +736,11 @@ test.describe("with the hand-worked entries", () => {
     await expect(exactText(page, "Today: $0.00 from 1 sale")).toBeVisible();
   });
 
-  test("entries added on Home are listed after tapping Transactions (state survives moving between tabs)", async ({ page }, testInfo) => {
+  test("entries added on Home are listed after a client-side move to Transactions (state survives moving between screens)", async ({ page }) => {
     await openWithHook(page, "/");
     await seed(page, DATASET);
     await expect(exactText(page, HOME_SYDNEY_SALES)).toBeVisible();
-    await goToTab(page, "Transactions", "/transactions", !!testInfo.project.use.hasTouch);
+    await goToTransactions(page);
     await expect(rows(page)).toHaveCount(11);
   });
 
@@ -970,12 +1006,12 @@ test.describe("the test seam is locked", () => {
     expect(process.env.NEXT_PUBLIC_E2E).toBeUndefined();
   });
 
-  test("S1: in a build without NEXT_PUBLIC_E2E, window.__bentoTest never appears", async ({ page }, testInfo) => {
+  test("S1: in a build without NEXT_PUBLIC_E2E, window.__bentoTest never appears", async ({ page }) => {
     await open(page, `${FLAG_OFF_BASE_URL}/`);
     await waitForHydration(page);
     expect(await page.evaluate((name) => name in window, HOOK_NAME)).toBe(false);
-    // Still absent after a client-side move to another tab.
-    await goToTab(page, "Transactions", "/transactions", !!testInfo.project.use.hasTouch);
+    // Still absent after a client-side move to another screen.
+    await goToTransactions(page);
     await expect(exactText(page, EMPTY_TRANSACTIONS)).toBeVisible();
     expect(await page.evaluate((name) => name in window, HOOK_NAME)).toBe(false);
   });
@@ -1018,12 +1054,12 @@ test.describe("the test seam is locked to localhost", () => {
     await waitForHook(page);
   });
 
-  test("S5: the flagged build reached under another hostname never installs the hook", async ({ page }, testInfo) => {
+  test("S5: the flagged build reached under another hostname never installs the hook", async ({ page }) => {
     await open(page, `http://${NON_LOCAL_HOST}:3000/`);
     expect(await page.evaluate(() => location.hostname)).toBe(NON_LOCAL_HOST);
     await waitForHydration(page);
     expect(await page.evaluate((name) => name in window, HOOK_NAME)).toBe(false);
-    await goToTab(page, "Transactions", "/transactions", !!testInfo.project.use.hasTouch);
+    await goToTransactions(page);
     await expect(exactText(page, EMPTY_TRANSACTIONS)).toBeVisible();
     expect(await page.evaluate((name) => name in window, HOOK_NAME)).toBe(false);
   });
