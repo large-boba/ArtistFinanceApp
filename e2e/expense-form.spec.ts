@@ -34,6 +34,15 @@
 //     opens it with a CLIENT-SIDE move (e.g. next/link), so pretend entries
 //     already in the store survive. The browser's Back button from the form
 //     returns to Home with the entries still there.
+//     CHANGED (T1.14): Home's "+ Expense" is replaced by the shared "+ Add"
+//     button (DECISIONS.md "The '+' button"; lead's approval at T1.8). The
+//     form is now reached from Home by opening "+ Add", then "Add expense",
+//     whose address is exactly /expenses/new?back=%2F (add-button.spec.ts
+//     B4). Every test that tapped "+ Expense" now does that, through
+//     pressExpenseControl()/openFormFromHome() below, and expects that address
+//     where it expected /expenses/new. What each test proves is unchanged:
+//     the move is client-side, entries survive, the date is taken when the
+//     form opens, Save returns to Home (safeBackPath("/") is "/").
 //
 // F2. The form is one real <form> inside <main>. The fields, in this DOM and
 //     Tab order, each with ONE visible <label> whose whole text is exactly:
@@ -143,6 +152,10 @@
 // F10. No uncaught errors and no React hydration errors during any test.
 //
 // ─── Added for T1.13 (stream tag, pre-fill, safe back) ─────────────────────
+// (F13 gained one more lead decision in T1.14, from the T1.13 review:
+// picking an event BY HAND never changes the Income stream. Only pre-fill
+// from ?event= brings the event's usual stream. See the T1.14 tests at the
+// end of this file.)
 // Guide §7; DECISIONS.md "Linking costs to events and streams" and "The '+'
 // button". Lead's decisions, written out here so the tests can be exact.
 //
@@ -383,11 +396,27 @@ function cancelLink(page: Page): Locator {
   return main(page).getByRole("link", { name: "Cancel", exact: true });
 }
 
-/** Home's "+ Expense" control, a button or a link (app-shell claim 8). */
-function expenseControl(page: Page): Locator {
-  return main(page)
-    .getByRole("button", { name: "+ Expense", exact: true })
-    .or(main(page).getByRole("link", { name: "+ Expense", exact: true }));
+// CHANGED (T1.14): Home's way to the form. It was the "+ Expense" control;
+// now it's the "+ Add" button, which opens a group holding "Add expense".
+
+/** The address "Add expense" on Home leads to, written out by hand (add-button.spec.ts B4). */
+const HOME_FORM_ADDRESS = "/expenses/new?back=%2F";
+
+function addButton(page: Page): Locator {
+  return main(page).getByRole("button", { name: "+ Add", exact: true });
+}
+
+/** Opens "+ Add" on Home (it must start closed) and returns the "Add expense" link, ready to press. */
+async function expenseControl(page: Page, hasTouch: boolean): Promise<Locator> {
+  await expect(addButton(page)).toHaveAttribute("aria-expanded", "false");
+  await press(addButton(page), hasTouch);
+  await expect(addButton(page)).toHaveAttribute("aria-expanded", "true");
+  return main(page).getByRole("link", { name: "Add expense", exact: true });
+}
+
+/** Opens "+ Add" on Home and presses "Add expense" (CHANGED (T1.14): was "+ Expense"). */
+async function pressExpenseControl(page: Page, hasTouch: boolean): Promise<void> {
+  await press(await expenseControl(page, hasTouch), hasTouch);
 }
 
 /** An element in <main> whose whole text is exactly `text`. */
@@ -441,12 +470,16 @@ async function openForm(page: Page): Promise<void> {
   await waitForForm(page);
 }
 
-/** Opens Home, then taps "+ Expense" (a client-side move) and waits for the form. */
+/**
+ * Opens Home, then "+ Add" → "Add expense" (a client-side move) and waits for
+ * the form. CHANGED (T1.14): was "+ Expense"; the address now carries
+ * ?back=%2F.
+ */
 async function openFormFromHome(page: Page, hasTouch: boolean): Promise<void> {
   await open(page, "/");
   await waitForHydration(page);
-  await press(expenseControl(page), hasTouch);
-  await expect(page).toHaveURL(urlWithPath(FORM_PATH));
+  await pressExpenseControl(page, hasTouch);
+  await expect(page).toHaveURL(urlWithPath(HOME_FORM_ADDRESS));
   await waitForForm(page);
 }
 
@@ -685,11 +718,11 @@ async function expectTabKeepsMainFocusClearOfNav(page: Page): Promise<void> {
 // ═══ 1. Opening the form (F1) ═══════════════════════════════════════════════
 
 test.describe("opening the form", () => {
-  test('"+ Expense" on Home opens the form at /expenses/new', async ({ page }, testInfo) => {
+  test('"+ Add" then "Add expense" on Home opens the form at /expenses/new?back=%2F (CHANGED (T1.14): was "+ Expense")', async ({ page }, testInfo) => {
     await open(page, "/");
     await waitForHydration(page);
-    await press(expenseControl(page), touch(testInfo));
-    await expect(page).toHaveURL(urlWithPath(FORM_PATH));
+    await pressExpenseControl(page, touch(testInfo));
+    await expect(page).toHaveURL(urlWithPath(HOME_FORM_ADDRESS));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(FORM_HEADING);
   });
 
@@ -733,8 +766,8 @@ test.describe("opening the form", () => {
       { date: SYDNEY_TODAY, amountCents: 3299, categoryId: "software", supplier: "Adobe" },
     ]);
     await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
-    await press(expenseControl(page), touch(testInfo));
-    await expect(page).toHaveURL(urlWithPath(FORM_PATH));
+    await pressExpenseControl(page, touch(testInfo));
+    await expect(page).toHaveURL(urlWithPath(HOME_FORM_ADDRESS));
     await page.goBack();
     await expect(page).toHaveURL(urlWithPath("/"));
     await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
@@ -916,7 +949,7 @@ test.describe("the date", () => {
     await expect(dateField(page)).toHaveValue(SYDNEY_TODAY);
   });
 
-  test("defaults to today when reached from Home's + Expense too", async ({ page }, testInfo) => {
+  test("defaults to today when reached from Home's + Add → Add expense too", async ({ page }, testInfo) => {
     await openFormFromHome(page, touch(testInfo));
     await expect(dateField(page)).toHaveValue(SYDNEY_TODAY);
   });
@@ -927,8 +960,8 @@ test.describe("the date", () => {
     await open(page, "/", new Date("2026-06-30T13:59:00.000Z")); // 23:59 in Sydney
     await waitForHydration(page);
     await page.clock.setFixedTime(new Date("2026-06-30T14:01:00.000Z")); // 00:01 on 1 July in Sydney
-    await press(expenseControl(page), touch(testInfo));
-    await expect(page).toHaveURL(urlWithPath(FORM_PATH));
+    await pressExpenseControl(page, touch(testInfo));
+    await expect(page).toHaveURL(urlWithPath(HOME_FORM_ADDRESS));
     await expect(dateField(page)).toHaveValue("2026-07-01");
   });
 
@@ -1290,7 +1323,7 @@ test.describe("saving a valid expense", () => {
       { date: SYDNEY_TODAY, amountCents: 3299, categoryId: "software", supplier: "Adobe" },
     ]);
     await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
-    await press(expenseControl(page), touch(testInfo));
+    await pressExpenseControl(page, touch(testInfo));
     await waitForForm(page);
     await fillForm(page, { amount: "23.50", category: "Packaging" });
     await saveAndExpectHome(page, touch(testInfo));
@@ -1303,7 +1336,7 @@ test.describe("saving a valid expense", () => {
     await openFormFromHome(page, touch(testInfo));
     await fillForm(page, { amount: "1,234.50", category: "Equipment" });
     await saveAndExpectHome(page, touch(testInfo));
-    await press(expenseControl(page), touch(testInfo));
+    await pressExpenseControl(page, touch(testInfo));
     await waitForForm(page);
     await fillForm(page, { amount: "0.5", category: "Phone" });
     await saveAndExpectHome(page, touch(testInfo));
@@ -1388,7 +1421,7 @@ test.describe("saving a valid expense", () => {
     await openFormFromHome(page, touch(testInfo));
     await fillForm(page, { date: "2026-06-20", supplier: "Officeworks", amount: "23.50", category: "Parking", notes: "x" });
     await saveAndExpectHome(page, touch(testInfo));
-    await press(expenseControl(page), touch(testInfo));
+    await pressExpenseControl(page, touch(testInfo));
     await waitForForm(page);
     await expect(dateField(page)).toHaveValue(SYDNEY_TODAY);
     await expect(supplierField(page)).toHaveValue("");
@@ -2237,4 +2270,60 @@ test.describe("T1.13: the old rules with the new fields", () => {
       await expectTabKeepsMainFocusClearOfNav(page);
     });
   }
+});
+
+// ═══ T1.14. Picking an event by hand leaves the stream alone ════════════════
+// Carried over from the T1.13 code review (lead's decision, T1.13 card):
+// only pre-fill from ?event= brings the event's usual stream (F14). Choosing
+// an event in the Event field by hand never changes the Income stream,
+// whatever it holds: "No stream", one the artist chose, or one pre-filled.
+// (The gallery shelf's usual stream is Vendor shelf rental, the convention's
+// is Sales at events, so a form that wrongly applied the usual stream on a
+// hand pick would show those instead.)
+
+test.describe("T1.14: picking an event by hand leaves the stream alone", () => {
+  test('Parking, then the gallery shelf picked by hand: the stream stays "No stream"', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Parking" });
+    expect(await selectedOptionText(streamField(page))).toBe(NO_STREAM);
+    await fillForm(page, { event: SHELF });
+    expect(await selectedOptionText(eventField(page))).toBe(SHELF);
+    await nextFrame(page); // let any (wrong) re-render land before reading the stream
+    expect(await selectedOptionText(streamField(page))).toBe(NO_STREAM);
+  });
+
+  test("Parking with Wholesale chosen, then the gallery shelf picked by hand: the stream stays Wholesale", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Parking" });
+    await streamField(page).selectOption({ label: "Wholesale" });
+    await fillForm(page, { event: SHELF });
+    expect(await selectedOptionText(eventField(page))).toBe(SHELF);
+    await nextFrame(page); // let any (wrong) re-render land before reading the stream
+    expect(await selectedOptionText(streamField(page))).toBe("Wholesale");
+  });
+
+  test("?event=pretend-event-comic-con, Parking, then the gallery shelf picked by hand: the stream stays Sales at events", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-comic-con");
+    await fillForm(page, { category: "Parking" });
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Sales at events");
+    await fillForm(page, { event: SHELF });
+    expect(await selectedOptionText(eventField(page))).toBe(SHELF);
+    await nextFrame(page); // let any (wrong) re-render land before reading the stream
+    expect(await selectedOptionText(streamField(page))).toBe("Sales at events");
+  });
+
+  test('Parking, the gallery shelf, then the convention, both by hand: the stream stays "No stream"', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Parking", event: SHELF });
+    await fillForm(page, { event: COMIC_CON });
+    expect(await selectedOptionText(eventField(page))).toBe(COMIC_CON);
+    await nextFrame(page);
+    expect(await selectedOptionText(streamField(page))).toBe(NO_STREAM);
+  });
 });

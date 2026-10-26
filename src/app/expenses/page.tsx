@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AddButton from "@/components/AddButton";
 
 // The layout adds " · BentoBudget" after this title.
 export const metadata: Metadata = { title: "Expenses" };
@@ -9,6 +10,7 @@ export default function ExpensesPage() {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">Expenses</h1>
+      <AddButton />
       <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300">
         Your expenses list and totals are coming next.
       </p>

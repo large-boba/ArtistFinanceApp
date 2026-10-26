@@ -75,7 +75,8 @@
 //    the entries list.)
 //
 // 8. Home button. Home has exactly one control (a <button> or a link) whose
-//    accessible name is exactly "+ Expense". The name equals the visible
+//    accessible name is exactly "+ Expense" (see CHANGED (T1.14) below: now
+//    "+ Add"). The name equals the visible
 //    label, so speech-input users can say what they see (WCAG 2.5.3); screen
 //    readers read it as "plus Expense".
 //    CHANGED (T1.8) by the owner's 2026-10-25 direction (DECISIONS.md "What
@@ -83,15 +84,23 @@
 //    and the quick-sale pad it opened are removed. The proof that they are
 //    gone (/sale is a 404, no "Sale" control on Home) is in
 //    removed-quick-sale.spec.ts.
+//    CHANGED (T1.14) by the owner's "+" button decision (DECISIONS.md "The
+//    '+' button"; lead's approval given in advance at T1.8): Home's control
+//    is now the shared "+ Add" button (a <button>, a disclosure offering
+//    "Add income" and "Add expense"), which REPLACES "+ Expense". So Home has
+//    exactly one control whose accessible name is exactly "+ Add", and none
+//    named "+ Expense". The button's own behaviour is in add-button.spec.ts.
+//    Claims 9, 10 and 14 below now check "+ Add" where they checked
+//    "+ Expense" (HOME_BUTTONS); nothing else about them changed.
 //
-// 9. Tap targets. Every nav link and Home's "+ Expense" are at least 44×44
+// 9. Tap targets. Every nav link and Home's "+ Add" are at least 44×44
 //    CSS pixels (their own bounding box, not a parent's).
 //
 // 10. Phone layout (390×844). The nav is visible, inside the screen's width,
 //     and its bottom edge is the bottom of the viewport (within 1 px) on every
 //     page, and it stays there while a long page scrolls underneath. On Home,
-//     "+ Expense" is fully on screen without scrolling and not covered by the
-//     nav.
+//     "+ Add" (CHANGED (T1.14), was "+ Expense") is fully on screen without
+//     scrolling and not covered by the nav.
 //
 // 11. Keyboard. Pressing Tab from the top of the page reaches the five nav
 //     links in order. A keyboard-focused link shows a visible focus indicator
@@ -121,7 +130,8 @@
 //     Content must not hide behind a taller nav either, at 150% and 200% on
 //     every page: after scrolling to the very bottom, the lowest-ending
 //     element inside <main> ends at or above the nav's top edge (within
-//     1 px). On Home, "+ Expense", once scrolled to the top of the screen
+//     1 px). On Home, "+ Add" (CHANGED (T1.14), was "+ Expense"), once
+//     scrolled to the top of the screen
 //     (`scrollIntoView({ block: "start" })`, the most a person can scroll it
 //     up), is fully on screen and ends at or above the nav's top edge. It is
 //     still at least 44×44 px and inside 0–390 px.
@@ -276,8 +286,8 @@ function navLink(page: Page, name: string): Locator {
 }
 
 // Home's big buttons (claim 8). "+ Sale" was removed in T1.8 (owner's
-// 2026-10-25 direction), so only "+ Expense" is left.
-const HOME_BUTTONS = ["+ Expense"] as const;
+// 2026-10-25 direction). CHANGED (T1.14): "+ Add" replaces "+ Expense".
+const HOME_BUTTONS = ["+ Add"] as const;
 type HomeButton = (typeof HOME_BUTTONS)[number];
 
 /** The Home control with this exact accessible name, as a button or a link. */
@@ -577,7 +587,15 @@ test.describe("Home's big button", () => {
     });
   }
 
-  test("on a phone, + Expense is fully on screen above the navigation without scrolling", async ({
+  test('Home has no control named "+ Expense" any more (CHANGED (T1.14): "+ Add" replaces it)', async ({
+    page,
+  }) => {
+    await open(page, "/");
+    await expect(page.getByRole("button", { name: "+ Expense", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "+ Expense", exact: true })).toHaveCount(0);
+  });
+
+  test("on a phone, + Add is fully on screen above the navigation without scrolling", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "phone", "phone-layout claim");

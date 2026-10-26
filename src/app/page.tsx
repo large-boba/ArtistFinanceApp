@@ -1,27 +1,17 @@
 // Home. A server component: it has no "use client", so nothing here needs the
 // browser. The page title comes from the default in layout.tsx ("BentoBudget").
 //
-// "+ Expense" opens the expense form. It sits near the top so it is always on
-// screen, above the bottom navigation.
+// "+ Add" (T1.14) sits directly under the heading so it is always on screen,
+// above the bottom navigation. It offers "Add income" and "Add expense".
 
-import Link from "next/link";
+import AddButton from "@/components/AddButton";
 import TodayTotals from "@/components/TodayTotals";
-
-const bigButton =
-  "flex min-h-24 w-full items-center justify-center rounded-2xl text-3xl font-bold focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-300";
 
 export default function HomePage() {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">Home</h1>
-      <div className="mt-6 flex flex-col gap-4">
-        <Link
-          href="/expenses/new"
-          className={`${bigButton} bg-indigo-800 text-white active:bg-indigo-900`}
-        >
-          + Expense
-        </Link>
-      </div>
+      <AddButton />
       <TodayTotals />
       <p className="mt-6 text-base text-zinc-700 dark:text-zinc-300">
         Practice mode: entries disappear when you refresh or close the app.

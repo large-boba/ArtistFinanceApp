@@ -25,6 +25,12 @@
 //       "Sales at events" (T1.10+) don't trip this);
 //     - no link whose address leads to /sale (or anything under /sale/).
 //     Home keeps exactly one visible "+ Expense" control (app-shell claim 8).
+//     CHANGED (T1.14) (owner's "+" button decision, DECISIONS.md "The '+'
+//     button"; lead's approval given in advance at T1.8): the shared "+ Add"
+//     button replaces "+ Expense", so Home now keeps exactly one visible
+//     "+ Add" control. The "no Sale control" checks are kept, and also run
+//     with "+ Add" opened, so neither of its links ("Add income",
+//     "Add expense") brings a sale pad back.
 //
 // R3. No uncaught errors and no React hydration errors during any test in
 //     this file (same fixture as entries-list.spec.ts D9 and expense-form F10).
@@ -33,7 +39,8 @@
 // (T1.10 replaced the "sale" entries, the add-sale action and addSale with
 // "income" entries, add-income and addIncome; covered by entries.test.ts and
 // entries-list.spec.ts). The new "+" button, navigation and income forms are
-// later cards and aren't anticipated.
+// later cards and aren't anticipated. (T1.14: the "+" button itself is tested
+// in add-button.spec.ts; only R2's "+ Expense" line changed here.)
 
 import { expect, test as base, type Page } from "@playwright/test";
 
@@ -123,13 +130,38 @@ test.describe("Home has no quick-sale control", () => {
     expect(toPad, "links on Home whose path is /sale").toEqual([]);
   });
 
-  test('Home still has exactly one visible "+ Expense" control', async ({ page }) => {
+  test('Home has exactly one visible "+ Add" control (CHANGED (T1.14): was "+ Expense")', async ({ page }) => {
     await openHome(page);
-    const expense = page
-      .getByRole("button", { name: "+ Expense", exact: true })
-      .or(page.getByRole("link", { name: "+ Expense", exact: true }));
-    await expect(expense).toHaveCount(1);
-    await expect(expense).toBeVisible();
+    const add = page
+      .getByRole("button", { name: "+ Add", exact: true })
+      .or(page.getByRole("link", { name: "+ Add", exact: true }));
+    await expect(add).toHaveCount(1);
+    await expect(add).toBeVisible();
+  });
+
+  test('with "+ Add" opened, Home still has no link or button whose name contains the word "Sale" (T1.14)', async ({
+    page,
+  }) => {
+    await openHome(page);
+    const add = page.getByRole("button", { name: "+ Add", exact: true });
+    await add.click();
+    await expect(add).toHaveAttribute("aria-expanded", "true");
+    const saleWord = /\bsale\b/i;
+    await expect(page.getByRole("link", { name: saleWord })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: saleWord })).toHaveCount(0);
+  });
+
+  test('with "+ Add" opened, Home has no link that leads to /sale (T1.14)', async ({ page }) => {
+    await openHome(page);
+    const add = page.getByRole("button", { name: "+ Add", exact: true });
+    await add.click();
+    await expect(add).toHaveAttribute("aria-expanded", "true");
+    const toPad = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("a[href]"))
+        .map((a) => new URL((a as HTMLAnchorElement).href).pathname)
+        .filter((path) => path === "/sale" || path.startsWith("/sale/")),
+    );
+    expect(toPad, "links on Home whose path is /sale").toEqual([]);
   });
 });
 

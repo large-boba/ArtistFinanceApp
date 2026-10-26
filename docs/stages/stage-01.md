@@ -537,7 +537,7 @@ Evidence:
     - **for T1.9 with a screen reader:** fields vanish without an announcement when switching to a production category.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1509 passed, 0 failed**. After the two tidy-ups, `npm run check` exited 0 again.
 
-### T1.14 — The "+" button: Income or Expense                Status: tests
+### T1.14 — The "+" button: Income or Expense                Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (it builds addresses for forms that already check `back` with `safeBackPath`)
 Guide: DECISIONS.md "The '+' button".
 Outcome:
@@ -558,6 +558,17 @@ Outcome:
 Out of scope: event and stream pages; editing entries.
 Done when: the Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
+- **Lead decisions (2026-10-26):** "+ Add" goes directly under each page's heading. Pages other than the four summary pages (the forms, Transactions) aren't checked. Leaving a page resets the button.
+- **Tests first** (test engineer): new `e2e/add-button.spec.ts` (B1–B8, 218 tests).
+  - Changed: app-shell claim 8 and removed-quick-sale R2 (CHANGED (T1.14), approved at T1.8). The expense-form helpers now open "+ Add". New hand-pick stream tests (from the T1.13 review).
+  - Red run: 225 failures, all from the missing "+ Add" or the leftover "+ Expense". Proof: 1717 passed with a scratch build. Planted bugs were caught: `back` not encoded, no focus return, no outside close, links hidden with opacity instead of `hidden`.
+- **Built** (frontend engineer):
+  - new `src/components/AddButton.tsx`: a disclosure button whose links carry the event, the stream and a `back` path checked by `safeBackPath`;
+  - placed on Home (replacing "+ Expense"), Events (through a new `action` slot in `ComingLater`), Expenses and Income.
+  - The lead viewed the phone screenshot: "+ Add" open, showing "Add income" and "Add expense".
+- **Code review: ACCEPT.**
+  - Logged for the T1.15 test round: Escape should also close the group when focus isn't inside it (Safari doesn't focus a button clicked with the mouse), using a document keydown listener while open. Also refresh the stale claim-8 wording in app-shell.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1717 passed, 0 failed**. Two leftover dev servers from earlier tasks were stopped.
 
 ### T1.15 — Events tab and event page                      Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
