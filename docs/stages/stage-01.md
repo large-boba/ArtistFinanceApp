@@ -570,7 +570,7 @@ Evidence:
   - Logged for the T1.15 test round: Escape should also close the group when focus isn't inside it (Safari doesn't focus a button clicked with the mouse), using a document keydown listener while open. Also refresh the stale claim-8 wording in app-shell.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1717 passed, 0 failed**. Two leftover dev servers from earlier tasks were stopped.
 
-### T1.15 — Events tab and event page                      Status: building
+### T1.15 — Events tab and event page                      Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data; the event id from the address is only looked up in a fixed list)
 Guide: §12 "By event or venue" (with its note that production costs aren't included), §7, §6; DECISIONS.md "Event takings", "Event 'Other costs'", "The '+' button".
 Outcome:
@@ -605,6 +605,32 @@ Lead decisions (2026-10-26); the full spec is E1–E11 in `e2e/events.spec.ts`:
 - **Clear** removes "Other costs" straight away, with no confirmation.
 - **Not decided yet:** whether the Events tab shows as current on an event's page.
 Evidence:
+- **Tests first** (test engineer):
+  - new `e2e/events.spec.ts` (E1–E11, 224 tests): exact dates in Sydney and Perth, money worked by hand, the owner's example entered through the real forms;
+  - `add-button` B1/B3 additions (Escape with focus on `<body>`, reset on leaving a page);
+  - app-shell claim 7 CHANGED.
+  - Red run: 200 failures for the intended reasons. Proof: 1949 passed with a scratch build. 5 planted bugs were all caught.
+- **Built** (frontend engineer):
+  - `/events` list (`EventsList`);
+  - `/events/[id]` (static for the three ids; any other id is a 404) with `EventDetail` and `OtherCostsEditor`;
+  - `event-dates.ts`;
+  - `AddButton`: a document Escape listener, and a reset when the page changes.
+- **The owner's example, as shown on the convention's page** (lead viewed the phone screenshot):
+  - takings $1,000 + $2,000 + $1,500 = **$4,500.00**;
+  - event costs $500 + $200 + $299 = **$999.00**;
+  - **Result $3,501.00**;
+  - Other costs $600 ("Stock sold, at cost") gives **Result after other costs $2,901.00**;
+  - the note "Production costs aren't included here." shows.
+- **Code review: ACCEPT.** The reviewer grepped the components for money maths and found none; every figure comes from `eventSummary`.
+  - Taken by the lead:
+    - the event ids are listed once (from `pretendEvents`), not in a second constant;
+    - the unused `ComingLater` action slot is removed;
+    - AddButton ignores an Escape something else already handled.
+  - Logged:
+    - for the next test round: focus after Cancel, Save and Clear in Other costs; a unit test for `event-dates` (or move it to `src/lib`);
+    - **before real data:** an extreme amount near the safe-number limit can make a summary throw and crash the page. This needs a business maximum for amounts (an owner decision, already open since T1.4) or a friendly error state.
+  - No separate security review was run; the card says why. The event id from the address is only matched against three fixed ids; any other is a real 404.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1949 passed, 0 failed**. After the three small fixes: `npm run check` exit 0, and the events, add-button and app-shell specs gave **923 passed, 0 failed**.
 
 ### T1.16 — Income tab and stream pages                     Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no

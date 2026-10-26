@@ -32,9 +32,10 @@
 //     Lead design (the owner may change it): a page-top button, not a
 //     floating one, so it never overlaps the bottom tabs or large text.
 //     The event and stream pages (T1.15/T1.16) add it later with their
-//     pre-fill; they aren't tested here.
-//     Test engineer's reading (flagged for the lead): the card's list of
-//     pages is complete for now, so Settings has no "+ Add".
+//     pre-fill; the event page's links are tested in events.spec.ts.
+//     Settings has no "+ Add" (lead confirmed after T1.14).
+//     ADDED (T1.15, lead's answer after T1.14): "+ Add" goes DIRECTLY under
+//     the h1: the h1's next element sibling is the "+ Add" button or holds it.
 //     It is ONE shared component: the button and the two links have the
 //     same `class` on all four pages.
 //
@@ -58,6 +59,12 @@
 //     - Closing: Escape closes the group and puts focus back on "+ Add"
 //       (also when focus was on one of the links); a tap or click outside it
 //       (on the page heading) closes it; pressing "+ Add" again closes it.
+//     - ADDED (T1.15, from the T1.14 code review): Escape closes it even when
+//       focus isn't inside it, e.g. opened with a mouse click and then focus
+//       moved to <body>.
+//     - ADDED (T1.15, lead's answer after T1.14): leaving a page resets it.
+//       Opened on Home, then a move to Events and back to Home with the
+//       bottom tabs (client-side): it is closed.
 //
 // B4. The links' addresses, EXACT (`href` attribute, character for
 //     character). Each link carries the page's pre-fill and `back` = the
@@ -407,6 +414,21 @@ test.describe('T1.14: "+ Add" is on Home, Events, Expenses and Income', () => {
       );
     });
 
+    test(`on ${p.name}, "+ Add" is directly under the h1: the h1's next element sibling is the button or holds it (T1.15)`, async ({
+      page,
+    }) => {
+      await open(page, p.path);
+      const direct = await heading(page).evaluate((h1, name) => {
+        const next = h1.nextElementSibling;
+        if (!next) return "nothing after the h1";
+        const isIt = (el: Element) =>
+          el.tagName === "BUTTON" && (el.textContent ?? "").replace(/\s+/g, " ").trim() === name;
+        if (isIt(next) || Array.from(next.querySelectorAll("button")).some(isIt)) return "yes";
+        return `next sibling is <${next.tagName.toLowerCase()}> "${(next.textContent ?? "").trim().slice(0, 40)}"`;
+      }, ADD_BUTTON);
+      expect(direct).toBe("yes");
+    });
+
     test(`on ${p.name}, "+ Add" is the first focusable element in <main>`, async ({ page }) => {
       await open(page, p.path);
       const first = await main(page).evaluate((m) => {
@@ -624,6 +646,34 @@ test.describe("T1.14: closing", () => {
     await open(page, "/");
     await openGroup(page, touch(testInfo));
     await press(addButton(page), touch(testInfo));
+    await expectClosed(page);
+  });
+
+  test("opened with a mouse click, then focus moved to <body>: Escape still closes it (T1.15, from the T1.14 review)", async ({
+    page,
+  }) => {
+    await open(page, "/");
+    await addButton(page).click();
+    await expect(addButton(page)).toHaveAttribute("aria-expanded", "true");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect(await page.evaluate(() => document.activeElement === document.body), "focus is on <body>").toBe(true);
+    await page.keyboard.press("Escape");
+    await expectClosed(page);
+  });
+
+  test("leaving a page resets it: opened on Home, then Events and back to Home with the tabs, it is closed (T1.15)", async ({
+    page,
+  }, testInfo) => {
+    const t = touch(testInfo);
+    await open(page, "/");
+    await openGroup(page, t);
+    await setMarker(page);
+    await press(mainNav(page).getByRole("link", { name: "Events", exact: true }), t);
+    await expect(heading(page)).toHaveText("Events");
+    await expectClosed(page);
+    await press(mainNav(page).getByRole("link", { name: "Home", exact: true }), t);
+    await expect(heading(page)).toHaveText("Home");
+    expect(await markerStillThere(page), "the moves were client-side").toBe(true);
     await expectClosed(page);
   });
 });

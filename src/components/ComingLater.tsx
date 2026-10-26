@@ -6,18 +6,14 @@ export default function ComingLater({
   title,
   stage,
   children,
-  action,
 }: {
   title: string;
   stage: number;
   children: React.ReactNode;
-  /** Optional control shown directly under the heading (e.g. "+ Add"). */
-  action?: React.ReactNode;
 }) {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">{title}</h1>
-      {action}
       <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300">
         {children}
       </p>
