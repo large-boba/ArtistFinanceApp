@@ -12,7 +12,8 @@
 //   - Every other stream: one Amount and a Payment method. Saving adds one row.
 //     "Vendor shelf rental" can also say which event the money came from.
 //
-// Rules this form follows (the same as the expense form):
+// Rules this form follows (mostly the same as the expense form; the pre-fill
+// and ?back= are new here):
 //   - The date is the phone's own date picker, starting as today on the device.
 //   - Amounts are typed as text. parseAmountToCents turns them into whole
 //     cents, and "Reads as $12.50" shows the result so a typo is obvious.
@@ -78,6 +79,12 @@ function readAmount(text: string, emptyMessage: string): { cents: number | null;
   return { cents };
 }
 
+/** Which fields the form shows for a stream: none yet, cash and card, or one amount. */
+function shapeOf(streamId: string): "none" | "takings" | "one-amount" {
+  if (!INCOME_STREAMS.some((s) => s.id === streamId)) return "none";
+  return streamId === SALES_AT_EVENTS ? "takings" : "one-amount";
+}
+
 /**
  * The starting stream and event from the page address. An id that is not
  * exactly a known one is ignored. A known event brings its usual stream when
@@ -113,8 +120,13 @@ export default function IncomeForm() {
   const eventParam = params.get("event");
   return (
     <FormFields
-      // A different pre-fill starts a fresh form.
-      key={`${streamParam ?? ""}|${eventParam ?? ""}`}
+      // A different page address starts a fresh form. The key is the WHOLE
+      // search string, not just stream and event, on purpose: after Save with
+      // ?back=/income/new the app replaces the address with plain /income/new,
+      // and that change of address remounts the form, so everything (stream,
+      // date, notes, messages and the double-tap guard) starts again. Keying on
+      // stream and event alone would miss this when neither was in the address.
+      key={params.toString()}
       locale={device.locale}
       today={device.today}
       start={startingChoice(streamParam, eventParam, device.today)}
@@ -156,7 +168,8 @@ function FormFields({
   const [payment, setPayment] = useState<PaymentMethod | "">("");
   const [notes, setNotes] = useState("");
   // Set by the first press of Save with a mistake in the form. From then on
-  // the messages follow what is typed (and disappear as soon as it is fixed).
+  // the messages follow what is typed (and disappear as soon as it is fixed),
+  // until the stream changes the form's shape (see the stream's onChange).
   const [tried, setTried] = useState(false);
   // True once a valid Save has gone through, so a double tap adds only once.
   const savedRef = useRef(false);
@@ -297,6 +310,9 @@ function FormFields({
           value={streamId}
           onChange={(e) => {
             const next = e.target.value;
+            // A new shape means new fields, so ALL messages are hidden until
+            // Save is pressed again: nobody is told off before they've typed.
+            if (shapeOf(next) !== shapeOf(streamId)) setTried(false);
             setStreamId(next);
             // Moving between the two streams that have events keeps the
             // event; any other stream forgets it.
@@ -410,6 +426,7 @@ function FormFields({
                     value={method}
                     checked={payment === method}
                     onChange={() => setPayment(method)}
+                    aria-describedby={describe(shown.payment && "income-payment-error")}
                     className="h-6 w-6 shrink-0 accent-indigo-800"
                   />
                   <span className="min-w-0">{PAYMENT_LABELS[method]}</span>

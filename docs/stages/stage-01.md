@@ -431,7 +431,7 @@ Evidence:
   - notes on saved rows get tested when a list shows notes (T1.16);
   - **before the first route handler (Stage 2):** turn `back` into a route-pattern allow-list, or refuse `/api` and `/auth` (DECISIONS follow-ups).
 
-### T1.12b — Income form: review follow-ups                 Status: tests
+### T1.12b — Income form: review follow-ups                 Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Vitest + Playwright)   Security review: no (the T1.12 security review proposed these items)
 Guide: as T1.12. Source: the T1.12 code and security reviews' optional findings that the lead took.
 Outcome:
@@ -444,6 +444,24 @@ Outcome:
 7. A comment says "mostly the same as the expense form".
 Done when: the new tests pass (red first); the full Playwright suite and `npm run check` are green.
 Evidence:
+- **Lead decisions (2026-10-26):**
+  - A shape change hides all messages until the next Save.
+  - After saving back to the form itself, the next save goes Home (no `back` is left in the address).
+  - The round trip (typed amounts coming back after switching away and back) is undecided and untested.
+  - Idea for the owner: a "Save and add another" button for entering several days in a row.
+- **Tests first** (test engineer):
+  - new `src/lib/navigation.test.ts`: 76 tests, the security reviewer's attack list plus the 200-character cap;
+  - `e2e/income-form.spec.ts` I13–I17.
+  - Red run: 3 Vitest and 28 Playwright failures, all for the intended reasons.
+- **Built** (frontend engineer):
+  - `IncomeForm.tsx`: a shape change resets the errors-shown state; the key is the whole search string; the payment error is linked from each radio; the header comment.
+  - `navigation.ts`: the length cap.
+- **Code review: ACCEPT.**
+  - Optional, taken: two comments corrected by the lead.
+  - Logged:
+    - for the T1.13 test round: one test that a move between one-amount streams keeps the errors showing;
+    - for T1.9: a screen reader may read the payment error twice (it's linked from the group and from each radio).
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1295 passed, 0 failed**.
 
 ### T1.13 — Expense form: stream tag and pre-fill             Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend expense-form spec)   Security review: no

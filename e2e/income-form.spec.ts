@@ -191,6 +191,48 @@
 //
 // I12. No uncaught errors and no React hydration errors during any test.
 //
+// ─── Added for T1.12b (review follow-ups the lead took) ───────────────────────
+//
+// I13. A shape change doesn't bring premature errors. Once Save has been
+//     pressed with a mistake, errors follow typing (I7), but only for the
+//     fields that were on the form when Save was pressed. When the stream
+//     changes and the form changes shape (no stream → Sales at events, no
+//     stream → another stream, or between Sales at events and the one-amount
+//     shape), the NEW fields (Cash and Card, or Amount and Payment method)
+//     show no error message and no aria-invalid until Save is pressed again.
+//     That next Save shows their errors and focuses the first bad field as in
+//     I7. (The stream's own error goes once a stream is chosen, as before.)
+//
+// I14. The form starts fresh after Save even when ?back= is the form's own
+//     address (/income/new). Save then stays on /income/new (no query) and
+//     the form is empty: stream "Choose a stream", no shape fields, empty
+//     notes, today's date, no messages, no "Reads as", no total. A second
+//     valid Save on that fresh form adds a second income (the double-tap
+//     guard belongs to one form, not to the page). The address after the
+//     first Save is plain /income/new, with no ?back=, so by I9 the second
+//     Save goes to Home.
+//
+// I15. The payment method error is linked from each radio too. After a
+//     blocked Save with no payment method, the error element has a non-empty
+//     id, every one of the five radios' aria-describedby includes that id, and
+//     the <fieldset>'s aria-describedby still includes it (I7). Once a method
+//     is chosen and the error is gone, no radio's description reads it.
+//
+// I16. ?back= is capped at 200 characters (safeBackPath, see
+//     src/lib/navigation.test.ts for the full table). Seen here through
+//     Cancel's href: a safe-looking 200-character back is kept, 201 gives "/".
+//
+// I17. Two lead decisions (2026-10-26), tests only:
+//     - Moving between the two streams that can have an event (Sales at
+//       events ↔ Vendor shelf rental) KEEPS the chosen event, and saving
+//       stores it. Moving on to a stream without events still clears it (I6).
+//     - Typed amounts don't carry over when the shape changes: Online sales
+//       with Amount "50", switched to Sales at events, shows empty Cash and
+//       Card, no "Reads as" and no total; Sales at events with Cash and Card
+//       typed, switched to Wholesale, shows an empty Amount and no "Reads as".
+//       (What a round trip back to the first shape shows isn't decided, so it
+//       isn't tested.)
+//
 // ═══ HAND-WORKED VALUES ═════════════════════════════════════════════════════
 //
 // The device clock is frozen at 2026-06-30T15:30:00Z. In Australia/Sydney
@@ -2234,5 +2276,357 @@ test.describe("on a phone at 320×568 with 200% text", () => {
     await saveButton(page).scrollIntoViewIfNeeded();
     await saveAndExpect(page, touch(testInfo));
     await expect(exactText(page, "Today: $1,234.56 from 1 sale")).toBeVisible();
+  });
+});
+
+// ═══ T1.12b ═════════════════════════════════════════════════════════════════
+
+/** Checks Cash and Card show no message and no aria-invalid. */
+async function expectTakingsFieldsQuiet(page: Page): Promise<void> {
+  await expect(cashField(page)).toBeVisible();
+  await expect(cardField(page)).toBeVisible();
+  await expect(exactText(page, ERROR_CASH_EMPTY)).toHaveCount(0);
+  await expect(exactText(page, ERROR_CARD_EMPTY)).toHaveCount(0);
+  await expect(exactText(page, ERROR_AMOUNT_INVALID)).toHaveCount(0);
+  await expect(cashField(page)).not.toHaveAttribute("aria-invalid", "true");
+  await expect(cardField(page)).not.toHaveAttribute("aria-invalid", "true");
+}
+
+/** Checks Amount and Payment method show no message and no aria-invalid. */
+async function expectOneAmountFieldsQuiet(page: Page): Promise<void> {
+  await expect(amountField(page)).toBeVisible();
+  await expect(paymentGroup(page)).toBeVisible();
+  await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toHaveCount(0);
+  await expect(exactText(page, ERROR_AMOUNT_INVALID)).toHaveCount(0);
+  await expect(exactText(page, ERROR_PAYMENT)).toHaveCount(0);
+  await expect(amountField(page)).not.toHaveAttribute("aria-invalid", "true");
+  expect(await describedByTexts(paymentGroup(page))).not.toContain(ERROR_PAYMENT);
+}
+
+// ─── I13. A shape change doesn't bring premature errors ─────────────────────
+
+test.describe("T1.12b: after a blocked Save, a new shape shows no errors until the next Save", () => {
+  test(`Save on an empty form, then Sales at events: "${ERROR_STREAM}" goes and Cash and Card show no error or aria-invalid`, async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_STREAM)).toBeVisible();
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await expect(exactText(page, ERROR_STREAM)).toHaveCount(0);
+    await expectTakingsFieldsQuiet(page);
+    await expectNoErrorsShown(page);
+  });
+
+  test("Save on an empty form, then Sales at events, then Save again: both cash and card errors show and focus moves to Cash", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await press(saveButton(page), touch(testInfo));
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await expectTakingsFieldsQuiet(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_CASH_EMPTY)).toBeVisible();
+    await expect(exactText(page, ERROR_CARD_EMPTY)).toBeVisible();
+    await expect(cashField(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(cardField(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(cashField(page)).toBeFocused();
+  });
+
+  test(`Save on an empty form, then Online sales: "${ERROR_STREAM}" goes and Amount and Payment method show no error or aria-invalid`, async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_STREAM)).toBeVisible();
+    await fillForm(page, { stream: "Online sales" });
+    await expect(exactText(page, ERROR_STREAM)).toHaveCount(0);
+    await expectOneAmountFieldsQuiet(page);
+    await expectNoErrorsShown(page);
+  });
+
+  test("Save on an empty form, then Online sales, then Save again: the amount and payment errors show and focus moves to Amount", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await press(saveButton(page), touch(testInfo));
+    await fillForm(page, { stream: "Online sales" });
+    await expectOneAmountFieldsQuiet(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toBeVisible();
+    await expect(exactText(page, ERROR_PAYMENT)).toBeVisible();
+    await expect(amountField(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(amountField(page)).toBeFocused();
+  });
+
+  test("cash/card errors showing, then switching to Wholesale: Amount and Payment method show no error until the next Save", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_CASH_EMPTY)).toBeVisible();
+    await fillForm(page, { stream: "Wholesale" });
+    await expectOneAmountFieldsQuiet(page);
+    await expectNoErrorsShown(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toBeVisible();
+    await expect(exactText(page, ERROR_PAYMENT)).toBeVisible();
+  });
+
+  test("amount/payment errors showing, then switching to Sales at events: Cash and Card show no error until the next Save", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toBeVisible();
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await expectTakingsFieldsQuiet(page);
+    await expectNoErrorsShown(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_CASH_EMPTY)).toBeVisible();
+    await expect(cashField(page)).toBeFocused();
+  });
+
+  test("cash/card errors showing, then switching to Vendor shelf rental (the one-amount stream that keeps the event): Amount and Payment method show no error", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_CARD_EMPTY)).toBeVisible();
+    await fillForm(page, { stream: VENDOR_SHELF });
+    await expectOneAmountFieldsQuiet(page);
+  });
+});
+
+// ─── I14. The form starts fresh when back is the form itself ────────────────
+
+test.describe("T1.12b: with back=/income/new, Save starts a fresh form", () => {
+  const SELF_BACK = `?back=${encodeURIComponent(FORM_PATH)}`;
+
+  test("after a valid Save, the page is /income/new again with an empty form", async ({ page }, testInfo) => {
+    await openForm(page, SELF_BACK);
+    await fillForm(page, { date: "2026-06-20", stream: "Online sales", amount: "5", payment: "Online", notes: "first" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(FORM_HEADING);
+    await expect.poll(() => selectedText(streamField(page))).toBe(STREAM_PLACEHOLDER);
+    await expect(streamField(page)).toHaveValue("");
+    await expect(amountField(page)).toHaveCount(0);
+    await expect(paymentGroup(page)).toHaveCount(0);
+    await expect(notesField(page)).toHaveValue("");
+    await expect(dateField(page)).toHaveValue(SYDNEY_TODAY);
+    await expect(readsAs(page)).toHaveCount(0);
+    await expect(totalText(page)).toHaveCount(0);
+    await expectNoErrorsShown(page);
+  });
+
+  test("a second valid Save on the fresh form adds a second income and goes Home: \"Today: $12.00 from 2 sales\" (500 + 700 cents)", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page, SELF_BACK);
+    await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
+    await expect.poll(() => selectedText(streamField(page))).toBe(STREAM_PLACEHOLDER);
+    await fillForm(page, { stream: "Wholesale", amount: "7", payment: "Card" });
+    // The address no longer has ?back= (I9), so this Save goes to Home.
+    await saveAndExpect(page, touch(testInfo), "/", "Home");
+    await expect(exactText(page, "Today: $12.00 from 2 sales")).toBeVisible();
+  });
+
+  test("takings then a one-amount income, both through the self-returning form: Home says \"Today: $355.00 from 3 sales\" (10000 + 25000 + 500 cents)", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page, SELF_BACK);
+    await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
+    await press(saveButton(page), touch(testInfo));
+    await expect.poll(() => selectedText(streamField(page))).toBe(STREAM_PLACEHOLDER);
+    await expect(cashField(page)).toHaveCount(0);
+    await fillForm(page, { stream: "Commissions", amount: "5", payment: "Cash" });
+    // The address no longer has ?back= (I9), so this Save goes to Home.
+    await saveAndExpect(page, touch(testInfo), "/", "Home");
+    await expect(exactText(page, "Today: $355.00 from 3 sales")).toBeVisible();
+  });
+});
+
+// ─── I15. The payment error is linked from each radio ───────────────────────
+
+test.describe("T1.12b: the payment method error is linked from every radio", () => {
+  /** Opens Online sales with an amount and no method, and presses Save. Returns the error's id. */
+  async function blockedSaveWithoutPayment(page: Page, hasTouch: boolean): Promise<string> {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales", amount: "23.50" });
+    await press(saveButton(page), hasTouch);
+    await expect(exactText(page, ERROR_PAYMENT)).toBeVisible();
+    const id = await exactText(page, ERROR_PAYMENT).evaluate((el) => el.id);
+    expect(id, "the payment error element's id").not.toBe("");
+    return id;
+  }
+
+  /** Each radio's aria-describedby ids, in order. */
+  function radioDescribedByIds(page: Page): Promise<string[][]> {
+    return paymentGroup(page).evaluate((group) =>
+      Array.from(group.querySelectorAll('input[type="radio"]')).map((r) =>
+        (r.getAttribute("aria-describedby") ?? "").split(/\s+/).filter((x) => x !== ""),
+      ),
+    );
+  }
+
+  test("after a blocked Save with no payment method, all five radios' aria-describedby include the error's id", async ({
+    page,
+  }, testInfo) => {
+    const id = await blockedSaveWithoutPayment(page, touch(testInfo));
+    const ids = await radioDescribedByIds(page);
+    expect(ids).toHaveLength(5);
+    expect(
+      ids.map((list) => list.includes(id)),
+      `each radio's aria-describedby ids: ${JSON.stringify(ids)}`,
+    ).toEqual([true, true, true, true, true]);
+  });
+
+  test("after a blocked Save with no payment method, each radio's description reads the error", async ({
+    page,
+  }, testInfo) => {
+    await blockedSaveWithoutPayment(page, touch(testInfo));
+    for (const label of PAYMENT_LABELS) {
+      expect(await describedByTexts(paymentRadio(page, label)), `"${label}" radio's description`).toContain(
+        ERROR_PAYMENT,
+      );
+    }
+  });
+
+  test("after a blocked Save with no payment method, the fieldset's aria-describedby still includes the error's id", async ({
+    page,
+  }, testInfo) => {
+    const id = await blockedSaveWithoutPayment(page, touch(testInfo));
+    const ids = await paymentGroup(page).evaluate((g) =>
+      (g.getAttribute("aria-describedby") ?? "").split(/\s+/).filter((x) => x !== ""),
+    );
+    expect(ids).toContain(id);
+  });
+
+  test("once a payment method is chosen, the error is gone and no radio's description reads it", async ({
+    page,
+  }, testInfo) => {
+    await blockedSaveWithoutPayment(page, touch(testInfo));
+    await paymentRadio(page, "Online").check();
+    await expect(exactText(page, ERROR_PAYMENT)).toHaveCount(0);
+    for (const label of PAYMENT_LABELS) {
+      expect(await describedByTexts(paymentRadio(page, label)), `"${label}" radio's description`).not.toContain(
+        ERROR_PAYMENT,
+      );
+    }
+  });
+});
+
+// ─── I16. back is capped at 200 characters ──────────────────────────────────
+
+test.describe("T1.12b: back is capped at 200 characters", () => {
+  // Hand-built: "/" + 199 × "a" = 200 characters; "/" + 200 × "a" = 201.
+  const AT_LIMIT = "/" + "a".repeat(199);
+  const OVER_LIMIT = "/" + "a".repeat(200);
+
+  test("with a safe-looking 200-character back, Cancel links to it unchanged", async ({ page }) => {
+    expect(AT_LIMIT.length).toBe(200);
+    await openForm(page, `?back=${encodeURIComponent(AT_LIMIT)}`);
+    await expect(cancelLink(page)).toHaveAttribute("href", AT_LIMIT);
+  });
+
+  test('with a safe-looking 201-character back, Cancel links to "/"', async ({ page }) => {
+    expect(OVER_LIMIT.length).toBe(201);
+    await openForm(page, `?back=${encodeURIComponent(OVER_LIMIT)}`);
+    await expect(cancelLink(page)).toHaveAttribute("href", "/");
+  });
+
+  test("with a safe-looking 201-character back, Save goes to Home", async ({ page }, testInfo) => {
+    await openForm(page, `?back=${encodeURIComponent(OVER_LIMIT)}`);
+    await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
+    await saveAndExpect(page, touch(testInfo), "/", "Home");
+    await expect(exactText(page, "Today: $5.00 from 1 sale")).toBeVisible();
+  });
+});
+
+// ─── I17. Lead decisions: events kept between event streams; amounts not carried ─
+
+test.describe("T1.12b: moving between the two event streams keeps the event", () => {
+  test("Sales at events with the convention, switched to Vendor shelf rental, keeps the convention selected", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, event: COMIC_CON });
+    await fillForm(page, { stream: VENDOR_SHELF });
+    expect(await selectedText(eventField(page))).toBe(COMIC_CON);
+  });
+
+  test("that kept convention is saved with the Vendor shelf rental income", async ({ page }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, event: COMIC_CON });
+    await fillForm(page, { stream: VENDOR_SHELF, amount: "45", payment: "Bank transfer" });
+    await saveAndExpect(page, touch(testInfo));
+    await goToTransactions(page);
+    await expect(rows(page)).toHaveCount(1);
+    const text = await rowText(rows(page).first());
+    expect(text).toMatch(/\bVendor shelf rental\b/);
+    expect(text).toContain(COMIC_CON);
+    expect(amountsIn(text)).toEqual(["$45.00"]);
+  });
+
+  test('then switching to Online sales removes the Event field, and back to Sales at events shows "Not assigned yet"', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, event: COMIC_CON });
+    await fillForm(page, { stream: VENDOR_SHELF });
+    expect(await selectedText(eventField(page))).toBe(COMIC_CON);
+    await fillForm(page, { stream: "Online sales" });
+    await expect(eventField(page)).toHaveCount(0);
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    expect(await selectedText(eventField(page))).toBe(NOT_ASSIGNED);
+  });
+
+  test("Vendor shelf rental with the shelf, switched to Sales at events, keeps the shelf and saves both takings rows with it", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { stream: VENDOR_SHELF, event: SHELF });
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    expect(await selectedText(eventField(page))).toBe(SHELF);
+    await fillForm(page, { cash: "10", card: "20" });
+    await saveAndExpect(page, touch(testInfo));
+    await goToTransactions(page);
+    await expect(rows(page)).toHaveCount(2);
+    for (let i = 0; i < 2; i++) {
+      expect(await rowText(rows(page).nth(i))).toContain(SHELF);
+    }
+  });
+});
+
+test.describe("T1.12b: typed amounts don't carry over when the shape changes", () => {
+  test('Online sales with Amount "50", switched to Sales at events: Cash and Card are empty, with no Reads as and no total', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { stream: "Online sales", amount: "50" });
+    await expect(exactText(page, "Reads as $50.00")).toBeVisible();
+    await fillForm(page, { stream: SALES_AT_EVENTS });
+    await expect(cashField(page)).toHaveValue("");
+    await expect(cardField(page)).toHaveValue("");
+    await expect(readsAs(page)).toHaveCount(0);
+    await expect(totalText(page)).toHaveCount(0);
+  });
+
+  test('Sales at events with Cash "100" and Card "250", switched to Wholesale: Amount is empty, with no Reads as', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
+    await expect(exactText(page, "Total $350.00")).toBeVisible();
+    await fillForm(page, { stream: "Wholesale" });
+    await expect(amountField(page)).toHaveValue("");
+    await expect(readsAs(page)).toHaveCount(0);
+    await expect(totalText(page)).toHaveCount(0);
   });
 });

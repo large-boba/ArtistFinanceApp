@@ -17,9 +17,14 @@
  * ("//host"), backslashes (browsers treat "\" like "/"), schemes
  * ("https:", "javascript:"), query strings, fragments, spaces, dots ("../")
  * and percent-encoding ("%2F%2F" decodes to "//" later).
+ *
+ * Anything longer than 200 characters is refused too. No real screen of this
+ * app has an address that long, and it keeps silly or huge addresses out of
+ * navigation and links.
  */
 export function safeBackPath(value: string | null | undefined): string {
   if (typeof value !== "string") return "/";
+  if (value.length > 200) return "/";
   if (!/^\/[A-Za-z0-9/-]*$/.test(value)) return "/";
   if (value.includes("//")) return "/";
   return value;
