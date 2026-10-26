@@ -431,6 +431,20 @@ Evidence:
   - notes on saved rows get tested when a list shows notes (T1.16);
   - **before the first route handler (Stage 2):** turn `back` into a route-pattern allow-list, or refuse `/api` and `/auth` (DECISIONS follow-ups).
 
+### T1.12b — Income form: review follow-ups                 Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Vitest + Playwright)   Security review: no (the T1.12 security review proposed these items)
+Guide: as T1.12. Source: the T1.12 code and security reviews' optional findings that the lead took.
+Outcome:
+1. Switching the stream so the form changes shape doesn't show errors on the new fields until Save is pressed again.
+2. The form resets after Save even when `back` points at the form's own address.
+3. The payment-method error is also linked from each radio (`aria-describedby`).
+4. `safeBackPath` returns "/" for anything longer than 200 characters.
+5. New `src/lib/navigation.test.ts` with the security reviewer's attack list, so the rule can't be loosened by accident.
+6. Tests for two lead decisions: switching between Sales at events and Vendor shelf rental keeps the event; typed amounts don't carry over when the shape changes.
+7. A comment says "mostly the same as the expense form".
+Done when: the new tests pass (red first); the full Playwright suite and `npm run check` are green.
+Evidence:
+
 ### T1.13 — Expense form: stream tag and pre-fill             Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend expense-form spec)   Security review: no
 Guide: §7; DECISIONS.md "Linking costs to events and streams".
