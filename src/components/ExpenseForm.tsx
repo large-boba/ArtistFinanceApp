@@ -1,6 +1,6 @@
 "use client";
 
-// The "Add expense" form (T1.7). The artist types; this file checks it and
+// The "Add expense" form (T1.7, T1.13). The artist types; this file checks it and
 // shows what it understood. Nothing is saved until Save is pressed, and even
 // then it only goes into the pretend in-memory store (EntriesProvider).
 //
@@ -11,14 +11,23 @@
 //     whole cents, and "Reads as $12.50" shows the result so a typo is obvious.
 //   - Mistakes are explained only after Save is pressed. Save is never
 //     disabled: pressing it is how you find out what is wrong.
-//   - Only event & venue categories can have an event (guide §7).
+//   - Only event & venue categories can have an event, and only event & venue
+//     and operating categories can have an income stream (guide §7).
+//     Production costs have neither and show a note saying so.
+//   - Event and Income stream keep their value while hidden (so a pre-filled
+//     event isn't lost while browsing categories), but only the fields the
+//     chosen category allows are saved.
+//   - The page address can pre-fill them (?event=, ?stream=), and ?back= says
+//     where Save and Cancel go (checked by safeBackPath). Pre-fill never
+//     chooses a category.
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { isIsoDate } from "@/lib/dates";
 import { parseAmountToCents } from "@/lib/money";
-import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
+import { safeBackPath } from "@/lib/navigation";
+import { DRAFT_CATEGORIES, INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import type { ExpenseGroup } from "@/lib/entries";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
@@ -50,8 +59,30 @@ const ERROR_CATEGORY = "Choose a category.";
 
 type Errors = { date?: string; amount?: string; category?: string };
 
+const PRODUCTION_NOTE = "Production costs aren't linked to an event or stream.";
+
+/**
+ * The starting event and stream from the page address. An id that is not
+ * exactly a known one is ignored. A known stream wins; otherwise a known
+ * event brings its usual stream.
+ */
+function startingChoice(
+  streamParam: string | null,
+  eventParam: string | null,
+  today: string,
+): { streamId: string; eventId: string } {
+  const event = pretendEvents(today).find((e) => e.id === eventParam);
+  const stream = INCOME_STREAMS.find((s) => s.id === streamParam);
+  return { streamId: stream?.id ?? event?.usualStreamId ?? "", eventId: event?.id ?? "" };
+}
+
+/**
+ * Reads the page address (this needs a Suspense boundary in the page, or
+ * `next build` fails), then shows the form once the device is known.
+ */
 export default function ExpenseForm() {
   const device = useDevice();
+  const params = useSearchParams();
 
   // Loading state: the device's language and today's date aren't known until
   // the page has woken up in the browser (see useDevice). The form only
@@ -59,10 +90,30 @@ export default function ExpenseForm() {
   if (device === null) {
     return <LoadingMessage text={LOADING_FORM} />;
   }
-  return <FormFields locale={device.locale} today={device.today} />;
+  return (
+    <FormFields
+      // A different page address starts a fresh form (the whole search string,
+      // as in the income form, so a replace to the form's own address resets it).
+      key={params.toString()}
+      locale={device.locale}
+      today={device.today}
+      start={startingChoice(params.get("stream"), params.get("event"), device.today)}
+      back={safeBackPath(params.get("back"))}
+    />
+  );
 }
 
-function FormFields({ locale, today }: { locale: string; today: string }) {
+function FormFields({
+  locale,
+  today,
+  start,
+  back,
+}: {
+  locale: string;
+  today: string;
+  start: { streamId: string; eventId: string };
+  back: string;
+}) {
   const router = useRouter();
   const { dispatch } = useEntries();
 
@@ -70,7 +121,8 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
   const [supplier, setSupplier] = useState("");
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [eventId, setEventId] = useState("");
+  const [eventId, setEventId] = useState(start.eventId);
+  const [streamId, setStreamId] = useState(start.streamId);
   const [notes, setNotes] = useState("");
   // Set by the first press of Save with a mistake in the form. From then on
   // the messages follow what is typed (and disappear as soon as it is fixed).
@@ -84,6 +136,8 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
 
   const category = DRAFT_CATEGORIES.find((c) => c.id === categoryId);
   const asksForEvent = category?.group === "event_venue";
+  const asksForStream = category?.group === "event_venue" || category?.group === "operating";
+  const isProduction = category?.group === "production";
   const cents = parseAmountToCents(amount);
 
   // What is wrong right now. Shown only after Save has been pressed.
@@ -123,14 +177,16 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
         supplier,
         amountCents: cents,
         categoryId: category.id,
-        // The store refuses an event on production and operating costs, so it
-        // is only sent for event & venue categories. "" means not assigned.
+        // The store refuses an event on production and operating costs, and a
+        // stream on production, so each is only sent when the category allows
+        // it (hidden fields keep their value but are not saved). "" means none.
         ...(asksForEvent && eventId !== "" ? { eventId } : {}),
+        ...(asksForStream && streamId !== "" ? { streamId } : {}),
         notes,
       },
     });
-    // replace, not push: Back from Home shouldn't reopen an empty form.
-    router.replace("/");
+    // replace, not push: Back afterwards shouldn't reopen an empty form.
+    router.replace(back);
   }
 
   return (
@@ -188,14 +244,9 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
           ref={categoryRef}
           id="expense-category"
           value={categoryId}
-          onChange={(e) => {
-            const next = DRAFT_CATEGORIES.find((c) => c.id === e.target.value);
-            setCategoryId(e.target.value);
-            // Leaving the event & venue group forgets the chosen event.
-            if (next?.group !== "event_venue") setEventId("");
-          }}
+          onChange={(e) => setCategoryId(e.target.value)}
           aria-invalid={shown.category ? true : undefined}
-          aria-describedby={describe(shown.category && "expense-category-error")}
+          aria-describedby={describe(isProduction && "expense-production-note", shown.category && "expense-category-error")}
           className={fieldClass + (shown.category ? badBorder : okBorder)}
         >
           <option value="">Choose a category</option>
@@ -209,6 +260,11 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
             </optgroup>
           ))}
         </select>
+        {isProduction && (
+          <p id="expense-production-note" className="text-base break-words">
+            {PRODUCTION_NOTE}
+          </p>
+        )}
         {shown.category && <p id="expense-category-error" className={errorClass}>{shown.category}</p>}
       </Field>
 
@@ -230,12 +286,34 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
         </Field>
       )}
 
+      {asksForStream && (
+        <Field id="expense-stream" label="Income stream (optional)">
+          <select
+            id="expense-stream"
+            value={streamId}
+            onChange={(e) => setStreamId(e.target.value)}
+            className={fieldClass + okBorder}
+          >
+            <option value="">No stream</option>
+            {INCOME_STREAMS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+
       <Field id="expense-notes" label="Notes (optional)">
         <textarea
           id="expense-notes"
           rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          // With the extra field the form is taller. On a small screen at large
+          // text, Chromium may then scroll only the caret into view, leaving the
+          // textarea half hidden. Scroll the whole box on screen when it gets focus.
+          onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest" })}
           className={fieldClass + okBorder + " min-h-24"}
         />
       </Field>
@@ -248,7 +326,7 @@ function FormFields({ locale, today }: { locale: string; today: string }) {
           Save
         </button>
         <Link
-          href="/"
+          href={back}
           className={cancelClass}
         >
           Cancel

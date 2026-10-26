@@ -45,12 +45,17 @@
 //       "Category"           a native <select> (see F5)
 //       "Event"              a native <select>, ONLY for event & venue
 //                            categories (see F6)
+//       "Income stream (optional)" a native <select>, ONLY for event & venue
+//                            and operating categories (see F11)
 //       "Notes (optional)"   a <textarea>
 //     then a submit <button> named exactly "Save", then a link named exactly
-//     "Cancel" whose href is "/". Nothing focusable comes before Date in
+//     "Cancel" whose href is "/" (or the safe ?back= path, F15). Nothing focusable comes before Date in
 //     <main>, so the first Tab from the top of the page lands on Date.
 //     The browser's own validation bubbles must not replace the messages in
 //     F4 (no `required`/`pattern` that blocks submit, or use `noValidate`).
+//     CHANGED (T1.13): the "Income stream (optional)" field comes after Event
+//     when Event shows, otherwise straight after Category; Cancel follows
+//     ?back= (F15).
 //
 // F3. Date. Defaults to todayOnDevice() in the device's zone (guide §6),
 //     worked out in the browser when the form OPENS (not when the app first
@@ -102,10 +107,18 @@
 //     zine workshop is gone). With no category, or a production or operating
 //     category, there is no Event field, and saving never sends an event for
 //     those (the store refuses it, guide §7).
+//     CHANGED (T1.13, lead's decision): T1.7's form forgot the chosen event
+//     when you left event & venue. Now a hidden Event (and a hidden Income
+//     stream) KEEPS its value while hidden and shows it again when the field
+//     comes back (F13). What is SAVED still follows the category: an event
+//     only for event & venue, a stream only for event & venue and operating.
+//     (No T1.7 test asserted the reset, so no assertion had to be removed;
+//     the two "switching" tests below still hold.)
 //
 // F7. Save adds exactly ONE expense (also when Save is double-clicked, or
 //     Enter is pressed in a field) through the store's "add-expense" action,
-//     then returns to Home ("/") with a client-side move, where "Today's
+//     then returns to Home ("/") with a client-side move (CHANGED (T1.13): or
+//     to the safe ?back= path, F15), where "Today's
 //     expenses: $X" (T1.6 D3) already includes it. Supplier and notes are
 //     stored trimmed. Cancel adds nothing and returns to Home. Opening the
 //     form again shows a fresh, empty form.
@@ -128,6 +141,64 @@
 //     - The date is taken when the form opens (F3).
 //
 // F10. No uncaught errors and no React hydration errors during any test.
+//
+// ─── Added for T1.13 (stream tag, pre-fill, safe back) ─────────────────────
+// Guide §7; DECISIONS.md "Linking costs to events and streams" and "The '+'
+// button". Lead's decisions, written out here so the tests can be exact.
+//
+// F11. Income stream. A native <select> with ONE visible <label> reading
+//     exactly "Income stream (optional)". Options, in order: "No stream"
+//     (value "", selected at the start), then the seven INCOME_STREAMS names
+//     in the guide's order: "Sales at events", "Online sales", "Wholesale",
+//     "Commissions", "Vendor shelf rental", "Social media",
+//     "Subscription income". No optgroups. It is in the accessibility tree
+//     only while an event & venue or operating category is chosen (not with
+//     no category, not for production). It never shows an error. Saving
+//     stores its stream (or none for "No stream").
+//     How the tests see it: expense rows don't show a stream yet (T1.16 will
+//     add stream totals), so the stream claims are proven through saves that
+//     succeed with no page error. The store refuses a stream on a production
+//     cost and an event on a non-event cost (entries.ts), so a form that sent
+//     a field the category doesn't allow throws in the page (F10).
+//
+// F12. Production note. While a production category is chosen, an element in
+//     <main> whose whole text is exactly
+//       "Production costs aren't linked to an event or stream."
+//     (plain ASCII apostrophe U+0027) is shown, and the Category field's
+//     aria-describedby includes it, so a screen reader hears why the fields
+//     went away. With no category, or any other category, the note is absent.
+//
+// F13. Hidden fields keep their value (lead's decision, replacing T1.7's
+//     reset). Event and Income stream remember what was chosen (by the
+//     artist or by pre-fill) while hidden, and show it again when a category
+//     that allows them is chosen. Only fields the chosen category allows are
+//     saved.
+//
+// F14. Pre-fill from the page address (T1.14's "+" button uses this):
+//     - ?event=<id> (an exact pretendEvents() id) pre-selects that event in
+//       the Event field (seen once an event & venue category is chosen) and
+//       makes the stream default to the event's usual stream:
+//         pretend-event-shelf     → Vendor shelf rental
+//         pretend-event-comic-con → Sales at events
+//     - ?stream=<id> (an exact INCOME_STREAMS id) pre-selects the stream. With
+//       both, ?stream wins for the stream field; the event still applies.
+//     - Unknown ids are ignored silently (no message, no aria-invalid, no
+//       page error). An unknown stream counts as "no stream given", so a known
+//       event still brings its usual stream (as in income-form I8).
+//     - Pre-fill never chooses a category: Category starts on
+//       "Choose a category" (the artist decides which kind of cost it is).
+//     - It works on a direct load and after a client-side move to the form.
+//
+// F15. Where Save and Cancel go: ?back=<path> through safeBackPath (the T1.12
+//     rule, capped at 200 characters in T1.12b), otherwise Home ("/"). Save
+//     moves there with a client-side replace, so the browser's Back
+//     afterwards doesn't reopen the form; Cancel is a link to the same place.
+//     Requests to any other host are blocked in these tests.
+//
+// F16. The old rules still hold with the new fields: errors only after Save,
+//     focus on the first bad field, a double tap saves once, and 320×568 at
+//     200% text works in all three shapes (no category; event & venue with
+//     Event and Income stream; production with the note).
 //
 // ═══ HAND-WORKED VALUES ═════════════════════════════════════════════════════
 //
@@ -165,6 +236,7 @@ const LABEL_AMOUNT = "Amount";
 const LABEL_CATEGORY = "Category";
 const LABEL_EVENT = "Event";
 const LABEL_NOTES = "Notes (optional)";
+const LABEL_STREAM = "Income stream (optional)"; // T1.13, F11
 
 const ERROR_AMOUNT_EMPTY = "Enter an amount.";
 const ERROR_AMOUNT_INVALID =
@@ -297,6 +369,9 @@ function categoryField(page: Page): Locator {
 }
 function eventField(page: Page): Locator {
   return main(page).getByRole("combobox", { name: LABEL_EVENT, exact: true });
+}
+function streamField(page: Page): Locator {
+  return main(page).getByRole("combobox", { name: LABEL_STREAM, exact: true });
 }
 function notesField(page: Page): Locator {
   return main(page).getByLabel(LABEL_NOTES, { exact: true });
@@ -806,7 +881,8 @@ test.describe("the fields and their labels", () => {
     ]);
   });
 
-  test("with an event & venue category, Tab goes Category, then Event, then Notes", async ({ page }) => {
+  // CHANGED (T1.13): the Income stream field now comes between Event and Notes (F2, F11).
+  test("with an event & venue category, Tab goes Category, then Event, then Income stream, then Notes", async ({ page }) => {
     await openForm(page);
     await fillForm(page, { category: "Parking" });
     await dateField(page).focus();
@@ -816,6 +892,7 @@ test.describe("the fields and their labels", () => {
       LABEL_AMOUNT,
       LABEL_CATEGORY,
       LABEL_EVENT,
+      LABEL_STREAM,
       LABEL_NOTES,
       "Save",
       "Cancel",
@@ -1344,6 +1421,7 @@ test.describe("on a phone, the form is comfortable to use", () => {
       [LABEL_AMOUNT, amountField(page)],
       [LABEL_CATEGORY, categoryField(page)],
       [LABEL_EVENT, eventField(page)],
+      [LABEL_STREAM, streamField(page)], // T1.13
       [LABEL_NOTES, notesField(page)],
       ["Save", saveButton(page)],
       ["Cancel", cancelLink(page)],
@@ -1368,7 +1446,8 @@ test.describe("on a phone, the form is comfortable to use", () => {
         px: parseFloat(getComputedStyle(el).fontSize),
       })),
     );
-    expect(sizes.length, "fields found").toBe(6);
+    // CHANGED (T1.13): 7 with Parking (Date, Supplier, Amount, Category, Event, Income stream, Notes).
+    expect(sizes.length, "fields found").toBe(7);
     const tooSmall = sizes.filter((s) => s.px < MIN_INPUT_FONT_PX).map((s) => `${s.label}: ${s.px}px`);
     expect(tooSmall).toEqual([]);
   });
@@ -1567,4 +1646,595 @@ test.describe("T1.13a: the Amount's \"Reads as\" is not a live region", () => {
     await fillForm(page, { amount: "12.5" });
     await expect(amountField(page)).toHaveAccessibleDescription(/(^|\s)Reads as \$12\.50(\s|$)/);
   });
+});
+
+// ═══ T1.13. Income stream, production note, pre-fill, safe back (F11–F16) ══
+
+const NO_STREAM = "No stream";
+// INCOME_STREAMS (src/lib/pretend-data.ts), written out by hand, in order.
+const STREAM_NAMES = [
+  "Sales at events",
+  "Online sales",
+  "Wholesale",
+  "Commissions",
+  "Vendor shelf rental",
+  "Social media",
+  "Subscription income",
+] as const;
+const PRODUCTION_NOTE = "Production costs aren't linked to an event or stream.";
+const COMIC_CON = "Pretend comic convention";
+const MARKET = "Pretend weekend market (today)";
+const SHELF = "Pretend gallery shelf";
+
+/** The text of a <select>'s selected option. */
+function selectedOptionText(select: Locator): Promise<string | null> {
+  return select.evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent?.trim() ?? null);
+}
+
+/** Opens the form with a query string (full load) and waits until it's ready. */
+async function openFormWith(page: Page, query: string): Promise<void> {
+  await open(page, FORM_PATH + query);
+  await waitForForm(page);
+}
+
+/** Matches a full URL on THIS server (the page's current origin) whose path is exactly `path`. */
+function urlOnThisServer(page: Page, path: string): RegExp {
+  const origin = new URL(page.url()).origin;
+  return new RegExp(`^${escapeRegExp(origin)}${escapeRegExp(path)}$`);
+}
+
+/** A client-side move (no reload) through Next.js's router, as goToTransactions does. */
+async function goClientSide(page: Page, href: string): Promise<void> {
+  const origin = new URL(page.url()).origin;
+  await page.evaluate((target) => {
+    (window as unknown as Record<string, unknown>).__t113SameDocument = true;
+    (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push(target);
+  }, href);
+  const wanted = new URL(href, origin);
+  const decoded = (u: URL) => ({ origin: u.origin, path: u.pathname, query: Array.from(u.searchParams.entries()) });
+  await expect.poll(() => decoded(new URL(page.url())), { message: `address after moving to ${href}` }).toEqual(
+    decoded(wanted),
+  );
+  expect(
+    await page.evaluate(() => (window as unknown as Record<string, unknown>).__t113SameDocument),
+    `the move to ${href} didn't reload the page`,
+  ).toBe(true);
+}
+
+/** Checks no error message and no aria-invalid is anywhere in <main>. */
+async function expectNoFormErrors(page: Page): Promise<void> {
+  for (const message of [ERROR_AMOUNT_EMPTY, ERROR_AMOUNT_INVALID, ERROR_CATEGORY, ERROR_DATE]) {
+    await expect(exactText(page, message)).toHaveCount(0);
+  }
+  await expect(main(page).locator('[aria-invalid="true"]')).toHaveCount(0);
+}
+
+// ─── F11. The Income stream field ───────────────────────────────────────────
+
+test.describe("T1.13: the Income stream field", () => {
+  test("there is no Income stream field before a category is chosen", async ({ page }) => {
+    await openForm(page);
+    await expect(streamField(page)).toHaveCount(0);
+  });
+
+  for (const category of [...EVENT_VENUE, ...OPERATING]) {
+    test(`choosing "${category}" shows the Income stream field`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { category });
+      await expect(streamField(page)).toBeVisible();
+    });
+  }
+
+  for (const category of PRODUCTION) {
+    test(`choosing "${category}" (production) shows no Income stream field`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { category });
+      await expect(categoryField(page)).toHaveValue(/.+/);
+      await expect(streamField(page)).toHaveCount(0);
+    });
+  }
+
+  test('the Income stream field has exactly one visible <label> reading "Income stream (optional)"', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Software" });
+    await expect(streamField(page)).toHaveCount(1);
+    const facts = await streamField(page).evaluate((el) => {
+      const labels = Array.from((el as HTMLSelectElement).labels ?? []);
+      labels.forEach((l) => l.setAttribute("data-stream-label", "yes"));
+      return { tag: el.tagName, labels: labels.map((l) => l.innerText.replace(/\s+/g, " ").trim()) };
+    });
+    expect(facts).toEqual({ tag: "SELECT", labels: [LABEL_STREAM] });
+    await expect(main(page).locator('label[data-stream-label="yes"]')).toBeVisible();
+  });
+
+  test('the Income stream field offers "No stream", then the seven streams in the guide\'s order, with no groups', async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Software" });
+    const facts = await streamField(page).evaluate((el) => ({
+      options: Array.from((el as HTMLSelectElement).options).map((o) => (o.textContent ?? "").trim()),
+      optgroups: el.querySelectorAll("optgroup").length,
+    }));
+    expect(facts).toEqual({ options: [NO_STREAM, ...STREAM_NAMES], optgroups: 0 });
+  });
+
+  test('the Income stream field starts on "No stream" (value "")', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Stall or table fees" });
+    await expect(streamField(page)).toHaveValue("");
+    expect(await selectedOptionText(streamField(page))).toBe(NO_STREAM);
+  });
+
+  test("with an operating category, Tab goes Category, then Income stream, then Notes", async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Software" });
+    await dateField(page).focus();
+    expect(await tabOrderInMain(page)).toEqual([
+      LABEL_DATE,
+      LABEL_SUPPLIER,
+      LABEL_AMOUNT,
+      LABEL_CATEGORY,
+      LABEL_STREAM,
+      LABEL_NOTES,
+      "Save",
+      "Cancel",
+    ]);
+  });
+
+  test("with a production category, Tab goes Category, then Notes (nothing in between)", async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Printing" });
+    await dateField(page).focus();
+    expect(await tabOrderInMain(page)).toEqual([
+      LABEL_DATE,
+      LABEL_SUPPLIER,
+      LABEL_AMOUNT,
+      LABEL_CATEGORY,
+      LABEL_NOTES,
+      "Save",
+      "Cancel",
+    ]);
+  });
+
+  test("an event & venue cost with an event and a stream saves (no page error) and is counted on Home", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "60", category: "Stall or table fees", event: COMIC_CON });
+    await streamField(page).selectOption({ label: "Sales at events" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $60.00")).toBeVisible();
+  });
+
+  for (const stream of STREAM_NAMES) {
+    test(`an operating cost tagged "${stream}" saves (no page error) and is counted on Home`, async ({
+      page,
+    }, testInfo) => {
+      await openForm(page);
+      await fillForm(page, { amount: "9.99", category: "Software" });
+      await streamField(page).selectOption({ label: stream });
+      await saveAndExpectHome(page, touch(testInfo));
+      await expect(exactText(page, "Today's expenses: $9.99")).toBeVisible();
+    });
+  }
+
+  test('an operating cost left on "No stream" saves and is listed on Transactions as Software, $9.99', async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "9.99", category: "Software" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await goToTransactions(page);
+    await expect(rows(page)).toHaveCount(1);
+    const text = await rowText(rows(page).first());
+    expect(text).toMatch(/\bSoftware\b/);
+    expect(amountsIn(text)).toEqual(["$9.99"]);
+  });
+});
+
+// ─── F12. The production note ───────────────────────────────────────────────
+
+test.describe("T1.13: the production note", () => {
+  for (const category of PRODUCTION) {
+    test(`choosing "${category}" shows exactly "${PRODUCTION_NOTE}"`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { category });
+      await expect(exactText(page, PRODUCTION_NOTE)).toHaveCount(1);
+      await expect(exactText(page, PRODUCTION_NOTE)).toBeVisible();
+    });
+  }
+
+  test("the production note is part of the Category field's description", async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Printing" });
+    expect(await describedByTexts(categoryField(page))).toContain(PRODUCTION_NOTE);
+  });
+
+  test("with no category, there is no production note", async ({ page }) => {
+    await openForm(page);
+    await expect(exactText(page, PRODUCTION_NOTE)).toHaveCount(0);
+  });
+
+  for (const category of [...EVENT_VENUE, ...OPERATING]) {
+    test(`choosing "${category}" shows no production note`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { category });
+      await expect(categoryField(page)).toHaveValue(/.+/);
+      await expect(exactText(page, PRODUCTION_NOTE)).toHaveCount(0);
+    });
+  }
+
+  test("switching from production to an event & venue category removes the note and shows Event and Income stream", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Packaging" });
+    await expect(exactText(page, PRODUCTION_NOTE)).toBeVisible();
+    await fillForm(page, { category: "Flights" });
+    await expect(exactText(page, PRODUCTION_NOTE)).toHaveCount(0);
+    await expect(eventField(page)).toBeVisible();
+    await expect(streamField(page)).toBeVisible();
+  });
+});
+
+// ─── F13. Hidden fields keep their value ────────────────────────────────────
+
+test.describe("T1.13: hidden Event and Income stream keep their value", () => {
+  test("pre-filled convention: Stall or table fees, then a production category, then Meals shows the convention and Sales at events again", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-comic-con");
+    await fillForm(page, { category: "Stall or table fees" });
+    await expect.poll(() => selectedOptionText(eventField(page))).toBe(COMIC_CON);
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Sales at events");
+    await fillForm(page, { category: "Printing" });
+    await expect(eventField(page)).toHaveCount(0);
+    await expect(streamField(page)).toHaveCount(0);
+    await expect(exactText(page, PRODUCTION_NOTE)).toBeVisible();
+    await fillForm(page, { category: "Meals" });
+    expect(await selectedOptionText(eventField(page))).toBe(COMIC_CON);
+    expect(await selectedOptionText(streamField(page))).toBe("Sales at events");
+  });
+
+  test("chosen by the artist: Accommodation with the market and Wholesale, then Packaging, then Parking shows both again", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Accommodation", event: MARKET });
+    await streamField(page).selectOption({ label: "Wholesale" });
+    await fillForm(page, { category: "Packaging" });
+    await expect(eventField(page)).toHaveCount(0);
+    await fillForm(page, { category: "Parking" });
+    expect(await selectedOptionText(eventField(page))).toBe(MARKET);
+    expect(await selectedOptionText(streamField(page))).toBe("Wholesale");
+  });
+
+  test("an operating category hides only Event: the stream stays shown, and back on Flights the event is there again", async ({
+    page,
+  }) => {
+    await openForm(page);
+    await fillForm(page, { category: "Accommodation", event: MARKET });
+    await streamField(page).selectOption({ label: "Wholesale" });
+    await fillForm(page, { category: "Software" });
+    await expect(eventField(page)).toHaveCount(0);
+    expect(await selectedOptionText(streamField(page))).toBe("Wholesale");
+    await fillForm(page, { category: "Flights" });
+    expect(await selectedOptionText(eventField(page))).toBe(MARKET);
+  });
+
+  test("an event and stream hidden by a production category are not saved (no page error)", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "12", category: "Meals", event: MARKET });
+    await streamField(page).selectOption({ label: "Wholesale" });
+    await fillForm(page, { category: "Art materials" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $12.00")).toBeVisible();
+  });
+
+  test("an event hidden by an operating category is not saved (no page error), while the stream is", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "8", category: "Meals", event: MARKET });
+    await streamField(page).selectOption({ label: "Online sales" });
+    await fillForm(page, { category: "Marketing" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $8.00")).toBeVisible();
+  });
+});
+
+// ─── F14. Pre-fill from the page address ────────────────────────────────────
+
+test.describe("T1.13: pre-fill from the page address", () => {
+  test("pre-fill never chooses a category: ?event=pretend-event-shelf&stream=online-sales starts on \"Choose a category\"", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-shelf&stream=online-sales");
+    await expect(categoryField(page)).toHaveValue("");
+    await expect(eventField(page)).toHaveCount(0);
+    await expect(streamField(page)).toHaveCount(0);
+  });
+
+  test("?event=pretend-event-shelf, then Vendor shelf rent: Event is the gallery shelf and the stream is Vendor shelf rental", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-shelf");
+    await fillForm(page, { category: "Vendor shelf rent" });
+    await expect.poll(() => selectedOptionText(eventField(page))).toBe(SHELF);
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Vendor shelf rental");
+  });
+
+  test("?event=pretend-event-comic-con, then Stall or table fees: Event is the convention and the stream is Sales at events", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-comic-con");
+    await fillForm(page, { category: "Stall or table fees" });
+    await expect.poll(() => selectedOptionText(eventField(page))).toBe(COMIC_CON);
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Sales at events");
+  });
+
+  test("?event=pretend-event-comic-con, then an operating category: no Event, the stream is Sales at events, and it saves without the event", async ({
+    page,
+  }, testInfo) => {
+    await openFormWith(page, "?event=pretend-event-comic-con");
+    await fillForm(page, { amount: "15", category: "Payment fees" });
+    await expect(eventField(page)).toHaveCount(0);
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Sales at events");
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $15.00")).toBeVisible();
+  });
+
+  test("?stream=online-sales, then Marketing: the stream is Online sales", async ({ page }) => {
+    await openFormWith(page, "?stream=online-sales");
+    await fillForm(page, { category: "Marketing" });
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Online sales");
+  });
+
+  test("?event=pretend-event-comic-con&stream=online-sales, then Stall or table fees: the convention, and the stream from ?stream (Online sales)", async ({
+    page,
+  }) => {
+    await openFormWith(page, "?event=pretend-event-comic-con&stream=online-sales");
+    await fillForm(page, { category: "Stall or table fees" });
+    await expect.poll(() => selectedOptionText(eventField(page))).toBe(COMIC_CON);
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Online sales");
+  });
+
+  test("pre-filled event and stream, then a production category: the note shows and it saves without either (no page error)", async ({
+    page,
+  }, testInfo) => {
+    await openFormWith(page, "?event=pretend-event-comic-con&stream=online-sales");
+    await fillForm(page, { amount: "40", category: "Printing" });
+    await expect(exactText(page, PRODUCTION_NOTE)).toBeVisible();
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $40.00")).toBeVisible();
+  });
+
+  test("pre-filled event and stream save with an event & venue cost (no page error)", async ({ page }, testInfo) => {
+    await openFormWith(page, "?event=pretend-event-shelf");
+    await fillForm(page, { amount: "120", category: "Vendor shelf rent" });
+    await expect.poll(() => selectedOptionText(eventField(page))).toBe(SHELF);
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $120.00")).toBeVisible();
+  });
+
+  test("pre-fill works after a client-side move to the form too (?stream=wholesale)", async ({ page }) => {
+    await open(page, "/");
+    await waitForHydration(page);
+    await goClientSide(page, `${FORM_PATH}?stream=wholesale`);
+    await waitForForm(page);
+    await fillForm(page, { category: "Website" });
+    await expect.poll(() => selectedOptionText(streamField(page))).toBe("Wholesale");
+  });
+
+  const UNKNOWN: readonly { query: string; why: string; event: string; stream: string }[] = [
+    { query: "?event=nope", why: "an unknown event", event: NOT_ASSIGNED, stream: NO_STREAM },
+    { query: "?stream=nope", why: "an unknown stream", event: NOT_ASSIGNED, stream: NO_STREAM },
+    { query: "?stream=Online%20sales", why: "a stream's name, not its id", event: NOT_ASSIGNED, stream: NO_STREAM },
+    { query: "?event=nope&stream=wholesale", why: "an unknown event with a known stream", event: NOT_ASSIGNED, stream: "Wholesale" },
+    { query: "?stream=nope&event=pretend-event-shelf", why: "an unknown stream counts as none, so the event brings its usual stream", event: SHELF, stream: "Vendor shelf rental" },
+  ];
+  for (const u of UNKNOWN) {
+    test(`${u.query} (${u.why}) is handled silently: Event "${u.event}", stream "${u.stream}", no error`, async ({
+      page,
+    }) => {
+      await openFormWith(page, u.query);
+      await fillForm(page, { category: "Parking" });
+      await expect.poll(() => selectedOptionText(eventField(page))).toBe(u.event);
+      await expect.poll(() => selectedOptionText(streamField(page))).toBe(u.stream);
+      await expectNoFormErrors(page);
+    });
+  }
+});
+
+// ─── F15. Where Save and Cancel go ──────────────────────────────────────────
+
+test.describe("T1.13: the safe back address", () => {
+  test.beforeEach(async ({ page }) => {
+    // Never let a wrong redirect reach another host.
+    await page.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, (route) => route.abort());
+  });
+
+  const OVER_LIMIT = "/" + "a".repeat(200); // 1 + 200 = 201 characters
+
+  test('with no back, Cancel is a link to "/" and Save goes Home', async ({ page }, testInfo) => {
+    await openForm(page);
+    await expect(cancelLink(page)).toHaveAttribute("href", "/");
+    await fillForm(page, { amount: "5", category: "Printing" });
+    await saveAndExpectHome(page, touch(testInfo));
+  });
+
+  test("with back=/events, Save goes to Events and the expense is kept", async ({ page }, testInfo) => {
+    await open(page, "/");
+    await waitForHydration(page);
+    await goClientSide(page, `${FORM_PATH}?back=${encodeURIComponent("/events")}`);
+    await waitForForm(page);
+    await fillForm(page, { amount: "5", category: "Printing" });
+    const target = urlOnThisServer(page, "/events");
+    await press(saveButton(page), touch(testInfo));
+    await expect(page).toHaveURL(target);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Events");
+    await goToTransactions(page);
+    await expect(rows(page)).toHaveCount(1);
+  });
+
+  test('with back=/events, Cancel is a link to "/events"', async ({ page }) => {
+    await openFormWith(page, `?back=${encodeURIComponent("/events")}`);
+    await expect(cancelLink(page)).toHaveAttribute("href", "/events");
+  });
+
+  test("with back=/events, Cancel goes to Events and adds nothing", async ({ page }, testInfo) => {
+    await openFormWith(page, `?back=${encodeURIComponent("/events")}`);
+    await fillForm(page, { amount: "5", category: "Printing" });
+    await press(cancelLink(page), touch(testInfo));
+    await expect(page).toHaveURL(urlOnThisServer(page, "/events"));
+    await goToTransactions(page);
+    await expect(exactText(page, "No entries yet.")).toBeVisible();
+  });
+
+  for (const [value, why] of [
+    ["//evil.example", "another site"],
+    [OVER_LIMIT, "201 characters, over the cap"],
+  ] as const) {
+    test(`with back set to ${why}, Save goes to Home on this server`, async ({ page }, testInfo) => {
+      await openFormWith(page, `?back=${encodeURIComponent(value)}`);
+      await fillForm(page, { amount: "5", category: "Printing" });
+      const home = urlOnThisServer(page, "/");
+      await press(saveButton(page), touch(testInfo));
+      await expect(page).toHaveURL(home);
+      await expect(exactText(page, "Today's expenses: $5.00")).toBeVisible();
+    });
+
+    test(`with back set to ${why}, Cancel is a link to "/"`, async ({ page }) => {
+      await openFormWith(page, `?back=${encodeURIComponent(value)}`);
+      await expect(cancelLink(page)).toHaveAttribute("href", "/");
+    });
+  }
+
+  test("Save replaces the form in the history: Back afterwards goes to the page before the form, with the expense kept", async ({
+    page,
+  }, testInfo) => {
+    await open(page, "/");
+    await waitForHydration(page);
+    await goClientSide(page, `${FORM_PATH}?back=${encodeURIComponent("/events")}`);
+    await waitForForm(page);
+    await fillForm(page, { amount: "5", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(page).toHaveURL(urlOnThisServer(page, "/events"));
+    await page.goBack();
+    await expect(page).toHaveURL(urlOnThisServer(page, "/"));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+    await expect(exactText(page, "Today's expenses: $5.00")).toBeVisible();
+  });
+});
+
+// ─── F16. The old rules still hold with the new fields ──────────────────────
+
+test.describe("T1.13: the old rules with the new fields", () => {
+  test("a pre-filled form shows no errors before Save, and Save with no category focuses Category", async ({
+    page,
+  }, testInfo) => {
+    await openFormWith(page, "?event=pretend-event-comic-con&stream=online-sales");
+    await fillForm(page, { amount: "5" });
+    await expectNoFormErrors(page);
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_CATEGORY)).toBeVisible();
+    await expect(categoryField(page)).toBeFocused();
+  });
+
+  test("a blocked Save keeps the chosen stream, and focus goes to Amount (first bad field)", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10.505", category: "Software" });
+    await streamField(page).selectOption({ label: "Commissions" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_INVALID)).toBeVisible();
+    await expect(amountField(page)).toBeFocused();
+    expect(await selectedOptionText(streamField(page))).toBe("Commissions");
+    await expect(streamField(page)).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("double-clicking Save with an event and a stream adds exactly one expense", async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "23.50", category: "Meals", event: MARKET });
+    await streamField(page).selectOption({ label: "Sales at events" });
+    await saveButton(page).dblclick();
+    await expect(page).toHaveURL(urlWithPath("/"));
+    await expect(exactText(page, "Today's expenses: $23.50")).toBeVisible();
+  });
+
+  const NARROW = { width: 320, height: 568 } as const;
+  const SHAPES: readonly { name: string; category: string | null; check: (page: Page) => Promise<void> }[] = [
+    { name: "no category", category: null, check: async (page) => expect(streamField(page)).toHaveCount(0) },
+    {
+      name: "event & venue with Event and Income stream",
+      category: "Accommodation",
+      check: async (page) => {
+        await expect(eventField(page)).toBeVisible();
+        await expect(streamField(page)).toBeVisible();
+      },
+    },
+    {
+      name: "production with the note",
+      category: "Printing",
+      check: async (page) => expect(exactText(page, PRODUCTION_NOTE)).toBeVisible(),
+    },
+  ];
+
+  for (const shape of SHAPES) {
+    /** Opens the form at 320×568 and 200% text in this shape. */
+    const openShape = async (page: Page) => {
+      await page.setViewportSize(NARROW);
+      await openForm(page);
+      await setTextSize(page, 200, "32px");
+      if (shape.category !== null) await fillForm(page, { category: shape.category });
+      await shape.check(page);
+    };
+
+    test(`on a phone at 320×568 and 200% text (${shape.name}), the form doesn't scroll sideways`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await openShape(page);
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(clientWidth).toBe(NARROW.width);
+      expect(scrollWidth, "scrollable width must not exceed the page width").toBeLessThanOrEqual(clientWidth);
+    });
+
+    test(`on a phone at 320×568 and 200% text (${shape.name}), every label, field, note and button stays inside 0–320 px`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await openShape(page);
+      const outside = await main(page).evaluate((m, width) => {
+        const bad: string[] = [];
+        for (const el of Array.from(m.querySelectorAll("label, input, select, textarea, button, a, p, h1"))) {
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 && r.height === 0) continue;
+          if (r.left < -1 || r.right > width + 1) {
+            bad.push(`${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 25)}": ${r.left.toFixed(1)}–${r.right.toFixed(1)}`);
+          }
+        }
+        return bad;
+      }, NARROW.width);
+      expect(outside).toEqual([]);
+    });
+
+    test(`on a phone at 320×568 and 200% text (${shape.name}), Tab never leaves a focused element hidden or under the nav`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "phone", "phone-layout claim");
+      await openShape(page);
+      await startTabbingFromTheTop(page);
+      await expectTabKeepsMainFocusClearOfNav(page);
+    });
+  }
 });

@@ -498,7 +498,7 @@ Evidence:
     - if a later card adds a status line to the expense form, update the "no live region" test rather than avoid the feature.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1322 passed, 0 failed**. After the `LOADING_FORM` tidy-up, which leaves the text on screen unchanged, `npm run check` exited 0 again.
 
-### T1.13 — Expense form: stream tag, pre-fill and safe back   Status: todo
+### T1.13 — Expense form: stream tag, pre-fill and safe back   Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend the expense-form spec)   Security review: no (reuses `safeBackPath`, already reviewed)
 Guide: §7; DECISIONS.md "Linking costs to events and streams", "The '+' button".
 Outcome:
@@ -513,6 +513,29 @@ Outcome:
 Out of scope: the "+" button (T1.14); editing existing expenses.
 Done when: the Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
+- **Lead decisions (2026-10-26):**
+  - The production note reads "Production costs aren't linked to an event or stream." (the owner may reword it).
+  - Pre-fill never chooses a category.
+  - An unknown `?stream=` counts as not given.
+  - Picking an event by hand doesn't change the stream.
+  - A focused field must be fully on screen (F8 kept strict), so Notes scrolls into view on focus.
+  - **Cancel** is a link to the same place as Save. Unlike Save, it adds a history step, which matches the income form and is intended.
+- **Tests first** (test engineer): `e2e/expense-form.spec.ts` F2/F6/F7 changed; F11–F16 added (about 80 tests per project).
+  - Red run: 126 failures for the intended reasons.
+  - Proof: 1509 passed with a scratch build. 3 planted bugs were caught: the old event reset, a stream sent on production, Cancel always going to "/".
+  - The usage limit interrupted the proof. The lead confirmed the feature files were restored before building.
+- **Built** (frontend engineer):
+  - `ExpenseForm.tsx`: the Income stream select, the production note linked from Category, pre-fill, the key on the full address, `safeBackPath`, Notes scrolling into view on focus;
+  - `src/app/expenses/new/page.tsx`: Suspense.
+  - The lead viewed the phone screenshot: Stall or table fees with the convention and Sales at events pre-filled.
+- **Code review: ACCEPT.** No hidden value can reach a save; the reviewer traced four routes, and the store refuses a leak anyway.
+  - Optional, taken by the lead: a simpler category `onChange`, and the header now says "(T1.7, T1.13)".
+  - Logged:
+    - **for the T1.14 test round:** a test that picking an event by hand leaves the stream alone;
+    - one shared pre-fill helper for both forms (later);
+    - scroll Notes only on keyboard focus, to avoid a small double scroll on tap (check at T1.9);
+    - **for T1.9 with a screen reader:** fields vanish without an announcement when switching to a production category.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1509 passed, 0 failed**. After the two tidy-ups, `npm run check` exited 0 again.
 
 ### T1.14 — The "+" button: Income or Expense                Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
