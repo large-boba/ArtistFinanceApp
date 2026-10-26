@@ -463,14 +463,41 @@ Evidence:
     - for T1.9: a screen reader may read the payment error twice (it's linked from the group and from each radio).
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1295 passed, 0 failed**.
 
-### T1.13 — Expense form: stream tag and pre-fill             Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend expense-form spec)   Security review: no
-Guide: §7; DECISIONS.md "Linking costs to events and streams".
+### T1.13a — Shared form parts                              Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright; small additions)   Security review: no
+Guide: §6 (show the interpreted amount). Source: the T1.12 code review (finding 5) and the T1.7/T1.12 live-region findings.
 Outcome:
-- An optional **Income stream** field for event & venue and operating categories. It's hidden for production costs, with a one-line note: "Production costs aren't linked to an event or stream."
-- Pre-fill of the event or stream from the page address.
-- Saving returns to where you came from.
-Done when: the Playwright tests pass; `npm run check` exits 0.
+- **One shared module** (e.g. `src/components/form-parts.tsx`) holding what the expense and income forms both use:
+  - the field, label and error class strings;
+  - `Field`;
+  - the `describe` helper;
+  - the amount error texts;
+  - the Save and Cancel styles;
+  - the loading message;
+  - the payment-method labels, also used by the entries list.
+- Both forms use the shared module. Their look and behaviour don't change.
+- **Lead decision (live regions):**
+  - **"Reads as $X" lines stop being live regions** in both forms. Each stays linked from its field (`aria-describedby`), so a screen reader reads it when the field is focused. This ends the keystroke-by-keystroke chatter and the stale reading when an amount turns invalid (T1.7 and T1.12 reviews).
+  - The income form's **"Total $X" stays a polite live region**.
+- **Test added from the T1.12b review:** switching between two one-amount streams keeps errors showing.
+Out of scope: new fields or behaviour (T1.13).
+Done when: all existing tests still pass, plus the new ones; `npm run check` exits 0.
+Evidence:
+
+### T1.13 — Expense form: stream tag, pre-fill and safe back   Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright; extend the expense-form spec)   Security review: no (reuses `safeBackPath`, already reviewed)
+Guide: §7; DECISIONS.md "Linking costs to events and streams", "The '+' button".
+Outcome:
+- **An optional "Income stream" field** ("No stream" plus the 7 streams). It shows for event & venue and operating categories only.
+- **For production categories**, the Event and Income stream fields are hidden and a one-line note says: "Production costs aren't linked to an event or stream."
+- **Pre-fill from the page address:**
+  - `?event=<id>` picks that event (used when the category is event & venue) and makes the stream default to the event's usual stream;
+  - `?stream=<id>` picks the stream;
+  - unknown ids are ignored.
+- **Lead decision:** hidden fields keep their value while hidden and come back when shown again, so a pre-filled event isn't lost while the artist browses categories. Only fields allowed for the chosen category are saved. This changes the T1.7 rule "leaving event & venue resets the Event choice".
+- **After Save or Cancel**, go to the safe `?back=` (`safeBackPath`), otherwise Home, using a replace.
+Out of scope: the "+" button (T1.14); editing existing expenses.
+Done when: the Playwright tests pass at phone and desktop size; `npm run check` exits 0.
 Evidence:
 
 ### T1.14 — The "+" button: Income or Expense                Status: todo
