@@ -383,17 +383,26 @@ Evidence:
   - Done: T1.10's note that "the Reports page wording goes when T1.11 removes it".
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 787/787, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **884 passed, 0 failed** (308 by-project skips).
 
-### T1.12 — Income form                                     Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §10, §6; DECISIONS.md "Event takings".
-Outcome: `/income/new`, built in the same style as the expense form:
-- date and stream fields;
-- for **Sales at events**: event, **Cash** and **Card** amounts (both required, 0 allowed) and a live total;
-- for other streams: one amount and a payment method;
-- notes.
-
-It reads pre-fill values from the page address (event, stream). Saving adds the rows and goes back to where you came from.
-Done when: the Playwright tests pass (valid saves for both shapes, rejected amounts, pre-fill, labels and keyboard); `npm run check` exits 0.
+### T1.12 — Income form                                     Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (client-only pretend data). The `back` address is checked as an internal path; see below.
+Guide: §10 (streams, cash basis), §6 (native date picker, show the interpreted amount); DECISIONS.md "Event takings", "The '+' button".
+Outcome: a new page `/income/new` ("Add income"), in the same style as the expense form: labels, 16px fields, 44px targets, errors only after Save, focus on the first bad field, and "Reads as $X" feedback.
+- **Date** is the native picker, defaulting to today on the device.
+- **Stream** is required and has no default: one of the 7 streams.
+- **When the stream is Sales at events** (owner: always split cash and card):
+  - Event (optional, "Not assigned yet");
+  - **Cash** and **Card** amounts, both required, $0 allowed;
+  - a live "Total $X".
+  - Saving uses the takings action, so both rows are always saved.
+- **Any other stream:** one Amount, plus a required **Payment method** (Cash, Card, Online, Bank transfer, Other; no default). For **Vendor shelf rental** only, an optional Event as well.
+- **Notes** are optional.
+- **Pre-fill from the page address** (T1.14 uses this):
+  - `?stream=<id>` picks the stream;
+  - `?event=<id>` picks the event and, when no stream is given, the event's usual stream.
+  - An unknown id is ignored.
+- **After Save**, go back to `?back=<path>` if it's a safe internal path: it starts with a single "/", has no "//", "\\" or scheme, and is made only of letters, digits, "-" and "/". Otherwise go back to Home. Use a replace, so Back doesn't reopen the form. A double tap saves once.
+Out of scope: the "+" button (T1.14), event and stream pages (T1.15/T1.16), editing existing income.
+Done when: the Playwright tests pass at phone and desktop size (valid saves for both shapes, rejected amounts with clear messages, pre-fill, the safe `back`, labels and keyboard, 320px at 200% text); `npm run check` exits 0.
 Evidence:
 
 ### T1.13 — Expense form: stream tag and pre-fill             Status: todo
