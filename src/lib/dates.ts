@@ -115,6 +115,25 @@ export function formatDateForDisplay(iso: string, locale: string): string {
   }).format(instant);
 }
 
+/**
+ * The name of a stored date's month in the person's language, e.g.
+ * "2026-07-01" is "July 2026" for "en-AU" and "Juli 2026" for "de-DE".
+ * Like formatDateForDisplay it builds the moment from the year and month
+ * numbers and formats in UTC, so the phone's time zone can't shift the month.
+ * Throws RangeError when `iso` isn't a real "YYYY-MM-DD" date.
+ */
+export function formatMonthForDisplay(iso: string, locale: string): string {
+  const parts = splitIsoDate(iso);
+  if (parts === null) throw new RangeError("formatMonthForDisplay needs a real YYYY-MM-DD date");
+
+  // The 15th is nowhere near a month edge; noon UTC keeps it clear of day shifts.
+  const instant = new Date(0);
+  instant.setUTCFullYear(parts.year, parts.month - 1, 15);
+  instant.setUTCHours(12, 0, 0, 0);
+
+  return new Intl.DateTimeFormat(locale, { timeZone: "UTC", month: "long", year: "numeric" }).format(instant);
+}
+
 // ─── Adding days to a date (T1.10) ───────────────────────────────────────────
 //
 // addDays works only with the year, month and day numbers. It never makes a
@@ -188,4 +207,26 @@ export function addDays(iso: string, days: number): string {
   const { year, month, day } = dateOfDayNumber(target);
   const pad = (n: number, width: number) => String(n).padStart(width, "0");
   return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
+}
+
+// ─── The first and last day of a month (T1.18) ───────────────────────────────
+
+/**
+ * The first and last day of the calendar month that `today` falls in, e.g.
+ * monthRange("2026-06-30") is { from: "2026-06-01", to: "2026-06-30" } and
+ * monthRange("2028-02-10") ends on "2028-02-29" (a leap year). Home passes
+ * both straight to rangeTotals, which includes both ends.
+ * Like addDays, it only works with the year and month numbers: no Date, no
+ * clock and no time zone, so the answer is the same on every phone.
+ * Throws RangeError when `today` isn't a real "YYYY-MM-DD" date.
+ */
+export function monthRange(today: string): { from: string; to: string } {
+  const parts = splitIsoDate(today);
+  if (parts === null) throw new RangeError("monthRange needs a real YYYY-MM-DD date");
+
+  // The year and month are already four and two digits in the valid input,
+  // so they can be copied straight from it: only the day changes.
+  const yearAndMonth = today.slice(0, 8); // e.g. "2026-06-"
+  const lastDay = daysInMonth(parts.year, parts.month); // 28, 29, 30 or 31
+  return { from: `${yearAndMonth}01`, to: `${yearAndMonth}${String(lastDay).padStart(2, "0")}` };
 }

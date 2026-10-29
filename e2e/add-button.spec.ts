@@ -13,8 +13,11 @@
 // they show as skipped, which is expected.
 //
 // How the tests see what was saved: the forms already exist (T1.12, T1.13),
-// and Home's running totals (home.spec.ts H3, was entries-list D3) add up every entry dated today:
-// "Today: $X from N sales" for income, "Today's expenses: $X" for expenses.
+// and Home's "This month" section (home.spec.ts H3) adds up every entry dated
+// in the device's month: "Income $X" and "Expenses $X". CHANGED (T1.18): it
+// used to be Home's today totals, "Today: $X from N sales" and "Today's expenses:
+// $X"; every entry in B6 is dated today (1 July in Sydney), so the amounts
+// are unchanged and only the wording of each line moved.
 // Entries live in memory, so every move between screens in this file is a
 // CLIENT-SIDE move (a link or the bottom nav), never page.goto, and the moves
 // through "Add income"/"Add expense" are proven not to reload the page with a
@@ -86,13 +89,14 @@
 // B6. Round trips. Saving the form returns to the page "+ Add" was on (the
 //     forms already follow a safe ?back=, T1.12/T1.13), and Home's totals
 //     include the new entry. Hand-worked amounts (AUD cents):
-//       Home → Add income, Online sales $25, Card        → 2500 → "Today: $25.00 from 1 sale"
-//       Home → Add expense, Software $9.95                → 995  → "Today's expenses: $9.95"
-//       /expenses → Add expense, Printing $23.50          → 2350 → "Today's expenses: $23.50"
+//       Home → Add income, Online sales $25, Card        → 2500 → "Income $25.00"
+//       Home → Add expense, Software $9.95                → 995  → "Expenses $9.95"
+//       /expenses → Add expense, Printing $23.50          → 2350 → "Expenses $23.50"
 //       /events → Add income, Sales at events,
 //                 cash $100 + card $250.50                → 10000 + 25050 = 35050
-//                                                         → "Today: $350.50 from 2 sales"
-//       /income → Add income, Commissions $80, Bank transfer → 8000 → "Today: $80.00 from 1 sale"
+//                                                         → "Income $350.50"
+//       /income → Add income, Commissions $80, Bank transfer → 8000 → "Income $80.00"
+//     (CHANGED (T1.18): the Home lines were the old "today" wording.)
 //
 // B7. Size and reach (guide §19, WCAG 2.5.8, 1.4.4, 1.4.10).
 //     - "+ Add", "Add income" and "Add expense" are each at least 44×44 CSS px
@@ -219,9 +223,28 @@ function heading(page: Page): Locator {
   return page.getByRole("heading", { level: 1 });
 }
 
-/** An element in <main> whose whole text is exactly `text`. */
-function exactText(page: Page, text: string): Locator {
-  return main(page).getByText(text, { exact: true });
+// (REMOVED (T1.18): exactText, whose only users were the old "today" lines;
+// expectHomeLine below replaces them.)
+
+/**
+ * CHANGED (T1.18): Home's "This month" section (home.spec.ts H3) has a line
+ * whose rendered text, whitespace collapsed, is exactly `text` (e.g.
+ * "Income $25.00"). Replaces the old exact "Today: $X from N sales" element.
+ */
+async function expectHomeLine(page: Page, text: string): Promise<void> {
+  const section = page.getByRole("main").getByRole("region", { name: "This month", exact: true });
+  await expect(section).toHaveCount(1);
+  await expect
+    .poll(
+      () =>
+        section.evaluate((root) =>
+          [root, ...Array.from(root.querySelectorAll("*"))]
+            .filter((el) => el.getClientRects().length > 0)
+            .map((el) => ((el as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim()),
+        ),
+      { message: `Home's "This month" has a line reading exactly "${text}"` },
+    )
+    .toContain(text);
 }
 
 /** Taps on a touch device (the phone project), clicks otherwise. */
@@ -719,12 +742,12 @@ test.describe("T1.14: following a link", () => {
 // ═══ B6. Round trips ════════════════════════════════════════════════════════
 
 test.describe("T1.14: round trips", () => {
-  test("Home → Add income (Online sales, $25, Card) → Save lands on Home showing \"Today: $25.00 from 1 sale\"", async ({
+  test("Home → Add income (Online sales, $25, Card) → Save lands on Home showing \"Income $25.00\" (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
     await open(page, HOME.path);
-    await expect(exactText(page, "Today: $0.00 from 0 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $0.00"); // CHANGED (T1.18): was "Today: $0.00 from 0 sales"
     await followLink(page, "income", HOME, t);
     await main(page).getByRole("combobox", { name: "Income stream", exact: true }).selectOption({ label: "Online sales" });
     await main(page).getByRole("textbox", { name: "Amount", exact: true }).fill("25");
@@ -736,10 +759,10 @@ test.describe("T1.14: round trips", () => {
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
     await expect(heading(page)).toHaveText("Home");
     // 2500 cents.
-    await expect(exactText(page, "Today: $25.00 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $25.00"); // CHANGED (T1.18): was "Today: $25.00 from 1 sale"
   });
 
-  test("Home → Add expense (Software, $9.95) → Save lands on Home showing \"Today's expenses: $9.95\"", async ({
+  test("Home → Add expense (Software, $9.95) → Save lands on Home showing \"Expenses $9.95\" (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
@@ -751,10 +774,10 @@ test.describe("T1.14: round trips", () => {
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
     await expect(heading(page)).toHaveText("Home");
     // 995 cents.
-    await expect(exactText(page, "Today's expenses: $9.95")).toBeVisible();
+    await expectHomeLine(page, "Expenses $9.95"); // CHANGED (T1.18): was "Today's expenses: $9.95"
   });
 
-  test("/expenses → Add expense (Printing, $23.50) → Save lands on /expenses, and Home shows \"Today's expenses: $23.50\"", async ({
+  test("/expenses → Add expense (Printing, $23.50) → Save lands on /expenses, and Home shows \"Expenses $23.50\" (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
@@ -767,10 +790,10 @@ test.describe("T1.14: round trips", () => {
     await expect(heading(page)).toHaveText("Expenses");
     await goHomeByNav(page, t);
     // 2350 cents.
-    await expect(exactText(page, "Today's expenses: $23.50")).toBeVisible();
+    await expectHomeLine(page, "Expenses $23.50"); // CHANGED (T1.18): was "Today's expenses: $23.50"
   });
 
-  test("/events → Add income (Sales at events, cash $100 + card $250.50) → Save lands on /events, and Home shows \"Today: $350.50 from 2 sales\"", async ({
+  test("/events → Add income (Sales at events, cash $100 + card $250.50) → Save lands on /events, and Home shows \"Income $350.50\" (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
@@ -784,10 +807,10 @@ test.describe("T1.14: round trips", () => {
     await expect(heading(page)).toHaveText("Events");
     await goHomeByNav(page, t);
     // 10000 + 25050 = 35050 cents, two income rows.
-    await expect(exactText(page, "Today: $350.50 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $350.50"); // CHANGED (T1.18): was "Today: $350.50 from 2 sales"
   });
 
-  test("/income → Add income (Commissions, $80, Bank transfer) → Save lands on /income, and Home shows \"Today: $80.00 from 1 sale\"", async ({
+  test("/income → Add income (Commissions, $80, Bank transfer) → Save lands on /income, and Home shows \"Income $80.00\" (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
@@ -804,7 +827,7 @@ test.describe("T1.14: round trips", () => {
     await expect(heading(page)).toHaveText("Income");
     await goHomeByNav(page, t);
     // 8000 cents.
-    await expect(exactText(page, "Today: $80.00 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $80.00"); // CHANGED (T1.18): was "Today: $80.00 from 1 sale"
   });
 
   test('after a round trip back to Home, "+ Add" is closed again', async ({ page }, testInfo) => {

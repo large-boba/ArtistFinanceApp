@@ -95,6 +95,15 @@
 //     the others (decision B; not limited by the T1.16b cap). Pure: the state
 //     is never changed. The groups come from each entry's own `group`.
 //
+// T1.18 (Home summary: this month), ADDED: totalsForDate is removed from
+// entries.ts (its tests with it), and Home's month totals come from
+// rangeTotals. Four of totalsForDate's claims had no rangeTotals twin yet, so
+// they are carried over at the end of the rangeTotals block, marked ADDED
+// (T1.18): every one of the seven streams counts; the totals follow an edit
+// and a delete; exact right up to MAX_SAFE_INTEGER; and a RangeError when the
+// EXPENSES would pass it. (They pass against today's rangeTotals: they guard
+// it, they don't ask for new behaviour.)
+//
 // Every expected value is worked out by hand (sums in the comments). None
 // comes from the code under test.
 
@@ -782,6 +791,61 @@ describe("rangeTotals — income, expenses and net for an inclusive date range",
   it("allows a net of exactly −MAX_SAFE_INTEGER (no income, MAX expenses)", () => {
     const state = direct([expenseRow("a", "2026-06-01", "", MAX, "Website", "operating", null)]);
     expect(rangeTotals(state, "2026-06-01", "2026-06-30")).toStrictEqual({ incomeCents: 0, expensesCents: MAX, netCents: -MAX });
+  });
+
+  // ADDED (T1.18): carried over from the removed totalsForDate tests (see the header).
+  it("ADDED (T1.18): counts every one of the seven streams: 1 + 10 + 100 + 1000 + 10000 + 100000 + 1000000 = 1111111", () => {
+    // One income per stream, each a different power of ten, so a stream left
+    // out would show as a missing digit 1 in the total.
+    const state = build(...ALL_STREAMS.map((streamId, i) => income(`s${i}`, "2026-06-10", 10 ** i, streamId, "card")));
+    expect(rangeTotals(state, "2026-06-01", "2026-06-30")).toStrictEqual({
+      incomeCents: 1111111,
+      expensesCents: 0,
+      netCents: 1111111,
+    });
+  });
+
+  it("ADDED (T1.18): follows an edit and a delete: Etsy 2599 → 3000 (+401) and the 15000 printing deleted give income 453000, expenses 99900, net 353100", () => {
+    // June before: income 452599, expenses 114900.
+    // Income 452599 − 2599 + 3000 = 453000; expenses 114900 − 15000 = 99900;
+    // net 453000 − 99900 = 353100.
+    const edited = entriesReducer(rangeState(), { type: "edit", id: "etsy", changes: { amountCents: 3000 } });
+    const after = entriesReducer(deepFreeze(edited), { type: "delete", id: "prints" });
+    expect(rangeTotals(after, "2026-06-01", "2026-06-30")).toStrictEqual({
+      incomeCents: 453000,
+      expensesCents: 99900,
+      netCents: 353100,
+    });
+  });
+
+  it("ADDED (T1.18): moving an entry's date out of the range takes it out: the Etsy sale moved to 1 Jul leaves June's income at 450000", () => {
+    // 452599 − 2599 = 450000; net 450000 − 114900 = 335100.
+    const after = entriesReducer(rangeState(), { type: "edit", id: "etsy", changes: { date: "2026-07-01" } });
+    expect(rangeTotals(after, "2026-06-01", "2026-06-30")).toStrictEqual({
+      incomeCents: 450000,
+      expensesCents: 114900,
+      netCents: 335100,
+    });
+  });
+
+  it("ADDED (T1.18): is exact right up to MAX_SAFE_INTEGER: 4503599627370495 + 4503599627370496 = 9007199254740991", () => {
+    const state = direct([
+      incomeRow("a", "2026-06-01", 4503599627370495, WHOLESALE, "bank_transfer", null),
+      incomeRow("b", "2026-06-30", 4503599627370496, WHOLESALE, "bank_transfer", null),
+    ]);
+    expect(rangeTotals(state, "2026-06-01", "2026-06-30")).toStrictEqual({
+      incomeCents: MAX,
+      expensesCents: 0,
+      netCents: MAX,
+    });
+  });
+
+  it("ADDED (T1.18): throws RangeError when the range's expenses would pass MAX_SAFE_INTEGER", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Website", "operating", null),
+      expenseRow("b", "2026-06-02", "", 1, "Website", "operating", null),
+    ]);
+    expect(() => rangeTotals(state, "2026-06-01", "2026-06-30")).toThrow(RangeError);
   });
 });
 

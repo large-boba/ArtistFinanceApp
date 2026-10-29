@@ -1,6 +1,7 @@
 // Tests for T1.5, part 1: today's date and showing a date
 // (docs/stages/stage-01.md "T1.5 — Pretend-data store and today's date"),
-// and for T1.10: adding days to a date (addDays, at the end of this file).
+// for T1.10: adding days to a date (addDays), and for T1.18: the first and
+// last day of a month (monthRange, at the end of this file).
 //
 // Written by test-engineer BEFORE src/lib/dates.ts exists. The builder must
 // not edit this file; disputes go to the project lead.
@@ -49,6 +50,22 @@
 //         all a "YYYY-MM-DD" string can hold (DECISION, test engineer: a
 //         RangeError rather than a 5-digit or year-0 string).
 //
+//   export function monthRange(today: string): { from: string; to: string }   (T1.18)
+//     The first and last day of the calendar month that `today` falls in,
+//     both "YYYY-MM-DD", e.g. monthRange("2026-06-30") is
+//     { from: "2026-06-01", to: "2026-06-30" }. Home passes them straight to
+//     rangeTotals (inclusive). Lead's decisions, 2026-10-29:
+//       - PURE calendar maths on the year and month numbers, like addDays:
+//         it never passes the string to new Date() or Date.parse(), never
+//         uses the device's time zone or clock. February has 29 days in a
+//         leap year (every 4th year, except centuries not divisible by 400):
+//         2026 → 28, 2028 → 29, 2100 → 28, 2000 → 29.
+//       - The result is a plain object with exactly the keys from and to.
+//       - Throws RangeError when `today` fails isIsoDate.
+//     Every expected month length below is written out by hand ("thirty days
+//     hath September, April, June and November; all the rest have 31,
+//     February 28, or 29 in a leap year").
+//
 // DECISION (display style): the expected strings below are what Intl's
 // numeric day/month/year style gives in Node 22 and 24 (ICU 77, CLDR 47).
 // For en-AU that is "01/07/2026", not the guide's "1/7/2026": we follow the
@@ -59,7 +76,14 @@
 // that moment (written next to each case). None comes from the code under test.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addDays, formatDateForDisplay, isIsoDate, todayOnDevice } from "@/lib/dates";
+import {
+  addDays,
+  formatDateForDisplay,
+  formatMonthForDisplay,
+  isIsoDate,
+  monthRange,
+  todayOnDevice,
+} from "@/lib/dates";
 
 const ISO_DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -457,6 +481,249 @@ describe("addDays — refuses bad input with RangeError", () => {
   for (const [iso, days, why] of outOfRange) {
     it(`throws for ${iso} ${days >= 0 ? "+" : "−"} ${Math.abs(days)} (${why})`, () => {
       expect(() => addDays(iso, days)).toThrow(RangeError);
+    });
+  }
+});
+
+// ─── monthRange (T1.18) ──────────────────────────────────────────────────────
+
+describe("monthRange — the first and last day of the month", () => {
+  it('monthRange("2026-06-30") is { from: "2026-06-01", to: "2026-06-30" } (the lead\'s example)', () => {
+    expect(monthRange("2026-06-30")).toStrictEqual({ from: "2026-06-01", to: "2026-06-30" });
+  });
+
+  it("the 1st of the month gives the same month: 2026-07-01 → 2026-07-01 to 2026-07-31", () => {
+    expect(monthRange("2026-07-01")).toStrictEqual({ from: "2026-07-01", to: "2026-07-31" });
+  });
+
+  it("a day in the middle gives the same month: 2026-10-29 → 2026-10-01 to 2026-10-31", () => {
+    expect(monthRange("2026-10-29")).toStrictEqual({ from: "2026-10-01", to: "2026-10-31" });
+  });
+
+  // Every month of 2026 (not a leap year), from its 15th. Lengths by hand.
+  const months2026: Array<[string, string, string]> = [
+    ["2026-01-15", "2026-01-01", "2026-01-31"],
+    ["2026-02-15", "2026-02-01", "2026-02-28"],
+    ["2026-03-15", "2026-03-01", "2026-03-31"],
+    ["2026-04-15", "2026-04-01", "2026-04-30"],
+    ["2026-05-15", "2026-05-01", "2026-05-31"],
+    ["2026-06-15", "2026-06-01", "2026-06-30"],
+    ["2026-07-15", "2026-07-01", "2026-07-31"],
+    ["2026-08-15", "2026-08-01", "2026-08-31"],
+    ["2026-09-15", "2026-09-01", "2026-09-30"],
+    ["2026-10-15", "2026-10-01", "2026-10-31"],
+    ["2026-11-15", "2026-11-01", "2026-11-30"],
+    ["2026-12-15", "2026-12-01", "2026-12-31"],
+  ];
+  for (const [today, from, to] of months2026) {
+    it(`${today} → ${from} to ${to}`, () => {
+      expect(monthRange(today)).toStrictEqual({ from, to });
+    });
+  }
+
+  it("December ends on the 31st, and the year doesn't roll over: 2026-12-31 → 2026-12-01 to 2026-12-31", () => {
+    expect(monthRange("2026-12-31")).toStrictEqual({ from: "2026-12-01", to: "2026-12-31" });
+  });
+});
+
+describe("monthRange — February and leap years", () => {
+  const februaries: Array<[string, string, string]> = [
+    ["2026-02-10", "2026-02-28", "2026 isn't divisible by 4: 28 days"],
+    ["2028-02-10", "2028-02-29", "2028 is divisible by 4: 29 days"],
+    ["2028-02-29", "2028-02-29", "the leap day itself"],
+    ["2100-02-10", "2100-02-28", "2100 is a century not divisible by 400: 28 days"],
+    ["2000-02-10", "2000-02-29", "2000 is divisible by 400: 29 days"],
+    ["1900-02-10", "1900-02-28", "1900 is a century not divisible by 400: 28 days"],
+    ["2400-02-10", "2400-02-29", "2400 is divisible by 400: 29 days"],
+    ["0004-02-10", "0004-02-29", "year 4 is divisible by 4: 29 days"],
+    ["0100-02-10", "0100-02-28", "year 100 is a century not divisible by 400: 28 days"],
+    ["0400-02-10", "0400-02-29", "year 400 is divisible by 400: 29 days"],
+    ["0001-02-10", "0001-02-28", "year 1 isn't divisible by 4: 28 days"],
+  ];
+  for (const [today, to, why] of februaries) {
+    it(`${today} → ${today.slice(0, 8)}01 to ${to} (${why})`, () => {
+      expect(monthRange(today)).toStrictEqual({ from: `${today.slice(0, 8)}01`, to });
+    });
+  }
+
+  it("2028-03-01 is March, not February: 2028-03-01 to 2028-03-31", () => {
+    expect(monthRange("2028-03-01")).toStrictEqual({ from: "2028-03-01", to: "2028-03-31" });
+  });
+});
+
+describe("monthRange — the ends of what a YYYY-MM-DD string can hold", () => {
+  it("year 0001: 0001-01-01 → 0001-01-01 to 0001-01-31 (four-digit, zero-padded)", () => {
+    expect(monthRange("0001-01-01")).toStrictEqual({ from: "0001-01-01", to: "0001-01-31" });
+  });
+
+  it("year 0099: 0099-12-05 → 0099-12-01 to 0099-12-31 (not 1999)", () => {
+    expect(monthRange("0099-12-05")).toStrictEqual({ from: "0099-12-01", to: "0099-12-31" });
+  });
+
+  it("year 9999: 9999-12-31 → 9999-12-01 to 9999-12-31 (no roll-over into a 5-digit year)", () => {
+    expect(monthRange("9999-12-31")).toStrictEqual({ from: "9999-12-01", to: "9999-12-31" });
+  });
+});
+
+describe("monthRange — the phone's time zone and clock make no difference", () => {
+  // Code that passes the string "2026-07-01" to new Date() gets midnight
+  // UTC, which is still 30 June in the Americas (UTC−), so it would answer
+  // June there. Code that mixes local and UTC goes wrong at UTC+14.
+  const cases: Array<[string, string, string, string]> = [
+    ["America/Los_Angeles", "2026-07-01", "2026-07-01", "2026-07-31"],
+    ["America/New_York", "2026-03-01", "2026-03-01", "2026-03-31"],
+    ["Pacific/Pago_Pago", "2026-12-31", "2026-12-01", "2026-12-31"],
+    ["Pacific/Kiritimati", "2026-06-30", "2026-06-01", "2026-06-30"],
+    ["Australia/Sydney", "2026-07-01", "2026-07-01", "2026-07-31"],
+    ["Australia/Perth", "2026-06-30", "2026-06-01", "2026-06-30"],
+  ];
+  for (const [zone, today, from, to] of cases) {
+    it(`on a device in ${zone}, ${today} → ${from} to ${to}`, () => {
+      onDeviceIn(zone, () => {
+        expect(monthRange(today)).toStrictEqual({ from, to });
+      });
+    });
+  }
+
+  it("doesn't read the clock: with the clock frozen on 1 Jan 2030, 2026-06-30 is still June 2026", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(utc(2030, 1, 1, 0, 0));
+    expect(monthRange("2026-06-30")).toStrictEqual({ from: "2026-06-01", to: "2026-06-30" });
+  });
+
+  it("its own code never parses a date string (no new Date(...), no Date.parse)", () => {
+    // A structural guard for the card's rule; the time-zone cases above are
+    // the behavioural one.
+    expect(String(monthRange)).not.toMatch(/new\s+Date\s*\(|Date\.parse/);
+  });
+});
+
+describe("monthRange — refuses bad input with RangeError", () => {
+  const bad: Array<[unknown, string]> = [
+    ["2026-02-29", "2026 has no 29 February"],
+    ["2026-04-31", "April has 30 days"],
+    ["2026-13-01", "there is no month 13"],
+    ["2026-00-10", "there is no month 0"],
+    ["2026-06-00", "there is no day 0"],
+    ["2026-6-30", "month must be two digits"],
+    ["30/06/2026", "a display format"],
+    ["2026-06-30T00:00:00Z", "a timestamp, not a date"],
+    [" 2026-06-30", "a leading space"],
+    ["0000-06-30", "there is no year 0"],
+    ["", "empty"],
+    [20260630, "a number"],
+    [null, "null"],
+    [undefined, "missing"],
+    [new Date(Date.UTC(2026, 5, 30)), "a Date object"],
+  ];
+  for (const [value, why] of bad) {
+    it(`throws for ${typeof value === "string" ? JSON.stringify(value) : String(value)} (${why})`, () => {
+      expect(() => monthRange(value as string)).toThrow(RangeError);
+    });
+  }
+});
+
+// ─── formatMonthForDisplay (T1.18) ───────────────────────────────────────────
+//
+// CONTRACT (lead, 2026-10-29): export function formatMonthForDisplay(iso: string, locale: string): string
+//   The month and year of a "YYYY-MM-DD" date in the person's language, as
+//   Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }) words it,
+//   worked out from the year and month NUMBERS in UTC (never the string
+//   passed to new Date()), so every day of a month gives the same text in
+//   every device time zone. Throws RangeError when `iso` fails isIsoDate.
+// Expected texts are written out by hand (CLDR month names). Year 1 comes out
+// as "January 1": Intl prints years without padding; pinned as it is.
+
+describe("formatMonthForDisplay — the month's name in the person's language", () => {
+  const cases: Array<[string, string, string]> = [
+    ["2026-07-01", "en-AU", "July 2026"],
+    ["2026-06-30", "en-AU", "June 2026"],
+    ["2026-07-01", "en-US", "July 2026"],
+    ["2026-02-14", "en-US", "February 2026"],
+    ["2026-07-01", "de-DE", "Juli 2026"],
+    ["2026-03-10", "de-DE", "März 2026"],
+    ["2026-12-31", "de-DE", "Dezember 2026"],
+    ["2026-01-01", "en-AU", "January 2026"],
+  ];
+  for (const [iso, locale, expected] of cases) {
+    it(`${iso} in ${locale} is "${expected}"`, () => {
+      expect(formatMonthForDisplay(iso, locale)).toBe(expected);
+    });
+  }
+
+  const edges: Array<[string, string, string]> = [
+    ["2026-07-01", "2026-07-31", "July 2026"],
+    ["2026-06-01", "2026-06-30", "June 2026"],
+    ["2028-02-01", "2028-02-29", "February 2028"],
+    ["2026-12-01", "2026-12-31", "December 2026"],
+  ];
+  for (const [first, last, expected] of edges) {
+    it(`the first and last day of the month give the same text: ${first} and ${last} are both "${expected}" (en-AU)`, () => {
+      expect([formatMonthForDisplay(first, "en-AU"), formatMonthForDisplay(last, "en-AU")]).toStrictEqual([expected, expected]);
+    });
+  }
+
+  it('year 0001: 0001-01-01 in en-AU is "January 1" (not 1901)', () => {
+    expect(formatMonthForDisplay("0001-01-01", "en-AU")).toBe("January 1");
+  });
+
+  it('year 9999: 9999-12-31 in en-AU is "December 9999" (no roll-over into 10000)', () => {
+    expect(formatMonthForDisplay("9999-12-31", "en-AU")).toBe("December 9999");
+  });
+
+  it('year 9999 in de-DE: 9999-12-31 is "Dezember 9999"', () => {
+    expect(formatMonthForDisplay("9999-12-31", "de-DE")).toBe("Dezember 9999");
+  });
+});
+
+describe("formatMonthForDisplay — the phone's time zone makes no difference", () => {
+  // Pago Pago is UTC−11 and Kiritimati UTC+14: midnight UTC on the 1st is
+  // still the previous month in Pago Pago, and 23:59 UTC on the last day is
+  // already the next month in Kiritimati. Code that formats in local time
+  // goes wrong in one of them.
+  const cases: Array<[string, string, string]> = [
+    ["Pacific/Pago_Pago", "2026-07-01", "July 2026"],
+    ["Pacific/Pago_Pago", "2026-12-31", "December 2026"],
+    ["Pacific/Kiritimati", "2026-06-30", "June 2026"],
+    ["Pacific/Kiritimati", "2026-07-01", "July 2026"],
+    ["America/Los_Angeles", "2026-07-01", "July 2026"],
+    ["Australia/Sydney", "2026-07-01", "July 2026"],
+    ["Australia/Perth", "2026-06-30", "June 2026"],
+  ];
+  for (const [zone, iso, expected] of cases) {
+    it(`on a device in ${zone}, ${iso} is "${expected}" (en-AU)`, () => {
+      onDeviceIn(zone, () => {
+        expect(formatMonthForDisplay(iso, "en-AU")).toBe(expected);
+      });
+    });
+  }
+
+  it("its own code never passes the date string to new Date() or Date.parse", () => {
+    // Structural guard; the time-zone cases above are the behavioural one.
+    // new Date(0) (a number) is allowed.
+    const source = String(formatMonthForDisplay);
+    expect(source).not.toMatch(/new\s+Date\s*\(\s*(?!0\s*\))[^)]/);
+    expect(source).not.toMatch(/Date\.parse/);
+  });
+});
+
+describe("formatMonthForDisplay — refuses bad dates with RangeError", () => {
+  const bad: Array<[unknown, string]> = [
+    ["2026-02-29", "2026 has no 29 February"],
+    ["2026-13-01", "there is no month 13"],
+    ["2026-00-10", "there is no month 0"],
+    ["2026-7-1", "month and day must be two digits"],
+    ["01/07/2026", "a display format"],
+    ["2026-07-01T00:00:00Z", "a timestamp, not a date"],
+    ["0000-07-01", "there is no year 0"],
+    ["", "empty"],
+    [20260701, "a number"],
+    [null, "null"],
+    [new Date(Date.UTC(2026, 6, 1)), "a Date object"],
+  ];
+  for (const [value, why] of bad) {
+    it(`throws for ${typeof value === "string" ? JSON.stringify(value) : String(value)} (${why})`, () => {
+      expect(() => formatMonthForDisplay(value as string, "en-AU")).toThrow(RangeError);
     });
   }
 });

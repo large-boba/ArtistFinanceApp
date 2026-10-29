@@ -70,6 +70,7 @@ Formatting is exact to the cent, with no float division. | §6, §7 |
 - **Before real data (Stage 2+):** decide whether Cloudflare's `workers.dev` and per-version preview URLs stay public, or go behind Cloudflare Access. Today they show only the starter page.
 - **Before the first route handler (Stage 2+):** `safeBackPath` (`src/lib/navigation.ts`) allows any same-site path. Turn it into a route-pattern allow-list, or refuse `/api` and `/auth`, so a crafted `?back=` can't trigger a GET route with side effects (T1.12 security review). GET route handlers must never change anything.
 - **Stage 2 database:** add a CHECK so stored amounts are between 0 and 999,999,999 cents, matching the owner's cap (T1.16b review), so no row can ever be above it.
+- **Stage 4 refunds:** Home's "This month" Net (`rangeTotals`) will include refunds once they arrive as linked negative income rows. That's the intended cash-basis result; add a test for it then (T1.18 review).
 - `global_fetch_strictly_public` is kept, but it isn't SSRF protection. Routes that fetch URLs (AI, imports) need their own allow-lists.
 
 - The lockfile is written with **npm 11**, which ships with Node 24 (CI, `.nvmrc`). npm 10.9.4 crashed adding Vitest (an npm 10 bug with Vite 8's optional peers). `npm ci` still works on npm 10, but `npm install` with npm 10 rewrites the lockfile (drops `libc` fields). Use Node 24, which ships npm 11, when installing packages.

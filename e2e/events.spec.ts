@@ -177,7 +177,8 @@
 //       comes back. The Result line stays.
 //     - The figure belongs to its event only, stays while moving around the
 //       app (client-side), and is NOT added to anything else: the events
-//       list's Result, Home's totals and the Transactions list don't change.
+//       list's Result, Home's totals (CHANGED (T1.18): its "This month"
+//       Income, Expenses and Net) and the Transactions list don't change.
 //       CHANGED (T1.17b): the Transactions list is removed; the Expenses tab
 //       takes its place in that check (no "$777.00" row, still 3 costs).
 //
@@ -1307,7 +1308,12 @@ test.describe("T1.15: other costs", () => {
     await expectLine(eventLink(page, COMIC_CON), "Result $3,501.00");
   });
 
-  test("not added to other totals: Home's today totals are the same after $600 other costs on today's market", async ({
+  // CHANGED (T1.18): Home's "today" lines became the "This month" section
+  // (home.spec.ts H3). Every entry here is dated today (1 July, Sydney), so the
+  // amounts are the same; the Net line is ADDED because it is where a wrongly
+  // subtracted figure would show: 50000 − 5000 = 45000 → "Net $450.00", not
+  // 45000 − 60000 = −15000 → "Net -$150.00".
+  test("not added to other totals: Home's month totals are the same after $600 other costs on today's market (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     const t = touch(testInfo);
@@ -1326,8 +1332,10 @@ test.describe("T1.15: other costs", () => {
     // 45000 − 60000 = −15000 cents.
     await expectLine(main(page), "Result after other costs -$150.00");
     await goByTab(page, "Home", t);
-    await expect(main(page).getByText("Today: $500.00 from 2 sales", { exact: true })).toBeVisible();
-    await expect(main(page).getByText("Today's expenses: $50.00", { exact: true })).toBeVisible();
+    const homeMonth = main(page).getByRole("region", { name: "This month", exact: true });
+    await expectLine(homeMonth, "Income $500.00"); // CHANGED (T1.18): was "Today: $500.00 from 2 sales"
+    await expectLine(homeMonth, "Expenses $50.00"); // CHANGED (T1.18): was "Today's expenses: $50.00"
+    await expectLine(homeMonth, "Net $450.00"); // ADDED (T1.18)
   });
 
   // CHANGED (T1.17b): was "the Transactions list has no $777.00 entry"; /transactions is

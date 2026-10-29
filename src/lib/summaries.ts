@@ -5,9 +5,9 @@
 // src/lib/summaries.test.ts.
 //
 // All new adding up of money goes here: screens show what these functions
-// return and never add amounts themselves, so every screen agrees. (Home's
-// "today" totals still use totalsForDate in entries.ts until T1.18 replaces
-// them with rangeTotals.)
+// return and never add amounts themselves, so every screen agrees. (Since
+// T1.18, Home's summary is rangeTotals for this month: monthRange in dates.ts
+// gives the first and last day, and rangeTotals adds up everything between.)
 //
 // Everything here is "pure": no clock, no saving or loading, and the state and
 // event list passed in are never changed. Money is whole cents, added up

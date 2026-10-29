@@ -16,8 +16,16 @@
 //
 // How the tests see what was saved, through client-side moves that keep the
 // in-memory entries:
-//   - Home's "Today: $X from N sales" line (home.spec.ts H3), which adds up
-//     every income row dated today, $0.00 rows included;
+//   - CHANGED (T1.18): Home's "Income $X" line in its "This month" section
+//     (home.spec.ts H3), which adds up every income row dated in the
+//     device's month (Sydney: July 2026; Perth: June 2026). It used to be
+//     "Today: $X from N sales"; every assertion on it is marked CHANGED
+//     (T1.18). The count "from N sales" is gone, so the two tests that relied
+//     on it to prove rows were saved ($0 takings, a $0 income) now check the
+//     stream's page instead. The blocked-save tests ("nothing is added")
+//     now see "Income $0.00", which proves no MONEY was added; a stray $0
+//     row would no longer show on Home, but every one of those tests types
+//     a non-zero amount or can't make a valid row at all;
 //   - CHANGED (T1.17b): the stream's own page, /income/<stream id>, reached
 //     with goToStream() (a client-side move, no reload). It used to be the
 //     Transactions list, which T1.17b removes. Being listed on a stream's
@@ -288,18 +296,21 @@
 //   Cash "$1,000"   → 100000 cents → "Reads as $1,000.00"
 //   Card "2,000.5"  → 200050 cents → "Reads as $2,000.50"
 //   Total 100000 + 200050 = 300050 cents → "Total $3,000.50"
-//   Home: "Today: $3,000.50 from 2 sales"
+//   Home: "Income $3,000.50"
 //   Sales at events page (newest first): card row $2,000.50, then cash row $1,000.00
 // Small takings: Cash "100" + Card "250" = 10000 + 25000 = 35000 → "Total $350.00",
-//   Home "Today: $350.00 from 2 sales".
-// Zero takings: "0" + "0" → "Total $0.00", Home "Today: $0.00 from 2 sales".
+//   Home "Income $350.00".
+// Zero takings: "0" + "0" → "Total $0.00", Home "Income $0.00".
 // T1.16b, the cap: "9999999.99" = 9,999,999 × 100 + 99 = 999,999,999 cents
 //   → "Reads as $9,999,999.99". Cash and Card both at the cap:
 //   999,999,999 + 999,999,999 = 1,999,999,998 cents → "Total $19,999,999.98",
-//   Home "Today: $19,999,999.98 from 2 sales". "10000000" = 1,000,000,000
+//   Home "Income $19,999,999.98". "10000000" = 1,000,000,000
 //   cents, one cent over the cap.
 // One-amount income: Wholesale "1,234.56" by Bank transfer → 123456 cents,
-//   Home "Today: $1,234.56 from 1 sale"; row "Wholesale" / "Bank transfer" / $1,234.56.
+//   Home "Income $1,234.56"; row "Wholesale" / "Bank transfer" / $1,234.56.
+//
+// CHANGED (T1.18): the Home strings above were "Today: $X from N sales"; Home
+// now shows the month's "Income $X" (every entry here is dated in the month).
 //
 // Every expected string below is written out by hand. None is computed with
 // the app's own code (parseAmountToCents, formatCents, formatDateForDisplay,
@@ -382,7 +393,8 @@ const EVENT_OPTIONS = [NOT_ASSIGNED, COMIC_CON, MARKET, SHELF] as const;
 const PAYMENT_LABELS = ["Cash", "Card", "Online", "Bank transfer", "Other"] as const;
 type PaymentLabel = (typeof PAYMENT_LABELS)[number];
 
-const HOME_NO_INCOME = "Today: $0.00 from 0 sales";
+// CHANGED (T1.18): Home's month line (home.spec.ts H3); was "Today: $0.00 from 0 sales".
+const HOME_NO_INCOME = "Income $0.00";
 // CHANGED (T1.17b): a stream page's empty state (income-streams.spec.ts S5),
 // replacing the Transactions list's "No entries yet.".
 const NO_INCOME = "No income yet.";
@@ -521,6 +533,27 @@ function cancelLink(page: Page): Locator {
 /** An element in <main> whose whole text is exactly `text`. */
 function exactText(page: Page, text: string): Locator {
   return main(page).getByText(text, { exact: true });
+}
+
+/**
+ * CHANGED (T1.18): Home's "This month" section (home.spec.ts H3) has a line
+ * whose rendered text, whitespace collapsed, is exactly `text` (e.g.
+ * "Income $350.00"). Replaces the old exact "Today: $X from N sales" element.
+ */
+async function expectHomeLine(page: Page, text: string): Promise<void> {
+  const section = page.getByRole("main").getByRole("region", { name: "This month", exact: true });
+  await expect(section).toHaveCount(1);
+  await expect
+    .poll(
+      () =>
+        section.evaluate((root) =>
+          [root, ...Array.from(root.querySelectorAll("*"))]
+            .filter((el) => el.getClientRects().length > 0)
+            .map((el) => ((el as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim()),
+        ),
+      { message: `Home's "This month" has a line reading exactly "${text}"` },
+    )
+    .toContain(text);
 }
 
 /** Any "Reads as …" feedback in <main>. */
@@ -1226,13 +1259,13 @@ test.describe("the date", () => {
     await expect(dateField(page)).toHaveValue("2026-07-01");
   });
 
-  test("a changed date is saved on both takings rows (2026-06-15, shown 15/06/2026), and today's income on Home stays $0.00", async ({
+  test("a changed date is saved on both takings rows (2026-06-15, shown 15/06/2026), and Home's income for July stays $0.00 (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { date: "2026-06-15", stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
     // CHANGED (T1.17b): checked on Sales at events (the <time> element is gone, see the header).
     await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
@@ -1253,7 +1286,7 @@ test.describe("the date", () => {
     expect(await describedByTexts(dateField(page))).toContain(ERROR_DATE);
     await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
     await goHomeByNav(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 });
 
@@ -1265,13 +1298,13 @@ test.describe("the date late at night in Perth", () => {
     await expect(dateField(page)).toHaveValue(PERTH_TODAY);
   });
 
-  test("takings saved with the default date count in Perth's today on Home: $350.00 from 2 sales", async ({
+  test("takings saved with the default date count in Perth's month on Home: Income $350.00 (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $350.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $350.00"); // CHANGED (T1.18): was "Today: $350.00 from 2 sales"
   });
 });
 
@@ -1411,13 +1444,13 @@ test.describe("Sales at events on a US-English device", () => {
 });
 
 test.describe("Sales at events: saving", () => {
-  test('saving Cash $1,000 and Card $2,000.50 returns Home with "Today: $3,000.50 from 2 sales"', async ({
+  test('saving Cash $1,000 and Card $2,000.50 returns Home with "Income $3,000.50"', async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "$1,000", card: "2,000.5" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $3,000.50 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $3,000.50"); // CHANGED (T1.18): was "Today: $3,000.50 from 2 sales"
   });
 
   // CHANGED (T1.17b): was "Transactions lists two Sales at events rows"; now the stream's page.
@@ -1460,20 +1493,25 @@ test.describe("Sales at events: saving", () => {
     expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", linked(MARKET, "Cash")], "$100.00");
   });
 
-  test("$0 cash and $0 card still save both rows: Home says \"Today: $0.00 from 2 sales\"", async ({
+  test("$0 cash and $0 card still save both rows: Home says \"Income $0.00\" and Sales at events lists both (CHANGED (T1.18))", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "0", card: "0" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $0.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $0.00"); // CHANGED (T1.18): was "Today: $0.00 from 2 sales"
+    // CHANGED (T1.18): Home no longer counts rows, so the two rows are checked on Sales at events.
+    await goToStream(page, SALES_AT_EVENTS);
+    await expect(rows(page)).toHaveCount(2);
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", "Card"], "$0.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", "Cash"], "$0.00");
   });
 
   test("$0 cash with $80 card saves both rows: Card $80.00 and Cash $0.00", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "0", card: "80" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $80.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $80.00"); // CHANGED (T1.18): was "Today: $80.00 from 2 sales"
     // CHANGED (T1.17b): checked on Sales at events.
     await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
@@ -1481,12 +1519,12 @@ test.describe("Sales at events: saving", () => {
     expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", "Cash"], "$0.00");
   });
 
-  test("double-clicking Save adds the two rows once: $350.00 from 2 sales", async ({ page }) => {
+  test("double-clicking Save adds the two rows once: Income $350.00 and two rows (CHANGED (T1.18))", async ({ page }) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveButton(page).dblclick();
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await expect(exactText(page, "Today: $350.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $350.00"); // CHANGED (T1.18): was "Today: $350.00 from 2 sales"
     await goToStream(page, SALES_AT_EVENTS); // CHANGED (T1.17b): was Transactions
     await expect(rows(page)).toHaveCount(2);
   });
@@ -1496,7 +1534,7 @@ test.describe("Sales at events: saving", () => {
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await cardField(page).press("Enter");
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await expect(exactText(page, "Today: $350.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $350.00"); // CHANGED (T1.18): was "Today: $350.00 from 2 sales"
   });
 });
 
@@ -1567,13 +1605,13 @@ test.describe("other streams: the amount's live feedback", () => {
 });
 
 test.describe("other streams: saving", () => {
-  test('Wholesale $1,234.56 by Bank transfer returns Home with "Today: $1,234.56 from 1 sale"', async ({
+  test('Wholesale $1,234.56 by Bank transfer returns Home with "Income $1,234.56"', async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: "Wholesale", amount: "1,234.56", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $1,234.56 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $1,234.56"); // CHANGED (T1.18): was "Today: $1,234.56 from 1 sale"
   });
 
   // CHANGED (T1.17b): was "on Transactions, the Wholesale row shows Wholesale, …"; listed on
@@ -1612,7 +1650,7 @@ test.describe("other streams: saving", () => {
       await openForm(page);
       await fillForm(page, { stream, amount: "9.99", payment: "Online" });
       await saveAndExpect(page, touch(testInfo));
-      await expect(exactText(page, "Today: $9.99 from 1 sale")).toBeVisible();
+      await expectHomeLine(page, "Income $9.99"); // CHANGED (T1.18): was "Today: $9.99 from 1 sale"
       await goToStream(page, stream);
       await expect(rows(page)).toHaveCount(1);
       expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Online"], "$9.99");
@@ -1627,11 +1665,15 @@ test.describe("other streams: saving", () => {
     });
   }
 
-  test("a $0.00 income can be saved: Home says \"Today: $0.00 from 1 sale\"", async ({ page }, testInfo) => {
+  test("a $0.00 income can be saved: Home says \"Income $0.00\" and Social media lists it (CHANGED (T1.18))", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: "Social media", amount: "0", payment: "Online" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $0.00 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $0.00"); // CHANGED (T1.18): was "Today: $0.00 from 1 sale"
+    // CHANGED (T1.18): Home no longer counts rows, so the saved row is checked on Social media.
+    await goToStream(page, "Social media");
+    await expect(rows(page)).toHaveCount(1);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Online"], "$0.00");
   });
 
   test('Vendor shelf rental $45 with the event "Pretend gallery shelf" is listed with that event', async ({
@@ -1665,7 +1707,7 @@ test.describe("other streams: saving", () => {
     await fillForm(page, { stream: "Online sales", amount: "23.50", payment: "Online" });
     await saveButton(page).dblclick();
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await expect(exactText(page, "Today: $23.50 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $23.50"); // CHANGED (T1.18): was "Today: $23.50 from 1 sale"
   });
 
   test("pressing Enter in the Amount field saves (the phone keyboard's Go key)", async ({ page }) => {
@@ -1673,7 +1715,7 @@ test.describe("other streams: saving", () => {
     await fillForm(page, { stream: "Online sales", amount: "7.25", payment: "Card" });
     await amountField(page).press("Enter");
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await expect(exactText(page, "Today: $7.25 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $7.25"); // CHANGED (T1.18): was "Today: $7.25 from 1 sale"
   });
 });
 
@@ -1734,7 +1776,7 @@ test.describe("a missing stream", () => {
     await expect(streamField(page)).toBeFocused();
     await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
     await goHomeByNav(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 
   test("with the date emptied and no stream, focus goes to Date (first in order) and both errors show", async ({
@@ -1784,7 +1826,7 @@ test.describe("Sales at events: missing or rejected amounts", () => {
     await expect(cashField(page)).toBeFocused();
     await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
     await goHomeByNav(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 
   test(`with Cash filled and Card empty, only "${ERROR_CARD_EMPTY}" shows and focus moves to Card`, async ({
@@ -1825,7 +1867,7 @@ test.describe("Sales at events: missing or rejected amounts", () => {
         await expect(field(page)).toBeFocused();
         await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
         await goHomeByNav(page, touch(testInfo));
-        await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+        await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
       });
     }
   }
@@ -1867,7 +1909,7 @@ test.describe("other streams: missing or rejected amounts and payment method", (
       await expect(readsAs(page)).toHaveCount(0);
       await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
       await goHomeByNav(page, touch(testInfo));
-      await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+      await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
     });
   }
 
@@ -1890,7 +1932,7 @@ test.describe("other streams: missing or rejected amounts and payment method", (
     await expect(paymentRadio(page, "Cash")).toBeFocused();
     await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
     await goHomeByNav(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 
   test("with the amount empty and no payment method, both errors show and focus goes to Amount (first in order)", async ({
@@ -2010,7 +2052,7 @@ test.describe("pre-fill from the page address", () => {
     await expect.poll(() => selectedText(eventField(page))).toBe(COMIC_CON);
     await fillForm(page, { cash: "1,000", card: "2,000" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $3,000.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $3,000.00"); // CHANGED (T1.18): was "Today: $3,000.00 from 2 sales"
     // CHANGED (T1.17b): on Sales at events; a linked row also shows its payment label (S5).
     await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
@@ -2086,7 +2128,7 @@ test.describe("after Save: the safe back address", () => {
       await openFormFromHome(page, formWithBack(value));
       await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
       await saveAndExpect(page, touch(testInfo), "/", "Home");
-      await expect(exactText(page, "Today: $5.00 from 1 sale")).toBeVisible();
+      await expectHomeLine(page, "Income $5.00"); // CHANGED (T1.18): was "Today: $5.00 from 1 sale"
     });
   }
 
@@ -2100,7 +2142,7 @@ test.describe("after Save: the safe back address", () => {
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
     // Still the same page session (Back was a client-side move), so the income is there.
-    await expect(exactText(page, "Today: $5.00 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $5.00"); // CHANGED (T1.18): was "Today: $5.00 from 1 sale"
   });
 
   test("opening the form again after a save shows a fresh form", async ({ page }, testInfo) => {
@@ -2140,7 +2182,7 @@ test.describe("Cancel", () => {
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await press(cancelLink(page), touch(testInfo));
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 
   // CHANGED (T1.17b): was "after Cancel, Transactions still has no entries".
@@ -2334,7 +2376,7 @@ test.describe("on a phone at 320×568 with 200% text", () => {
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveButton(page).scrollIntoViewIfNeeded();
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $350.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $350.00"); // CHANGED (T1.18): was "Today: $350.00 from 2 sales"
   });
 
   test("on a phone at 320×568 and 200% text, a one-amount income can still be saved and counted on Home", async ({
@@ -2350,7 +2392,7 @@ test.describe("on a phone at 320×568 with 200% text", () => {
     await press(label, touch(testInfo));
     await saveButton(page).scrollIntoViewIfNeeded();
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $1,234.56 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $1,234.56"); // CHANGED (T1.18): was "Today: $1,234.56 from 1 sale"
   });
 });
 
@@ -2498,7 +2540,7 @@ test.describe("T1.12b: with back=/income/new, Save starts a fresh form", () => {
     await expectNoErrorsShown(page);
   });
 
-  test("a second valid Save on the fresh form adds a second income and goes Home: \"Today: $12.00 from 2 sales\" (500 + 700 cents)", async ({
+  test("a second valid Save on the fresh form adds a second income and goes Home: \"Income $12.00\" (500 + 700 cents)", async ({
     page,
   }, testInfo) => {
     await openForm(page, SELF_BACK);
@@ -2509,10 +2551,10 @@ test.describe("T1.12b: with back=/income/new, Save starts a fresh form", () => {
     await fillForm(page, { stream: "Wholesale", amount: "7", payment: "Card" });
     // The address no longer has ?back= (I9), so this Save goes to Home.
     await saveAndExpect(page, touch(testInfo), "/", "Home");
-    await expect(exactText(page, "Today: $12.00 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $12.00"); // CHANGED (T1.18): was "Today: $12.00 from 2 sales"
   });
 
-  test("takings then a one-amount income, both through the self-returning form: Home says \"Today: $355.00 from 3 sales\" (10000 + 25000 + 500 cents)", async ({
+  test("takings then a one-amount income, both through the self-returning form: Home says \"Income $355.00\" (10000 + 25000 + 500 cents)", async ({
     page,
   }, testInfo) => {
     await openForm(page, SELF_BACK);
@@ -2523,7 +2565,7 @@ test.describe("T1.12b: with back=/income/new, Save starts a fresh form", () => {
     await fillForm(page, { stream: "Commissions", amount: "5", payment: "Cash" });
     // The address no longer has ?back= (I9), so this Save goes to Home.
     await saveAndExpect(page, touch(testInfo), "/", "Home");
-    await expect(exactText(page, "Today: $355.00 from 3 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $355.00"); // CHANGED (T1.18): was "Today: $355.00 from 3 sales"
   });
 });
 
@@ -2620,7 +2662,7 @@ test.describe("T1.12b: back is capped at 200 characters", () => {
     await openForm(page, `?back=${encodeURIComponent(OVER_LIMIT)}`);
     await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
     await saveAndExpect(page, touch(testInfo), "/", "Home");
-    await expect(exactText(page, "Today: $5.00 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $5.00"); // CHANGED (T1.18): was "Today: $5.00 from 1 sale"
   });
 });
 
@@ -2935,7 +2977,7 @@ test.describe("T1.16b: the amount cap in Cash and Card (Sales at events)", () =>
       await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
       await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
       await goHomeByNav(page, touch(testInfo));
-      await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+      await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
     });
 
     test(`${label} "9999999.991" (three decimals): Save shows the format message, not the cap message`, async ({
@@ -2992,13 +3034,13 @@ test.describe("T1.16b: the amount cap in Cash and Card (Sales at events)", () =>
     await expect(exactText(page, "Total $19,999,999.98")).toBeVisible();
   });
 
-  test('saving Cash and Card both "$9,999,999.99" returns Home with "Today: $19,999,999.98 from 2 sales"', async ({
+  test('saving Cash and Card both "$9,999,999.99" returns Home with "Income $19,999,999.98"', async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "$9,999,999.99", card: "9,999,999.99" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $19,999,999.98 from 2 sales")).toBeVisible();
+    await expectHomeLine(page, "Income $19,999,999.98"); // CHANGED (T1.18): was "Today: $19,999,999.98 from 2 sales"
   });
 
   test("saved Cash and Card at the cap are listed as two rows of $9,999,999.99", async ({ page }, testInfo) => {
@@ -3020,13 +3062,13 @@ test.describe("T1.16b: the amount cap in Amount (other streams)", () => {
     expect(await describedByTexts(amountField(page))).toContain("Reads as $9,999,999.99");
   });
 
-  test('Wholesale "$9,999,999.99" by Bank transfer saves: Home says "Today: $9,999,999.99 from 1 sale"', async ({
+  test('Wholesale "$9,999,999.99" by Bank transfer saves: Home says "Income $9,999,999.99"', async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: "Wholesale", amount: "$9,999,999.99", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await expect(exactText(page, "Today: $9,999,999.99 from 1 sale")).toBeVisible();
+    await expectHomeLine(page, "Income $9,999,999.99"); // CHANGED (T1.18): was "Today: $9,999,999.99 from 1 sale"
   });
 
   test('Amount "10000000" shows no "Reads as" while typing', async ({ page }) => {
@@ -3073,7 +3115,7 @@ test.describe("T1.16b: the amount cap in Amount (other streams)", () => {
     await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
     await expect(page).toHaveURL(urlOnThisServer(page, FORM_PATH));
     await goHomeByNav(page, touch(testInfo));
-    await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
+    await expectHomeLine(page, HOME_NO_INCOME); // CHANGED (T1.18)
   });
 
   test('Amount "10000000" with no payment method: both errors show and focus goes to Amount (first in order)', async ({

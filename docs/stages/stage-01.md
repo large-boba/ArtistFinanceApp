@@ -798,7 +798,7 @@ Evidence:
   - **Logged for the next test round:** event-date wording now lives in two places (`formatEventDates`, unit-tested, and the `EventDates` component). The e2e exact-text tests catch any drift today. A shared pure "date parts" helper would make it one source.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1090/1090). `CI=1 npx playwright test` gave **2538 passed, 0 failed** (19.8 minutes). The comment fix came after the run; lint was re-run.
 
-### T1.18 — Home summary: this month                         Status: tests
+### T1.18 — Home summary: this month                         Status: done
 Owner agent: backend-engineer (one small date helper), then frontend-engineer (Home)   Tests: test-engineer (Vitest + Playwright)   Security review: no
 Guide: §12 (main profit view, simplified for pretend data); DECISIONS.md "Navigation" (report figures live on Home and the event and stream pages).
 Outcome:
@@ -816,6 +816,20 @@ Outcome:
 Out of scope: a full reports screen (Stage 6); choosing other periods.
 Done when: the tests pass, including the owner's example dated this month (Income $4,500.00, Expenses $999.00, Net $3,501.00); `npm run check` exits 0.
 Evidence:
+- **Tests first (test-engineer):**
+  - `monthRange` (53 unit tests: every month, leap and non-leap Februaries, century years, bad input);
+  - `formatMonthForDisplay` (34 unit tests);
+  - the `totalsForDate` tests removed with the function;
+  - `e2e/home.spec.ts` H1–H11, including the owner's example and the re-targeted live-region test (D10);
+  - add-button, income-form, expense-form and events specs updated where they read Home's old "Today" lines.
+  - Red run: 54 unit and 307 browser tests failed for the intended reason (no helper, no summary). Proof run: 2600 passed against a scratch build, then restored with `sha256sum -c`.
+- **Build:**
+  - backend-engineer added `monthRange` and removed `totalsForDate`;
+  - frontend-engineer added `src/components/MonthSummary.tsx` and `formatMonthForDisplay`, wired it into Home, and deleted `TodayTotals.tsx`.
+  - Builder's run: 2600 passed.
+- **Code review:** ACCEPT, no blocking findings. Lead tidy-up: the `strong` flag renamed to `isNet`. Follow-up logged in DECISIONS.md: Stage 4 refunds will reduce Home's Net.
+- **Lead's own run (after the tidy-up, clean `.next`):** `npm run check` exit 0 (1163 unit tests passed, check-rules 0 errors, 0 warnings); `CI=1 npx playwright test`: 2600 passed, 368 skipped (phone-only or desktop-only), 0 failed (19.8m).
+- **Screenshot (phone, pretend data):** "This month / October 2026 / Income $4,500.00 / Expenses $999.00 / Net $3,501.00".
 
 ### T1.9 — Owner tries it on a real phone                   Status: todo
 Owner agent: **owner**

@@ -511,46 +511,6 @@ export function subtractCents(a: number, b: number): number {
 // ─── Reading the entries ─────────────────────────────────────────────────────
 
 /**
- * Totals for one calendar day: the income in cents (every stream), how many
- * income rows (zero-amount ones count), and the expenses in cents. The names
- * salesCents and salesCount stay until T1.18 replaces Home's "today" wording.
- * Exact whole-cent sums. Throws RangeError for a bad date, or if a total would
- * go past Number.MAX_SAFE_INTEGER cents (beyond that it could no longer be
- * exact). Negative amounts are rejected for now; refunds arrive in Stage 4 as
- * linked negative income rows, and real totals move to SQL (§12).
- * Not limited by the owner's $9,999,999.99 cap (T1.16b): that rule is for
- * saving entries, and a reader adds up whatever it's given.
- */
-export function totalsForDate(
-  entries: readonly Entry[],
-  date: string,
-): { salesCents: number; salesCount: number; expensesCents: number } {
-  checkDate(date);
-  let salesCents = 0;
-  let salesCount = 0;
-  let expensesCents = 0;
-
-  // Adds one entry's amount (refusing a negative one for now) to a total.
-  // On purpose this does NOT use the owner's cap (checkAmountCents): the cap
-  // is a rule for what may be SAVED. This function only READS entries, so it
-  // must add up exactly whatever it's given, refusing only what it can't add
-  // exactly (fractions of a cent, or totals past Number.MAX_SAFE_INTEGER).
-  const add = (total: number, amount: number): number =>
-    addCents(total, checkWholeNonNegativeCents(amount, "amountCents"));
-
-  for (const entry of entries) {
-    if (entry.date !== date) continue;
-    if (entry.kind === "income") {
-      salesCents = add(salesCents, entry.amountCents);
-      salesCount += 1;
-    } else {
-      expensesCents = add(expensesCents, entry.amountCents);
-    }
-  }
-  return { salesCents, salesCount, expensesCents };
-}
-
-/**
  * The entries newest first: a later date comes first, and on the same date the
  * entry added later comes first (an edit doesn't count as adding). Returns a
  * new list holding the same entry objects; the given list isn't reordered.

@@ -141,8 +141,9 @@
 // F7. Save adds exactly ONE expense (also when Save is double-clicked, or
 //     Enter is pressed in a field) through the store's "add-expense" action,
 //     then returns to Home ("/") with a client-side move (CHANGED (T1.13): or
-//     to the safe ?back= path, F15), where "Today's
-//     expenses: $X" (T1.6 D3) already includes it. Supplier and notes are
+//     to the safe ?back= path, F15), where Home's
+//     "Expenses $X" line (CHANGED (T1.18): was "Today's expenses: $X"; the
+//     month's total, home.spec.ts H3) already includes it. Supplier and notes are
 //     stored trimmed. Cancel adds nothing and returns to Home. Opening the
 //     form again shows a fresh, empty form.
 //
@@ -302,8 +303,10 @@ const NOT_ASSIGNED = "Not assigned yet";
 const HOME_NOTE_OLD = "These buttons start working soon";
 const HOME_NOTE_NEW = "Practice mode: entries disappear when you refresh or close the app.";
 
-const HOME_EMPTY_EXPENSES = "Today's expenses: $0.00";
-const HOME_EMPTY_SALES = "Today: $0.00 from 0 sales";
+// CHANGED (T1.18): Home's month lines (home.spec.ts H3); were
+// "Today's expenses: $0.00" and "Today: $0.00 from 0 sales".
+const HOME_EMPTY_EXPENSES = "Expenses $0.00";
+const HOME_EMPTY_SALES = "Income $0.00";
 
 const HOOK_NAME = "__bentoTest";
 const HOOK_WAIT_MS = 10_000;
@@ -461,6 +464,27 @@ async function pressExpenseControl(page: Page, hasTouch: boolean): Promise<void>
 /** An element in <main> whose whole text is exactly `text`. */
 function exactText(page: Page, text: string): Locator {
   return main(page).getByText(text, { exact: true });
+}
+
+/**
+ * CHANGED (T1.18): Home's "This month" section (home.spec.ts H3) has a line
+ * whose rendered text, whitespace collapsed, is exactly `text` (e.g.
+ * "Expenses $23.50"). Replaces the old exact "Today's expenses: $X" element.
+ */
+async function expectHomeLine(page: Page, text: string): Promise<void> {
+  const section = page.getByRole("main").getByRole("region", { name: "This month", exact: true });
+  await expect(section).toHaveCount(1);
+  await expect
+    .poll(
+      () =>
+        section.evaluate((root) =>
+          [root, ...Array.from(root.querySelectorAll("*"))]
+            .filter((el) => el.getClientRects().length > 0)
+            .map((el) => ((el as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim()),
+        ),
+      { message: `Home's "This month" has a line reading exactly "${text}"` },
+    )
+    .toContain(text);
 }
 
 /** Any "Reads as …" feedback in <main>. */
@@ -804,12 +828,12 @@ test.describe("opening the form", () => {
       { date: SYDNEY_TODAY, amountCents: 2350, categoryId: "printing", supplier: "Officeworks" },
       { date: SYDNEY_TODAY, amountCents: 3299, categoryId: "software", supplier: "Adobe" },
     ]);
-    await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
+    await expectHomeLine(page, "Expenses $56.49"); // CHANGED (T1.18): was "Today's expenses: $56.49"
     await pressExpenseControl(page, touch(testInfo));
     await expect(page).toHaveURL(urlWithPath(HOME_FORM_ADDRESS));
     await page.goBack();
     await expect(page).toHaveURL(urlWithPath("/"));
-    await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
+    await expectHomeLine(page, "Expenses $56.49"); // CHANGED (T1.18): was "Today's expenses: $56.49"
   });
 });
 
@@ -1017,11 +1041,11 @@ test.describe("the date", () => {
     expect(await rowLines(rows(page).first())).toEqual(["15/06/2026", "Printing", "$5.00"]);
   });
 
-  test("an expense dated another day doesn't change today's expenses on Home", async ({ page }, testInfo) => {
+  test("an expense dated 30 June (the month before, in Sydney) doesn't change Home's expenses for July (CHANGED (T1.18): was \"another day\")", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { date: "2026-06-30", amount: "5", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, HOME_EMPTY_EXPENSES)).toBeVisible();
+    await expectHomeLine(page, HOME_EMPTY_EXPENSES); // CHANGED (T1.18)
   });
 
   test(`emptying the date and pressing Save shows "${ERROR_DATE}" and adds nothing`, async ({ page }, testInfo) => {
@@ -1051,11 +1075,11 @@ test.describe("the date late at night in Perth", () => {
     await expect(dateField(page)).toHaveValue(PERTH_TODAY);
   });
 
-  test("an expense saved with the default date counts in Perth's today on Home", async ({ page }, testInfo) => {
+  test("an expense saved with the default date counts in Perth's month on Home (CHANGED (T1.18))", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { amount: "5", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $5.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $5.00"); // CHANGED (T1.18): was "Today's expenses: $5.00"
   });
 });
 
@@ -1157,7 +1181,7 @@ test.describe("rejected amounts", () => {
       await expect(exactText(page, error)).toBeVisible();
       await expect(page).toHaveURL(urlWithPath(FORM_PATH));
       await goToTab(page, "Home", "/", touch(testInfo));
-      await expect(exactText(page, HOME_EMPTY_EXPENSES)).toBeVisible();
+      await expectHomeLine(page, HOME_EMPTY_EXPENSES); // CHANGED (T1.18)
     });
 
     test(`"${typed}" (${why}): no "Reads as" text is shown`, async ({ page }, testInfo) => {
@@ -1308,7 +1332,7 @@ test.describe("the event prompt", () => {
       event: "Pretend comic convention",
     });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $1,234.50")).toBeVisible();
+    await expectHomeLine(page, "Expenses $1,234.50"); // CHANGED (T1.18): was "Today's expenses: $1,234.50"
   });
 
   test('saving an event & venue expense left on "Not assigned yet" returns Home and counts it', async ({
@@ -1317,7 +1341,7 @@ test.describe("the event prompt", () => {
     await openForm(page);
     await fillForm(page, { amount: "60", category: "Stall or table fees" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $60.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $60.00"); // CHANGED (T1.18): was "Today's expenses: $60.00"
   });
 
   test("picking an event, then switching to a production category, saves without the hidden event", async ({
@@ -1329,7 +1353,7 @@ test.describe("the event prompt", () => {
     await fillForm(page, { amount: "12", category: "Meals", event: "Pretend weekend market (today)" });
     await fillForm(page, { category: "Art materials" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $12.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $12.00"); // CHANGED (T1.18): was "Today's expenses: $12.00"
   });
 });
 
@@ -1342,14 +1366,14 @@ test.describe("saving a valid expense", () => {
     await saveAndExpectHome(page, touch(testInfo));
   });
 
-  test(`Home then says exactly "Today's expenses: $23.50", and the sales line is unchanged`, async ({
+  test(`Home then says exactly "Expenses $23.50", and the Income line is unchanged (CHANGED (T1.18))`, async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { supplier: "Officeworks", amount: "23.50", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $23.50")).toHaveCount(1);
-    await expect(exactText(page, HOME_EMPTY_SALES)).toBeVisible();
+    await expectHomeLine(page, "Expenses $23.50"); // CHANGED (T1.18): was "Today's expenses: $23.50"
+    await expectHomeLine(page, HOME_EMPTY_SALES); // CHANGED (T1.18)
   });
 
   test("the new expense adds to entries already in the store: $56.49 + $23.50 = $79.99", async ({
@@ -1361,12 +1385,12 @@ test.describe("saving a valid expense", () => {
       { date: SYDNEY_TODAY, amountCents: 2350, categoryId: "printing", supplier: "Officeworks" },
       { date: SYDNEY_TODAY, amountCents: 3299, categoryId: "software", supplier: "Adobe" },
     ]);
-    await expect(exactText(page, "Today's expenses: $56.49")).toBeVisible();
+    await expectHomeLine(page, "Expenses $56.49"); // CHANGED (T1.18): was "Today's expenses: $56.49"
     await pressExpenseControl(page, touch(testInfo));
     await waitForForm(page);
     await fillForm(page, { amount: "23.50", category: "Packaging" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $79.99")).toBeVisible();
+    await expectHomeLine(page, "Expenses $79.99"); // CHANGED (T1.18): was "Today's expenses: $79.99"
   });
 
   test("two expenses through the form add up exactly: $1,234.50 + $0.50 = $1,235.00", async ({
@@ -1380,7 +1404,7 @@ test.describe("saving a valid expense", () => {
     await fillForm(page, { amount: "0.5", category: "Phone" });
     await saveAndExpectHome(page, touch(testInfo));
     // 123450 + 50 = 123500 cents.
-    await expect(exactText(page, "Today's expenses: $1,235.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $1,235.00"); // CHANGED (T1.18): was "Today's expenses: $1,235.00"
   });
 
   test("a $0.00 expense can be saved and is listed as $0.00", async ({ page }, testInfo) => {
@@ -1444,7 +1468,7 @@ test.describe("saving a valid expense", () => {
     await fillForm(page, { amount: "23.50", category: "Printing" });
     await saveButton(page).dblclick();
     await expect(page).toHaveURL(urlWithPath("/"));
-    await expect(exactText(page, "Today's expenses: $23.50")).toBeVisible();
+    await expectHomeLine(page, "Expenses $23.50"); // CHANGED (T1.18): was "Today's expenses: $23.50"
   });
 
   test("pressing Enter in the Amount field saves (the phone keyboard's Go key)", async ({ page }) => {
@@ -1452,7 +1476,7 @@ test.describe("saving a valid expense", () => {
     await fillForm(page, { amount: "7.25", category: "Marketing" });
     await amountField(page).press("Enter");
     await expect(page).toHaveURL(urlWithPath("/"));
-    await expect(exactText(page, "Today's expenses: $7.25")).toBeVisible();
+    await expectHomeLine(page, "Expenses $7.25"); // CHANGED (T1.18): was "Today's expenses: $7.25"
   });
 
   test("opening the form again after a save shows a fresh form", async ({ page }, testInfo) => {
@@ -1475,7 +1499,7 @@ test.describe("saving a valid expense", () => {
     await fillForm(page, { amount: "23.50", category: "Printing" });
     await press(cancelLink(page), touch(testInfo));
     await expect(page).toHaveURL(urlWithPath("/"));
-    await expect(exactText(page, HOME_EMPTY_EXPENSES)).toBeVisible();
+    await expectHomeLine(page, HOME_EMPTY_EXPENSES); // CHANGED (T1.18)
   });
 });
 
@@ -1616,7 +1640,7 @@ test.describe("on a phone at 320×568 with 200% text", () => {
     await fillForm(page, { supplier: "Officeworks", amount: "23.50", category: "Printing" });
     await saveButton(page).scrollIntoViewIfNeeded();
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $23.50")).toBeVisible();
+    await expectHomeLine(page, "Expenses $23.50"); // CHANGED (T1.18): was "Today's expenses: $23.50"
   });
 });
 
@@ -1871,7 +1895,7 @@ test.describe("T1.13: the Income stream field", () => {
     await fillForm(page, { amount: "60", category: "Stall or table fees", event: COMIC_CON });
     await streamField(page).selectOption({ label: "Sales at events" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $60.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $60.00"); // CHANGED (T1.18): was "Today's expenses: $60.00"
   });
 
   for (const stream of STREAM_NAMES) {
@@ -1882,7 +1906,7 @@ test.describe("T1.13: the Income stream field", () => {
       await fillForm(page, { amount: "9.99", category: "Software" });
       await streamField(page).selectOption({ label: stream });
       await saveAndExpectHome(page, touch(testInfo));
-      await expect(exactText(page, "Today's expenses: $9.99")).toBeVisible();
+      await expectHomeLine(page, "Expenses $9.99"); // CHANGED (T1.18): was "Today's expenses: $9.99"
     });
   }
 
@@ -1998,7 +2022,7 @@ test.describe("T1.13: hidden Event and Income stream keep their value", () => {
     await streamField(page).selectOption({ label: "Wholesale" });
     await fillForm(page, { category: "Art materials" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $12.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $12.00"); // CHANGED (T1.18): was "Today's expenses: $12.00"
   });
 
   test("an event hidden by an operating category is not saved (no page error), while the stream is", async ({
@@ -2009,7 +2033,7 @@ test.describe("T1.13: hidden Event and Income stream keep their value", () => {
     await streamField(page).selectOption({ label: "Online sales" });
     await fillForm(page, { category: "Marketing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $8.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $8.00"); // CHANGED (T1.18): was "Today's expenses: $8.00"
   });
 });
 
@@ -2051,7 +2075,7 @@ test.describe("T1.13: pre-fill from the page address", () => {
     await expect(eventField(page)).toHaveCount(0);
     await expect.poll(() => selectedOptionText(streamField(page))).toBe("Sales at events");
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $15.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $15.00"); // CHANGED (T1.18): was "Today's expenses: $15.00"
   });
 
   test("?stream=online-sales, then Marketing: the stream is Online sales", async ({ page }) => {
@@ -2076,7 +2100,7 @@ test.describe("T1.13: pre-fill from the page address", () => {
     await fillForm(page, { amount: "40", category: "Printing" });
     await expect(exactText(page, PRODUCTION_NOTE)).toBeVisible();
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $40.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $40.00"); // CHANGED (T1.18): was "Today's expenses: $40.00"
   });
 
   test("pre-filled event and stream save with an event & venue cost (no page error)", async ({ page }, testInfo) => {
@@ -2084,7 +2108,7 @@ test.describe("T1.13: pre-fill from the page address", () => {
     await fillForm(page, { amount: "120", category: "Vendor shelf rent" });
     await expect.poll(() => selectedOptionText(eventField(page))).toBe(SHELF);
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $120.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $120.00"); // CHANGED (T1.18): was "Today's expenses: $120.00"
   });
 
   test("pre-fill works after a client-side move to the form too (?stream=wholesale)", async ({ page }) => {
@@ -2173,7 +2197,7 @@ test.describe("T1.13: the safe back address", () => {
       const home = urlOnThisServer(page, "/");
       await press(saveButton(page), touch(testInfo));
       await expect(page).toHaveURL(home);
-      await expect(exactText(page, "Today's expenses: $5.00")).toBeVisible();
+      await expectHomeLine(page, "Expenses $5.00"); // CHANGED (T1.18): was "Today's expenses: $5.00"
     });
 
     test(`with back set to ${why}, Cancel is a link to "/"`, async ({ page }) => {
@@ -2195,7 +2219,7 @@ test.describe("T1.13: the safe back address", () => {
     await page.goBack();
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
-    await expect(exactText(page, "Today's expenses: $5.00")).toBeVisible();
+    await expectHomeLine(page, "Expenses $5.00"); // CHANGED (T1.18): was "Today's expenses: $5.00"
   });
 });
 
@@ -2232,7 +2256,7 @@ test.describe("T1.13: the old rules with the new fields", () => {
     await streamField(page).selectOption({ label: "Sales at events" });
     await saveButton(page).dblclick();
     await expect(page).toHaveURL(urlWithPath("/"));
-    await expect(exactText(page, "Today's expenses: $23.50")).toBeVisible();
+    await expectHomeLine(page, "Expenses $23.50"); // CHANGED (T1.18): was "Today's expenses: $23.50"
   });
 
   const NARROW = { width: 320, height: 568 } as const;
@@ -2373,11 +2397,11 @@ test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
     });
   }
 
-  test('"9999999.99" saves: Home says exactly "Today\'s expenses: $9,999,999.99"', async ({ page }, testInfo) => {
+  test('"9999999.99" saves: Home says exactly "Expenses $9,999,999.99" (CHANGED (T1.18))', async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { amount: "9999999.99", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $9,999,999.99")).toBeVisible();
+    await expectHomeLine(page, "Expenses $9,999,999.99"); // CHANGED (T1.18): was "Today's expenses: $9,999,999.99"
   });
 
   // CHANGED (T1.17b): was "listed on Transactions".
@@ -2433,7 +2457,7 @@ test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
       await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
       await expect(page).toHaveURL(urlWithPath(FORM_PATH));
       await goToTab(page, "Home", "/", touch(testInfo));
-      await expect(exactText(page, HOME_EMPTY_EXPENSES)).toBeVisible();
+      await expectHomeLine(page, HOME_EMPTY_EXPENSES); // CHANGED (T1.18)
     });
   }
 
@@ -2509,7 +2533,7 @@ test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
     await expect(exactText(page, ERROR_AMOUNT_INVALID)).toHaveCount(0);
   });
 
-  test('after fixing "10000000" to "9999999.99", Save adds it: Home says "Today\'s expenses: $9,999,999.99"', async ({
+  test('after fixing "10000000" to "9999999.99", Save adds it: Home says "Expenses $9,999,999.99" (CHANGED (T1.18))', async ({
     page,
   }, testInfo) => {
     await openForm(page);
@@ -2518,6 +2542,6 @@ test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
     await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
     await amountField(page).fill("9999999.99");
     await saveAndExpectHome(page, touch(testInfo));
-    await expect(exactText(page, "Today's expenses: $9,999,999.99")).toBeVisible();
+    await expectHomeLine(page, "Expenses $9,999,999.99"); // CHANGED (T1.18): was "Today's expenses: $9,999,999.99"
   });
 });

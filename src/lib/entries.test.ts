@@ -10,6 +10,20 @@
 //     card); event & venue and operating costs can carry an income-stream
 //     tag; each event can hold one "Other costs" figure. DECISIONS.md "Event
 //     takings", "Linking costs to events and streams", "Event 'Other costs'".
+//   - REMOVED (T1.18, "Home summary: this month"; lead's decision 2026-10-29):
+//     totalsForDate and all of its tests. Home now shows the month's totals
+//     from rangeTotals (src/lib/summaries.ts), so totalsForDate has no user
+//     and is deleted from entries.ts. What its tests proved is covered by
+//     rangeTotals' tests in src/lib/summaries.test.ts: every stream and every
+//     expense group counts, $0 rows add 0, other dates are left out, other
+//     costs never count, exact sums to MAX_SAFE_INTEGER and a RangeError past
+//     it (income and expenses), a RangeError for a bad date, and the totals
+//     follow edits and deletes (the last three carried over there as ADDED
+//     (T1.18)). The income-row COUNT ("from N sales") has no successor: Home
+//     no longer shows it. The removed blocks were "totalsForDate (income rows
+//     count where sales did)", "totalsForDate with event takings", one
+//     "totalsForDate ignores them" case in decision 14's block, and one
+//     T1.16b sum case.
 //
 // Written by test-engineer BEFORE the code. The builder must not edit this
 // file; disputes go to the project lead.
@@ -80,10 +94,8 @@
 //   };
 //
 //   export function entriesReducer(state: EntriesState, action: EntriesAction): EntriesState
-//   export function totalsForDate(entries: readonly Entry[], date: string):
-//     { salesCents: number; salesCount: number; expensesCents: number }
-//     (T1.10: salesCents/salesCount now add up INCOME rows of every stream.
-//     The names stay until T1.18 replaces Home's "today" wording.)
+//   (REMOVED (T1.18): export function totalsForDate. entries.ts must no
+//   longer export it; see the header.)
 //   export function entriesNewestFirst(entries: readonly Entry[]): Entry[]
 //
 // DECISIONS (made here so the tests can be exact; the lead confirms them):
@@ -114,8 +126,8 @@
 //     income eventId → null, notes → "". Income has NO default payment method
 //     and no default stream (T1.10, lead): leaving either out throws.
 //  6. Edit keeps the entry's place in insertion order (and its id and kind).
-//  7. totalsForDate throws RangeError for a bad date, and when a total would
-//     pass Number.MAX_SAFE_INTEGER cents (it can no longer be exact).
+//  7. (REMOVED (T1.18) with totalsForDate; rangeTotals keeps the same rule,
+//     see src/lib/summaries.test.ts.)
 //  8. Newest first: later date first; on the same date, the entry added later
 //     comes first. An edit doesn't count as "adding".
 //  9. Events (lead's ruling, 2026-10-25, extended for T1.10). The state holds
@@ -180,8 +192,8 @@
 //     notes, so the old "note" or any other key is a RangeError.
 //     "clear-event-other-costs" removes it; clearing an event that has none
 //     returns the VERY SAME state object (like deleting a missing id), but an
-//     unknown event id is a RangeError. Other costs are never entries, so totalsForDate and
-//     entriesNewestFirst never see them, and every other action keeps them as
+//     unknown event id is a RangeError. Other costs are never entries, so entriesNewestFirst
+//     (and rangeTotals, summaries.test.ts) never see them, and every other action keeps them as
 //     they were. The reducer stays pure: the old state never changes.
 //     Test engineer's reading: otherCosts is a plain object (so it compares
 //     with toStrictEqual and copies with JSON), and notes that aren't a string
@@ -213,7 +225,6 @@ import {
   entriesReducer,
   createEntriesState,
   PAYMENT_METHODS,
-  totalsForDate,
   type EntriesAction,
   type EntriesState,
   type Entry,
@@ -221,6 +232,7 @@ import {
   type IncomeInput,
   subtractCents,
 } from "@/lib/entries";
+import * as entriesModule from "@/lib/entries";
 import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -331,14 +343,6 @@ const expenseRow = (id: string, date: string, amountCents: number): Entry => ({
   streamId: null,
   notes: "",
 });
-
-/**
- * A frozen list of entries written out directly, WITHOUT the reducer (T1.16b).
- * Only for the sum tests: amounts above the owner's cap can't be added through
- * the store any more, but totalsForDate must still add up exactly whatever
- * it's given (decision 7).
- */
-const hugeEntries = (...rows: object[]): readonly Entry[] => deepFreeze(rows as Entry[]);
 
 // ─── Starting point and the lists ───────────────────────────────────────────
 
@@ -1560,169 +1564,6 @@ describe("explicit undefined: rejected on edit, a default on add", () => {
   });
 });
 
-// ─── Totals for a day ───────────────────────────────────────────────────────
-
-describe("totalsForDate (income rows count where sales did)", () => {
-  // Hand-checked dataset, income from several streams. On 2026-07-01:
-  //   income    i1 1500 (Sales at events, market) + i2 0 (Online sales)
-  //             + i4 2250 (Commissions) + i6 3333 (Vendor shelf rental, shelf)
-  //             + i7 17 (Social media)
-  //             = 1500 + 0 = 1500; + 2250 = 3750; + 3333 = 7083; + 17 = 7100
-  //             cents from 5 income rows (the 0 counts)
-  //   expenses  e1 4000 + e3 1234 = 5234 cents
-  // On 2026-06-30: i3 99999 (Wholesale) and e2 50000.
-  // On 2026-07-02: i5 700 (Subscription income), no expenses.
-  const dataset = () =>
-    frozenState(
-      addIncome("i1", "2026-07-01", 1500, { eventId: MARKET }),
-      addIncome("i2", "2026-07-01", 0, { streamId: ONLINE_SALES, paymentMethod: "online" }),
-      addExpense("e1", "2026-07-01", 4000),
-      addIncome("i3", "2026-06-30", 99999, { streamId: WHOLESALE, paymentMethod: "bank_transfer" }),
-      addIncome("i4", "2026-07-01", 2250, { streamId: COMMISSIONS, paymentMethod: "card" }),
-      addExpense("e2", "2026-06-30", 50000),
-      addIncome("i5", "2026-07-02", 700, { streamId: SUBSCRIPTIONS, paymentMethod: "online" }),
-      {
-        type: "add-expense",
-        id: "e3",
-        expense: { date: "2026-07-01", supplier: "Craft Fair Co", amountCents: 1234, categoryId: STALL_FEES },
-      },
-      addIncome("i6", "2026-07-01", 3333, { streamId: VENDOR_SHELF, paymentMethod: "bank_transfer", eventId: SHELF }),
-      addIncome("i7", "2026-07-01", 17, { streamId: SOCIAL_MEDIA, paymentMethod: "other" }),
-    ).entries;
-
-  it("sums the day's income from every stream and the expenses, counting the zero-amount income (7100 from 5; 5234)", () => {
-    expect(totalsForDate(dataset(), "2026-07-01")).toStrictEqual({
-      salesCents: 7100,
-      salesCount: 5,
-      expensesCents: 5234,
-    });
-  });
-
-  it("excludes other dates: 30 June has only its own income and expense", () => {
-    expect(totalsForDate(dataset(), "2026-06-30")).toStrictEqual({
-      salesCents: 99999,
-      salesCount: 1,
-      expensesCents: 50000,
-    });
-  });
-
-  it("excludes other dates: 2 July has one income and no expenses", () => {
-    expect(totalsForDate(dataset(), "2026-07-02")).toStrictEqual({
-      salesCents: 700,
-      salesCount: 1,
-      expensesCents: 0,
-    });
-  });
-
-  it("counts every one of the seven streams: 1 + 10 + 100 + 1000 + 10000 + 100000 + 1000000 = 1111111 from 7", () => {
-    // One income per stream, each a different power of ten, so a stream left
-    // out would show as a missing digit 1 in the total.
-    const entries = frozenState(
-      ...ALL_STREAMS.map((streamId, i) => addIncome(`i${i}`, TODAY, 10 ** i, { streamId })),
-    ).entries;
-    expect(totalsForDate(entries, TODAY)).toStrictEqual({ salesCents: 1111111, salesCount: 7, expensesCents: 0 });
-  });
-
-  it("is all zeros for a day with no entries", () => {
-    expect(totalsForDate(dataset(), "2026-07-03")).toStrictEqual({ salesCents: 0, salesCount: 0, expensesCents: 0 });
-  });
-
-  it("is all zeros with no entries at all", () => {
-    expect(totalsForDate([], "2026-07-01")).toStrictEqual({ salesCents: 0, salesCount: 0, expensesCents: 0 });
-  });
-
-  it("counts a day with only a zero income as 1 income row of 0 cents", () => {
-    const entries = frozenState(addIncome("i1", TODAY, 0)).entries;
-    expect(totalsForDate(entries, TODAY)).toStrictEqual({ salesCents: 0, salesCount: 1, expensesCents: 0 });
-  });
-
-  it("updates after a delete: removing i4 (2250) leaves 7100 − 2250 = 4850 from 4", () => {
-    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), { type: "delete", id: "i4" });
-    expect(totalsForDate(after.entries, "2026-07-01")).toStrictEqual({
-      salesCents: 4850,
-      salesCount: 4,
-      expensesCents: 5234,
-    });
-  });
-
-  it("updates after an edit: i1 1500 → 1999 gives 7100 + 499 = 7599", () => {
-    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
-      type: "edit",
-      id: "i1",
-      changes: { amountCents: 1999 },
-    });
-    expect(totalsForDate(after.entries, "2026-07-01")).toStrictEqual({
-      salesCents: 7599,
-      salesCount: 5,
-      expensesCents: 5234,
-    });
-  });
-
-  it("an income's stream change doesn't change the day's total: i4 Commissions → Wholesale is still 7100 from 5", () => {
-    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
-      type: "edit",
-      id: "i4",
-      changes: { streamId: WHOLESALE },
-    });
-    expect(totalsForDate(after.entries, "2026-07-01")).toStrictEqual({
-      salesCents: 7100,
-      salesCount: 5,
-      expensesCents: 5234,
-    });
-  });
-
-  it("moves an entry between days when its date is edited: e1 (4000) to 30 June", () => {
-    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
-      type: "edit",
-      id: "e1",
-      changes: { date: "2026-06-30" },
-    });
-    // 1 July expenses: 1234. 30 June expenses: 50000 + 4000 = 54000.
-    expect(totalsForDate(after.entries, "2026-07-01").expensesCents).toBe(1234);
-    expect(totalsForDate(after.entries, "2026-06-30").expensesCents).toBe(54000);
-  });
-
-  it("moves an income between days when its date is edited: i6 (3333) to 30 June", () => {
-    const after = entriesReducer(deepFreeze({ ...createEntriesState(EVENT_IDS), entries: dataset() }), {
-      type: "edit",
-      id: "i6",
-      changes: { date: "2026-06-30" },
-    });
-    // 1 July: 7100 − 3333 = 3767 from 4. 30 June: 99999 + 3333 = 103332 from 2.
-    expect(totalsForDate(after.entries, "2026-07-01")).toStrictEqual({ salesCents: 3767, salesCount: 4, expensesCents: 5234 });
-    expect(totalsForDate(after.entries, "2026-06-30")).toStrictEqual({ salesCents: 103332, salesCount: 2, expensesCents: 50000 });
-  });
-
-  // CHANGED (T1.16b): the next three tests used to make their huge entries
-  // through the reducer, which now refuses anything above 999,999,999 cents.
-  // They now write the entries out directly (hugeEntries), so they still
-  // prove what they proved: totalsForDate, a READER like the summaries, adds
-  // up exactly to MAX_SAFE_INTEGER and throws past it (decision 7). The cap
-  // belongs to the store's actions, not to the sums.
-  it("is exact right up to MAX_SAFE_INTEGER: 4503599627370495 + 4503599627370496 = 9007199254740991", () => {
-    const entries = hugeEntries(incomeRow("i1", TODAY, 4503599627370495), incomeRow("i2", TODAY, 4503599627370496));
-    expect(totalsForDate(entries, TODAY)).toStrictEqual({
-      salesCents: 9007199254740991,
-      salesCount: 2,
-      expensesCents: 0,
-    });
-  });
-
-  it("throws RangeError when the day's income would pass MAX_SAFE_INTEGER (no longer exact)", () => {
-    const entries = hugeEntries(incomeRow("i1", TODAY, Number.MAX_SAFE_INTEGER), incomeRow("i2", TODAY, 1));
-    expect(() => totalsForDate(entries, TODAY)).toThrow(RangeError);
-  });
-
-  it("throws RangeError when the day's expenses would pass MAX_SAFE_INTEGER", () => {
-    const entries = hugeEntries(expenseRow("e1", TODAY, Number.MAX_SAFE_INTEGER), expenseRow("e2", TODAY, 1));
-    expect(() => totalsForDate(entries, TODAY)).toThrow(RangeError);
-  });
-
-  it("throws RangeError for a date that isn't YYYY-MM-DD, instead of quietly showing zeros", () => {
-    expect(() => totalsForDate(dataset(), "2026-7-1")).toThrow(RangeError);
-  });
-});
-
 // ─── Newest first ───────────────────────────────────────────────────────────
 
 describe("entriesNewestFirst", () => {
@@ -2067,27 +1908,6 @@ describe("event takings rows are ordinary income entries afterwards (decision 12
 
   it("newest first: day 2 card, day 2 cash, day 1 card, day 1 cash", () => {
     expect(ids(entriesNewestFirst(start().entries))).toStrictEqual(["k2", "c2", "k1", "c1"]);
-  });
-});
-
-describe("totalsForDate with event takings: both rows count (the owner's 3-day example)", () => {
-  const convention = () =>
-    frozenState(
-      addTakings("c1", "k1"), // 22 Jun: 40000 + 60000
-      addTakings("c2", "k2", { date: "2026-06-23", cashCents: 50000, cardCents: 150000 }),
-      addTakings("c3", "k3", { date: "2026-06-24", cashCents: 0, cardCents: 150000 }),
-    ).entries;
-
-  it("day 1: 40000 + 60000 = 100000 cents ($1,000) from 2 rows", () => {
-    expect(totalsForDate(convention(), "2026-06-22")).toStrictEqual({ salesCents: 100000, salesCount: 2, expensesCents: 0 });
-  });
-
-  it("day 2: 50000 + 150000 = 200000 cents ($2,000) from 2 rows", () => {
-    expect(totalsForDate(convention(), "2026-06-23")).toStrictEqual({ salesCents: 200000, salesCount: 2, expensesCents: 0 });
-  });
-
-  it("day 3: 0 + 150000 = 150000 cents ($1,500) from 2 rows (the $0 cash row counts)", () => {
-    expect(totalsForDate(convention(), "2026-06-24")).toStrictEqual({ salesCents: 150000, salesCount: 2, expensesCents: 0 });
   });
 });
 
@@ -2451,6 +2271,8 @@ describe("clear-event-other-costs (decision 14)", () => {
 describe("other costs are never entries and survive every other action (decision 14)", () => {
   // TODAY: takings cash 40000 + card 60000 = 100000 from 2 rows; table 50000.
   // The convention's other costs (60000) must never show up in any of these.
+  // (REMOVED (T1.18): the totalsForDate case; summaries.test.ts proves
+  // rangeTotals ignores other costs.)
   const start = () =>
     frozenState(
       addTakings("c1", "k1", { date: TODAY }),
@@ -2463,10 +2285,6 @@ describe("other costs are never entries and survive every other action (decision
     );
   const OTHER = { [CONVENTION]: { amountCents: 60000, notes: "stock" } };
   const OTHER_AND_SHELF = { ...OTHER, [SHELF]: { amountCents: 5, notes: "" } };
-
-  it("totalsForDate ignores them: 100000 from 2 income rows, expenses 50000 (not 110000)", () => {
-    expect(totalsForDate(start().entries, TODAY)).toStrictEqual({ salesCents: 100000, salesCount: 2, expensesCents: 50000 });
-  });
 
   it("setting them adds no entry: still exactly c1, k1, v1", () => {
     expect(ids(start().entries)).toStrictEqual(["c1", "k1", "v1"]);
@@ -2714,7 +2532,7 @@ describe("subtractCents", () => {
 // field as add's, so the cap applies to edits too (the bad-amount table above
 // already runs every bad amount through both edits).
 // addCents/subtractCents keep their ±MAX_SAFE_INTEGER limits (general helpers,
-// tested below unchanged), and so does totalsForDate (decision 7, a reader).
+// tested below unchanged), and so does rangeTotals (summaries.test.ts, a reader).
 //
 // The boundary pair, worked out by hand: 9,999,999 × 100 + 99 = 999,999,999
 // (allowed); 999,999,999 + 1 = 1,000,000,000 (refused).
@@ -2797,9 +2615,12 @@ describe("T1.16b: the store's amount cap, 999,999,999 cents", () => {
   it("an income edit to 1,000,000,000 cents is refused and the entry keeps 100", () => {
     expectRefused(frozenState(addIncome("i1", TODAY, 100)), { type: "edit", id: "i1", changes: { amountCents: OVER } });
   });
+});
 
-  it("two capped incomes on one day add up exactly: 999,999,999 + 999,999,999 = 1,999,999,998", () => {
-    const entries = frozenState(addIncome("i1", TODAY, CAP), addIncome("i2", TODAY, CAP)).entries;
-    expect(totalsForDate(entries, TODAY)).toStrictEqual({ salesCents: 1999999998, salesCount: 2, expensesCents: 0 });
+// ─── T1.18: totalsForDate is gone ────────────────────────────────────────────
+
+describe("T1.18: totalsForDate is removed (Home uses rangeTotals)", () => {
+  it("entries.ts no longer exports totalsForDate", () => {
+    expect(Object.hasOwn(entriesModule, "totalsForDate")).toBe(false);
   });
 });
