@@ -16,7 +16,7 @@
 // with a conditional `test.skip(...)`. On desktop they show as skipped.
 //
 // How data gets in: the test seam window.__bentoTest.addIncome / addExpense
-// (entries-list.spec.ts S0–S6) for what the pages SHOW, and the real forms
+// (test-seam.spec.ts S0–S6; entries-list.spec.ts until T1.17b) for what the pages SHOW, and the real forms
 // through "+ Add" for the round trips and the notes. Entries live in memory,
 // so every move between screens is client-side (links, tabs).
 //
@@ -344,7 +344,7 @@ async function seed(page: Page, income: readonly IncomeInput[], expenses: readon
       { timeout: HOOK_WAIT_MS },
     )
     .catch(() => {
-      throw new Error(`test seam window.${HOOK_NAME} never appeared (see entries-list.spec.ts)`);
+      throw new Error(`test seam window.${HOOK_NAME} never appeared (see test-seam.spec.ts)`);
     });
   await page.evaluate(
     ({ name, income, expenses }) => {
@@ -389,8 +389,10 @@ function hasToken(text: string, token: string): boolean {
   return new RegExp(`(^| )${escapeRegExp(token)}( |$)`).test(text);
 }
 
+// CHANGED (T1.17b): also finds a currency prefix ("A$35.50" on an en-US device); en-AU
+// amounts are found exactly as before.
 function amountsIn(text: string): string[] {
-  return text.match(/-?\$\d[\d,]*\.\d{2}/g) ?? [];
+  return text.match(/-?[A-Z]{0,2}\$\d[\d,]*\.\d{2}/g) ?? [];
 }
 
 /**
@@ -1107,4 +1109,22 @@ test.describe("T1.16: on a phone at 320×568 with 200% text", () => {
       expect(await outsideWidth(page, NARROW.width)).toEqual([]);
     });
   }
+});
+
+// ═══ ADDED (T1.17b): carried over from the retired entries-list.spec.ts ═════
+// Old D1 (the device's locale) for income rows, now on a stream page.
+
+test.describe("T1.17b: on a US-English device (from entries-list D1)", () => {
+  test.use({ locale: "en-US" });
+
+  test('Online sales rows show dates the US way and AUD as "A$": 6/30/2026 Card A$35.50, 6/28/2026 Online A$120.00', async ({
+    page,
+  }) => {
+    await openStream(page, ONLINE);
+    await seedMixed(page);
+    await expect(incomeRows(page)).toHaveCount(2);
+    expectRowParts(await textOf(incomeRows(page).nth(0)), ["6/30/2026", "Card"], "A$35.50");
+    expectRowParts(await textOf(incomeRows(page).nth(1)), ["6/28/2026", "Online", "Etsy order 1042"], "A$120.00");
+    await expectLine(region(page, "Income"), "Income A$155.50");
+  });
 });

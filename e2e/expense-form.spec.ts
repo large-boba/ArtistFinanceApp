@@ -16,6 +16,20 @@
 // also proves the move didn't reload the page. No assertion about the form
 // or the list changed.
 //
+// CHANGED (T1.17b): /transactions is removed, so the tests that checked a
+// saved expense on the Transactions list now check it on the Expenses tab
+// with goToExpenses() (the same client-side move, to /expenses, with the same
+// no-reload proof). A row there is the shared cost row (expenses.spec.ts X5):
+// its rendered lines are exactly the date, the category, the supplier (when
+// set), "<event> · <stream>" (when set), the notes (when set) and the
+// amount. So each check is now an exact list of lines, which also pins what
+// the old checks did (the supplier, trimmed; a blank supplier leaves no line;
+// one amount; the date shown the local way). Two things don't carry over and
+// are flagged to the lead: the old label "Expense" (every row on the Expenses
+// tab is an expense) and the row's <time datetime="YYYY-MM-DD"> element (the
+// shared row shows the date as text only). F9's role="list" claim moves to
+// the Expenses list's own <ul>, see below.
+//
 // Written by the test engineer BEFORE the code. Builders must not edit this
 // file; report a disputed test to the project lead instead.
 //
@@ -146,7 +160,9 @@
 //       (the Stage 1 lesson, true whichever buttons work).
 //     - The <ul>s carry role="list" (Safari/VoiceOver drops list semantics
 //       when list-style is none): the Transactions entries list and the nav's
-//       list.
+//       list. CHANGED (T1.17b): the Transactions list is gone; only the nav's
+//       list is checked here. Whether the new lists (Expenses, event and
+//       stream pages) need role="list" too is a question for the lead.
 //     - The date is taken when the form opens (F3).
 //
 // F10. No uncaught errors and no React hydration errors during any test.
@@ -554,41 +570,41 @@ async function goToTab(
 }
 
 /**
- * Moves to /transactions with a client-side move (no reload), without the
- * bottom navigation: T1.11 took Transactions out of the tabs. It calls
- * Next.js's own router, window.next.router.push, the same call a next/link
- * link makes. A marker put on `window` first must still be there afterwards,
- * which proves the page wasn't reloaded (a reload starts a fresh window).
+ * CHANGED (T1.17b): moves to the Expenses tab (/expenses) with a client-side
+ * move (no reload). It replaces goToTransactions(): /transactions is removed.
+ * It calls Next.js's own router, window.next.router.push, the same call a
+ * next/link link makes. A marker put on `window` first must still be there
+ * afterwards, which proves the page wasn't reloaded (a reload starts a fresh
+ * window and would wipe the saved expense).
  */
-async function goToTransactions(page: Page): Promise<void> {
+async function goToExpenses(page: Page): Promise<void> {
   const routerReady = await page.evaluate(
     () => typeof (window as unknown as { next?: { router?: { push?: unknown } } }).next?.router?.push === "function",
   );
   expect(routerReady, "Next.js's client router (window.next.router.push) is available").toBe(true);
   await page.evaluate(() => {
     (window as unknown as Record<string, unknown>).__t111SameDocument = true;
-    (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/transactions");
+    (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/expenses");
   });
-  await expect(page).toHaveURL(urlWithPath("/transactions"));
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Transactions");
+  await expect(page).toHaveURL(urlWithPath("/expenses"));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Expenses");
   expect(
     await page.evaluate(() => (window as unknown as Record<string, unknown>).__t111SameDocument),
-    "the move to /transactions didn't reload the page",
+    "the move to /expenses didn't reload the page",
   ).toBe(true);
 }
 
+/** CHANGED (T1.17b): the rows of the Expenses tab's "All expenses" list. */
 function rows(page: Page): Locator {
-  return main(page).getByRole("list").getByRole("listitem");
+  return main(page).getByRole("region", { name: "All expenses", exact: true }).getByRole("listitem");
 }
 
-/** A row's text as laid out, with runs of whitespace collapsed to one space. */
-async function rowText(row: Locator): Promise<string> {
-  return (await row.innerText()).replace(/\s+/g, " ").trim();
-}
-
-/** Every money amount in a piece of text ("$1,234.56", "A$0.01", ...). */
-function amountsIn(text: string): string[] {
-  return text.match(/[A-Z]{0,2}\$\d[\d,]*\.\d{2}/g) ?? [];
+/** T1.17b: a cost row's rendered lines (expenses.spec.ts X5), whitespace collapsed, empties dropped. */
+async function rowLines(row: Locator): Promise<string[]> {
+  return (await row.innerText())
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line !== "");
 }
 
 /** The texts of the elements an element's aria-describedby points at. */
@@ -612,7 +628,7 @@ async function seedExpenses(page: Page, expenses: readonly ExpenseInput[]): Prom
       { timeout: HOOK_WAIT_MS },
     )
     .catch(() => {
-      throw new Error(`test seam window.${HOOK_NAME} never appeared (see entries-list.spec.ts)`);
+      throw new Error(`test seam window.${HOOK_NAME} never appeared (see test-seam.spec.ts)`);
     });
   await page.evaluate(
     ({ name, expenses }) => {
@@ -995,10 +1011,10 @@ test.describe("the date", () => {
     await fillForm(page, { date: "2026-06-15", amount: "5", category: "Printing" });
     await expect(dateField(page)).toHaveValue("2026-06-15");
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Expenses tab; the date is the row's first line.
+    await goToExpenses(page);
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first().locator("time")).toHaveAttribute("datetime", "2026-06-15");
-    await expect(rows(page).first().locator("time")).toHaveText("15/06/2026");
+    expect(await rowLines(rows(page).first())).toEqual(["15/06/2026", "Printing", "$5.00"]);
   });
 
   test("an expense dated another day doesn't change today's expenses on Home", async ({ page }, testInfo) => {
@@ -1371,35 +1387,32 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { amount: "0", category: "Website" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page); // CHANGED (T1.17b): was Transactions
     await expect(rows(page)).toHaveCount(1);
-    expect(amountsIn(await rowText(rows(page).first()))).toEqual(["$0.00"]);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Website", "$0.00"]);
   });
 
-  test("on Transactions the new row shows Expense, the supplier, $23.50 and today's date", async ({
+  // CHANGED (T1.17b): was "on Transactions the new row shows Expense, the supplier, $23.50 and
+  // today's date". On the Expenses tab there's no "Expense" label (see the header).
+  test("on the Expenses tab the new row reads exactly 01/07/2026, Printing, Officeworks, $23.50", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { supplier: "Officeworks", amount: "23.50", category: "Printing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page);
     await expect(rows(page)).toHaveCount(1);
-    const row = rows(page).first();
-    const text = await rowText(row);
-    expect(text).toMatch(/\bExpense\b/);
-    expect(text).toMatch(/\bOfficeworks\b/);
-    expect(amountsIn(text)).toEqual(["$23.50"]);
-    await expect(row.locator("time")).toHaveAttribute("datetime", SYDNEY_TODAY);
-    await expect(row.locator("time")).toHaveText("01/07/2026");
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Printing", "Officeworks", "$23.50"]);
   });
 
-  test("a blank supplier is listed by its category name", async ({ page }, testInfo) => {
+  // CHANGED (T1.17b): the category is always shown now; a blank supplier leaves no line.
+  test("a blank supplier is listed by its category name, with no supplier line", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { amount: "150", category: "Accommodation" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page);
     await expect(rows(page)).toHaveCount(1);
-    expect(await rowText(rows(page).first())).toMatch(/\bAccommodation\b/);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Accommodation", "$150.00"]);
   });
 
   test('a supplier of only spaces counts as blank: the row shows "Merch manufacturing"', async ({
@@ -1408,18 +1421,20 @@ test.describe("saving a valid expense", () => {
     await openForm(page);
     await fillForm(page, { supplier: "    ", amount: "40", category: "Merch manufacturing" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page); // CHANGED (T1.17b): exact lines, so no blank supplier line
     await expect(rows(page)).toHaveCount(1);
-    expect(await rowText(rows(page).first())).toMatch(/\bMerch manufacturing\b/);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Merch manufacturing", "$40.00"]);
   });
 
   test('a supplier typed as "  Officeworks  " is listed trimmed', async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { supplier: "  Officeworks  ", amount: "23.50", category: "Printing", notes: "  A3 prints  " });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page); // CHANGED (T1.17b): was Transactions; the notes now show too, trimmed
     await expect(rows(page)).toHaveCount(1);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Printing", "Officeworks", "A3 prints", "$23.50"]);
     const raw = await rows(page).first().evaluate((el) => el.textContent ?? "");
+    expect(raw).not.toContain(" A3 prints ");
     expect(raw).toContain("Officeworks");
     expect(raw).not.toContain(" Officeworks ");
   });
@@ -1620,15 +1635,9 @@ test.describe("items carried over from T1.6", () => {
     await expect(exactText(page, HOME_NOTE_NEW)).toBeVisible();
   });
 
-  test('the Transactions entries list has role="list"', async ({ page }, testInfo) => {
-    await openForm(page);
-    await fillForm(page, { amount: "5", category: "Printing" });
-    await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
-    await expect(rows(page)).toHaveCount(1);
-    await expect(main(page).locator("ul, ol")).toHaveCount(1);
-    await expect(main(page).locator("ul, ol")).toHaveAttribute("role", "list");
-  });
+  // CHANGED (T1.17b): 'the Transactions entries list has role="list"' is retired with the
+  // page. The Expenses tab's list has no role="list" today; whether it should is a
+  // question for the lead (it would be a new requirement on the T1.17 lists).
 
   test('the bottom navigation\'s list has role="list"', async ({ page }) => {
     await open(page, "/");
@@ -1739,7 +1748,7 @@ function urlOnThisServer(page: Page, path: string): RegExp {
   return new RegExp(`^${escapeRegExp(origin)}${escapeRegExp(path)}$`);
 }
 
-/** A client-side move (no reload) through Next.js's router, as goToTransactions does. */
+/** A client-side move (no reload) through Next.js's router, as goToExpenses does. */
 async function goClientSide(page: Page, href: string): Promise<void> {
   const origin = new URL(page.url()).origin;
   await page.evaluate((target) => {
@@ -1877,17 +1886,17 @@ test.describe("T1.13: the Income stream field", () => {
     });
   }
 
-  test('an operating cost left on "No stream" saves and is listed on Transactions as Software, $9.99', async ({
+  // CHANGED (T1.17b): was "listed on Transactions as Software, $9.99". Exact lines, so
+  // "No stream" really saved no stream (there's no stream line).
+  test('an operating cost left on "No stream" saves and is listed on the Expenses tab as Software, $9.99, with no stream', async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { amount: "9.99", category: "Software" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page);
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bSoftware\b/);
-    expect(amountsIn(text)).toEqual(["$9.99"]);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Software", "$9.99"]);
   });
 });
 
@@ -2134,7 +2143,7 @@ test.describe("T1.13: the safe back address", () => {
     await press(saveButton(page), touch(testInfo));
     await expect(page).toHaveURL(target);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Events");
-    await goToTransactions(page);
+    await goToExpenses(page); // CHANGED (T1.17b): was Transactions
     await expect(rows(page)).toHaveCount(1);
   });
 
@@ -2148,8 +2157,10 @@ test.describe("T1.13: the safe back address", () => {
     await fillForm(page, { amount: "5", category: "Printing" });
     await press(cancelLink(page), touch(testInfo));
     await expect(page).toHaveURL(urlOnThisServer(page, "/events"));
-    await goToTransactions(page);
-    await expect(exactText(page, "No entries yet.")).toBeVisible();
+    // CHANGED (T1.17b): the Expenses tab's empty state, was Transactions' "No entries yet.".
+    await goToExpenses(page);
+    await expect(exactText(page, "No expenses yet.")).toBeVisible();
+    await expect(rows(page)).toHaveCount(0);
   });
 
   for (const [value, why] of [
@@ -2369,13 +2380,14 @@ test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
     await expect(exactText(page, "Today's expenses: $9,999,999.99")).toBeVisible();
   });
 
-  test('"$9,999,999.99" saves one expense, listed on Transactions as $9,999,999.99', async ({ page }, testInfo) => {
+  // CHANGED (T1.17b): was "listed on Transactions".
+  test('"$9,999,999.99" saves one expense, listed on the Expenses tab as $9,999,999.99', async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { amount: "$9,999,999.99", category: "Equipment" });
     await saveAndExpectHome(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToExpenses(page);
     await expect(rows(page)).toHaveCount(1);
-    expect(amountsIn(await rowText(rows(page).first()))).toEqual(["$9,999,999.99"]);
+    expect(await rowLines(rows(page).first())).toEqual(["01/07/2026", "Equipment", "$9,999,999.99"]);
   });
 
   test('typing "10000000" shows no "Reads as" text', async ({ page }) => {

@@ -8,8 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-// The five tabs, in order: Home, Events, Expenses, Income, Settings. (The
-// Transactions page still exists but is not a tab, so no tab is "current" there.)
+// The five tabs, in order: Home, Events, Expenses, Income, Settings.
 // Each tab: where it goes, its label, and a small picture. The pictures are
 // aria-hidden so a screen reader says just "Home", not "Home, icon".
 const TABS: { href: string; label: string; icon: ReactNode }[] = [

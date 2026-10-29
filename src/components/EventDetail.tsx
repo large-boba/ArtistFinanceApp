@@ -15,7 +15,7 @@
 // once, as a production cost on the day it was bought. Adding it to a
 // total as well would count the same money twice. So it shows on THIS page
 // only, as the extra line "Result after other costs", and the events list,
-// Home, the Expenses tab and the Transactions list never include it.
+// Home, the Expenses tab and the stream pages never include it.
 //
 // The page waits for useDevice (the device's language and today's date) before
 // it draws anything, because the pretend events' dates depend on "today".

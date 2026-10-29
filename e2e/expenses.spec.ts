@@ -14,7 +14,7 @@
 // skipped.
 //
 // How data gets in: the test seam window.__bentoTest.addIncome / addExpense
-// (entries-list.spec.ts S0–S6) for what the page SHOWS, and the real form
+// (test-seam.spec.ts S0–S6; entries-list.spec.ts until T1.17b) for what the page SHOWS, and the real form
 // through "+ Add" for the round trips and the owner's example. Entries live in
 // memory, so every move between screens is client-side (tabs, links, or
 // window.next.router.push, the call a next/link link makes).
@@ -293,7 +293,7 @@ async function seed(page: Page, income: readonly IncomeInput[], expenses: readon
       { timeout: HOOK_WAIT_MS },
     )
     .catch(() => {
-      throw new Error(`test seam window.${HOOK_NAME} never appeared (see entries-list.spec.ts)`);
+      throw new Error(`test seam window.${HOOK_NAME} never appeared (see test-seam.spec.ts)`);
     });
   await page.evaluate(
     ({ name, income, expenses }) => {
@@ -912,5 +912,76 @@ test.describe("T1.17: on a phone at 320×568 with 200% text", () => {
     await expectTotals(page, totalsLines("$10,000,034.49", "$10,000,189.99", "$79.99", "$20,000,304.47"));
     await expectNoSidewaysScroll(page);
     expect(await outsideWidth(page, NARROW.width)).toEqual([]);
+  });
+});
+
+// ═══ ADDED (T1.17b): carried over from the retired entries-list.spec.ts ═════
+// The Transactions list's claims that still apply to a list of costs, checked
+// on the Expenses tab (old D1 en-US locale, D5 a real list, the accessibility
+// tree, D8 nothing hidden behind the nav).
+
+test.describe("T1.17b: on a US-English device (from entries-list D1)", () => {
+  test.use({ locale: "en-US" });
+
+  test('rows show dates the US way and AUD as "A$" (owner\'s example)', async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], OWNER_COSTS);
+    await expect(expenseRows(page)).toHaveCount(5);
+    expect(await allRowLines(expenseRows(page))).toEqual([
+      ["6/30/2026", "Software", "Adobe", "Online sales", "A$15.00"],
+      ["6/24/2026", "Accommodation", "Harbour Hotel", COMIC_CON.name, "A$299.00"],
+      ["6/23/2026", "Meals", COMIC_CON.name, "A$200.00"],
+      ["6/22/2026", "Stall or table fees", "Comic con organisers", COMIC_CON.name, "A$500.00"],
+      ["6/20/2026", "Printing", "Zine printer", "A$120.00"],
+    ]);
+  });
+
+  test('the totals show AUD as "A$": A$120.00 / A$999.00 / A$15.00 / A$1,134.00', async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], OWNER_COSTS);
+    for (const line of totalsLines("A$120.00", "A$999.00", "A$15.00", "A$1,134.00")) {
+      await expectLine(totals(page), line);
+    }
+  });
+});
+
+test.describe("T1.17b: the list is accessible and clear of the nav (from entries-list D5, D8)", () => {
+  test("the expenses are a real list: one <ul> or <ol> in All expenses whose children are all <li>", async ({
+    page,
+  }) => {
+    await openExpenses(page);
+    await seed(page, [], ROWS_COSTS);
+    await expect(expenseRows(page)).toHaveCount(8);
+    const lists = await allExpenses(page).evaluate((section) =>
+      Array.from(section.querySelectorAll("ul, ol")).map((list) => ({
+        tag: list.tagName,
+        children: Array.from(list.children).map((c) => c.tagName),
+      })),
+    );
+    expect(lists.length, "lists in All expenses").toBe(1);
+    expect(["UL", "OL"]).toContain(lists[0].tag);
+    expect(lists[0].children).toEqual(Array(8).fill("LI"));
+  });
+
+  test("each row's lines are in the accessibility tree", async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], ROWS_COSTS);
+    await expect(expenseRows(page)).toHaveCount(8);
+    for (let i = 0; i < ROWS_IN_ORDER.length; i++) {
+      const snapshot = await expenseRows(page).nth(i).ariaSnapshot();
+      for (const part of ROWS_IN_ORDER[i]) {
+        expect(snapshot, `row ${i + 1} exposes "${part}" to screen readers`).toContain(part);
+      }
+    }
+  });
+
+  test("scrolled to the bottom, the last row ends at or above the nav's top edge", async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], ROWS_COSTS);
+    await expect(expenseRows(page)).toHaveCount(8);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const last = await box(expenseRows(page).last());
+    const nav = await box(mainNav(page));
+    expect(last.y + last.height, "bottom of the last row vs top of the nav (px)").toBeLessThanOrEqual(nav.y + 1);
   });
 });

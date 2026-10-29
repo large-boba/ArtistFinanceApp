@@ -206,6 +206,9 @@
 // 17. Transactions leaves the tabs (NEW, T1.11, lead's decision on the card).
 //     On every tab's page and on /transactions itself, the "Main" nav has no
 //     link whose path is /transactions or anything under it.
+//     CHANGED (T1.17b): /transactions no longer exists, so it is no longer
+//     opened here; the tab pages are still checked. The wider claim (no link
+//     ANYWHERE leads to it) is 18 below.
 //
 // 18. TEMPORARY (NEW, T1.11, lead's decision on the card): /transactions
 //     stays reachable by its address until T1.16 and T1.17 split its list
@@ -217,6 +220,18 @@
 //     tell a screen reader you're on a page you aren't on).
 //     The entries-list and expense-form specs now reach /transactions with a
 //     client-side move that doesn't use the nav (see their headers).
+//     CHANGED (T1.17b): RETIRED. T1.17b removes /transactions (its list is
+//     split into the Expenses tab and the stream pages, T1.16/T1.17). Claim 18
+//     is now, like 16 for /reports:
+//       - /transactions is a real 404: a browser opening it gets HTTP 404, and
+//         a GET that does NOT follow redirects gets 404 too (a 3xx elsewhere
+//         doesn't count as removing it), on both servers (3000, the test
+//         build, and 3001, built without the test flag as Cloudflare builds
+//         it). /transactions/anything (e.g. /transactions/2026) is a 404 as
+//         well;
+//       - no link anywhere leads to it (nav or <main>, any path that is
+//         /transactions or under it) on: the five tab pages, the three event
+//         pages, the seven stream pages and the two forms.
 import {
   expect,
   test as base,
@@ -1617,7 +1632,8 @@ test.describe("/reports is removed (T1.11)", () => {
 });
 
 test.describe("Transactions is no longer a tab (T1.11)", () => {
-  for (const path of [...SCREENS.map((s) => s.path), TRANSACTIONS_PATH]) {
+  // CHANGED (T1.17b): /transactions itself left this list (it's a 404 now, claim 18).
+  for (const path of SCREENS.map((s) => s.path)) {
     test(`on ${path}, the "Main" navigation has no link that leads to /transactions`, async ({
       page,
     }) => {
@@ -1631,43 +1647,59 @@ test.describe("Transactions is no longer a tab (T1.11)", () => {
   }
 });
 
-// TEMPORARY (claim 18): T1.16 and T1.17 remove /transactions and replace
-// these tests.
-test.describe("TEMPORARY until T1.16/T1.17: /transactions is still reachable by its address", () => {
-  test("/transactions answers HTTP 200", async ({ page }) => {
+// Claim 18, CHANGED (T1.17b): the TEMPORARY "/transactions is still reachable"
+// tests are retired (T1.17b removes the page). Replaced by these.
+
+/** Every page that stays, where no link may lead to /transactions (claim 18). */
+const PAGES_WITHOUT_TRANSACTIONS_LINKS = [
+  ...SCREENS.map((s) => s.path),
+  "/events/pretend-event-comic-con",
+  "/events/pretend-event-todays-market",
+  "/events/pretend-event-shelf",
+  "/income/sales-at-events",
+  "/income/online-sales",
+  "/income/wholesale",
+  "/income/commissions",
+  "/income/vendor-shelf-rental",
+  "/income/social-media",
+  "/income/subscription-income",
+  "/expenses/new",
+  "/income/new",
+] as const;
+
+test.describe("/transactions is removed (T1.17b)", () => {
+  test("a browser opening /transactions gets HTTP 404", async ({ page }) => {
     const response = await page.goto(TRANSACTIONS_PATH);
-    expect(response?.status(), `HTTP status of ${TRANSACTIONS_PATH}`).toBe(200);
+    expect(response?.status(), `HTTP status of ${TRANSACTIONS_PATH}`).toBe(NOT_FOUND);
   });
 
-  test('/transactions has exactly one level-1 heading, "Transactions"', async ({ page }) => {
-    await open(page, TRANSACTIONS_PATH);
-    const h1 = page.getByRole("heading", { level: 1 });
-    await expect(h1).toHaveCount(1);
-    await expect(h1).toHaveText("Transactions");
-  });
+  // (No "/transactions/" case: Next.js answers any trailing slash with its own 308 to the
+  // address without it, which then 404s; that redirect isn't the page.)
+  for (const path of [TRANSACTIONS_PATH, `${TRANSACTIONS_PATH}/2026`]) {
+    test(`GET ${path}, without following redirects, answers HTTP 404 (test build)`, async ({ request }) => {
+      const response = await request.get(path, { maxRedirects: 0 });
+      expect(response.status(), `HTTP status of ${path}`).toBe(NOT_FOUND);
+    });
 
-  test("/transactions still shows the Main navigation with exactly Home, Events, Expenses, Income, Settings", async ({
-    page,
-  }) => {
-    await open(page, TRANSACTIONS_PATH);
-    await expect(mainNav(page)).toHaveCount(1);
-    const links = mainNav(page).getByRole("link");
-    await expect(links).toHaveCount(SCREENS.length);
-    for (let i = 0; i < SCREENS.length; i++) {
-      await expect(links.nth(i)).toHaveAccessibleName(SCREENS[i].name);
-    }
-  });
+    test(`GET ${path}, without following redirects, answers HTTP 404 (build without the test flag, port 3001)`, async ({
+      request,
+    }) => {
+      const response = await request.get(`${FLAG_OFF_BASE_URL}${path}`, { maxRedirects: 0 });
+      expect(response.status(), `HTTP status of ${FLAG_OFF_BASE_URL}${path}`).toBe(NOT_FOUND);
+    });
+  }
 
-  test("on /transactions, no nav link has aria-current", async ({ page }) => {
-    await open(page, TRANSACTIONS_PATH);
-    // Wait for hydration (the nav publishes --nav-h, claim 15), so a current
-    // tab set only in the browser would be seen too.
-    await page.waitForFunction(
-      () => document.documentElement.style.getPropertyValue("--nav-h") !== "",
-    );
-    await expect(mainNav(page).getByRole("link")).toHaveCount(SCREENS.length);
-    await expect(mainNav(page).locator("[aria-current]")).toHaveCount(0);
-  });
+  for (const path of PAGES_WITHOUT_TRANSACTIONS_LINKS) {
+    test(`${path} has no link anywhere that leads to /transactions`, async ({ page }) => {
+      await open(page, path);
+      // After hydration too, so a link added only in the browser is seen.
+      await page.waitForFunction(() => document.documentElement.style.getPropertyValue("--nav-h") !== "");
+      expect(
+        await linkPathsUnder(page.locator("body"), TRANSACTIONS_PATH),
+        `links on ${path} whose path is ${TRANSACTIONS_PATH} or under it`,
+      ).toEqual([]);
+    });
+  }
 });
 
 // ---------- 12. no uncaught errors, end to end ----------

@@ -13,7 +13,7 @@
 // they show as skipped, which is expected.
 //
 // How the tests see what was saved: the forms already exist (T1.12, T1.13),
-// and Home's running totals (entries-list D3) add up every entry dated today:
+// and Home's running totals (home.spec.ts H3, was entries-list D3) add up every entry dated today:
 // "Today: $X from N sales" for income, "Today's expenses: $X" for expenses.
 // Entries live in memory, so every move between screens in this file is a
 // CLIENT-SIDE move (a link or the bottom nav), never page.goto, and the moves

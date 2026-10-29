@@ -14,19 +14,24 @@
 // with a conditional `test.skip(...)`, as in app-shell.spec.ts. On desktop
 // they show as skipped, which is expected.
 //
-// How the tests see what was saved: there is no income list yet (T1.16), so
-// they use two existing screens, through client-side moves that keep the
+// How the tests see what was saved, through client-side moves that keep the
 // in-memory entries:
-//   - Home's "Today: $X from N sales" line (entries-list D3), which adds up
+//   - Home's "Today: $X from N sales" line (home.spec.ts H3), which adds up
 //     every income row dated today, $0.00 rows included;
-//   - the Transactions list (still reachable by its address until T1.16/T1.17
-//     remove it, app-shell claim 18), reached with goToTransactions(), the
-//     same helper as in entries-list.spec.ts. Each income row shows its
-//     stream's name, its date, its amount, and as its description the
-//     event's name when it has an event, otherwise its payment method
-//     ("Cash", "Card", "Online", "Bank transfer", "Other") (entries-list D6).
-//     Rows on the same date are listed newest first, so for one day's takings
-//     the CARD row (added second) comes first and the CASH row second.
+//   - CHANGED (T1.17b): the stream's own page, /income/<stream id>, reached
+//     with goToStream() (a client-side move, no reload). It used to be the
+//     Transactions list, which T1.17b removes. Being listed on a stream's
+//     page is what proves the stream was saved (the row itself no longer
+//     names its stream). Each income row there (income-streams.spec.ts S5)
+//     holds its date; "<event name> · <payment label>" when it has an event,
+//     otherwise the payment label alone ("Cash", "Card", "Online",
+//     "Bank transfer", "Other"); its notes when set; its amount; nothing
+//     else. So a linked row now shows its payment label too (S5's decision),
+//     where the Transactions row showed only the event. Rows on the same
+//     date are listed newest first, so for one day's takings the CARD row
+//     (added second) comes first and the CASH row second.
+//     Not carried over: the rows' <time datetime="YYYY-MM-DD"> element. The
+//     stream page's rows show the date as text only (flagged to the lead).
 // No new test seam is used or needed.
 //
 // ═══ DECISIONS (lead's, written out here so the tests can be exact) ════════
@@ -284,7 +289,7 @@
 //   Card "2,000.5"  → 200050 cents → "Reads as $2,000.50"
 //   Total 100000 + 200050 = 300050 cents → "Total $3,000.50"
 //   Home: "Today: $3,000.50 from 2 sales"
-//   Transactions (newest first): card row $2,000.50, then cash row $1,000.00
+//   Sales at events page (newest first): card row $2,000.50, then cash row $1,000.00
 // Small takings: Cash "100" + Card "250" = 10000 + 25000 = 35000 → "Total $350.00",
 //   Home "Today: $350.00 from 2 sales".
 // Zero takings: "0" + "0" → "Total $0.00", Home "Today: $0.00 from 2 sales".
@@ -378,7 +383,21 @@ const PAYMENT_LABELS = ["Cash", "Card", "Online", "Bank transfer", "Other"] as c
 type PaymentLabel = (typeof PAYMENT_LABELS)[number];
 
 const HOME_NO_INCOME = "Today: $0.00 from 0 sales";
-const EMPTY_TRANSACTIONS = "No entries yet.";
+// CHANGED (T1.17b): a stream page's empty state (income-streams.spec.ts S5),
+// replacing the Transactions list's "No entries yet.".
+const NO_INCOME = "No income yet.";
+
+// T1.17b: each stream's page address, INCOME_STREAMS ids written out by hand
+// (pinned by src/lib/pretend-data.test.ts).
+const STREAM_IDS: Record<(typeof STREAM_NAMES)[number], string> = {
+  "Sales at events": "sales-at-events",
+  "Online sales": "online-sales",
+  Wholesale: "wholesale",
+  Commissions: "commissions",
+  "Vendor shelf rental": "vendor-shelf-rental",
+  "Social media": "social-media",
+  "Subscription income": "subscription-income",
+};
 
 const EDGE_TOLERANCE_PX = 1;
 const MIN_TAP_TARGET_PX = 44;
@@ -602,10 +621,13 @@ async function goClientSide(page: Page, href: string): Promise<void> {
   ).toBe(true);
 }
 
-/** Moves client-side to /transactions (no tab for it since T1.11) and checks its heading. */
-async function goToTransactions(page: Page): Promise<void> {
-  await goClientSide(page, "/transactions");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Transactions");
+/**
+ * CHANGED (T1.17b): moves client-side (no reload) to a stream's page and
+ * checks its heading. Replaces goToTransactions(): /transactions is removed.
+ */
+async function goToStream(page: Page, stream: (typeof STREAM_NAMES)[number]): Promise<void> {
+  await goClientSide(page, `/income/${STREAM_IDS[stream]}`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(stream);
 }
 
 /** Opens Home (full load), then moves client-side to the form at `href`. */
@@ -654,9 +676,30 @@ async function saveAndExpect(page: Page, hasTouch: boolean, path = "/", heading 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
 }
 
+/** CHANGED (T1.17b): the income rows of a stream page (its "Income" region, S5). */
 function rows(page: Page): Locator {
-  return main(page).getByRole("list").getByRole("listitem");
+  return main(page).getByRole("region", { name: "Income", exact: true }).getByRole("listitem");
 }
+
+/** Whether `token` appears in `text` as whole words (bounded by the ends or spaces). */
+function hasToken(text: string, token: string): boolean {
+  return new RegExp(`(^| )${escapeRegExp(token)}( |$)`).test(text);
+}
+
+/**
+ * T1.17b, as income-streams.spec.ts S5: a row holds exactly these parts and
+ * nothing else apart from punctuation; `amount` is its only money amount.
+ */
+function expectRowParts(text: string, parts: readonly string[], amount: string): void {
+  for (const part of parts) expect(hasToken(text, part), `"${text}" holds "${part}"`).toBe(true);
+  expect(amountsIn(text), `the only money amount in "${text}"`).toEqual([amount]);
+  let rest = text;
+  for (const part of [...parts, amount]) rest = rest.replace(part, "");
+  expect(rest.replace(/[\s·•,;:|()–—-]/g, ""), `left over in "${text}"`).toBe("");
+}
+
+/** "<event> · <payment label>", as a linked income row shows it (S5). */
+const linked = (event: string, label: string) => `${event} \u00B7 ${label}`;
 
 /** A row's text as laid out, with runs of whitespace collapsed to one space. */
 async function rowText(row: Locator): Promise<string> {
@@ -1190,12 +1233,11 @@ test.describe("the date", () => {
     await fillForm(page, { date: "2026-06-15", stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveAndExpect(page, touch(testInfo));
     await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
-    await goToTransactions(page);
+    // CHANGED (T1.17b): checked on Sales at events (the <time> element is gone, see the header).
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    for (let i = 0; i < 2; i++) {
-      await expect(rows(page).nth(i).locator("time")).toHaveAttribute("datetime", "2026-06-15");
-      await expect(rows(page).nth(i).locator("time")).toHaveText("15/06/2026");
-    }
+    expectRowParts(await rowText(rows(page).nth(0)), ["15/06/2026", "Card"], "$250.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["15/06/2026", "Cash"], "$100.00");
   });
 
   test(`emptying the date and pressing Save shows "${ERROR_DATE}", focuses Date and adds nothing`, async ({
@@ -1378,36 +1420,30 @@ test.describe("Sales at events: saving", () => {
     await expect(exactText(page, "Today: $3,000.50 from 2 sales")).toBeVisible();
   });
 
-  test("with no event, Transactions lists two Sales at events rows: Card $2,000.50 first, then Cash $1,000.00", async ({
+  // CHANGED (T1.17b): was "Transactions lists two Sales at events rows"; now the stream's page.
+  test("with no event, Sales at events lists two rows: Card $2,000.50 first, then Cash $1,000.00", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "$1,000", card: "2,000.5" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    const first = await rowText(rows(page).nth(0));
-    const second = await rowText(rows(page).nth(1));
-    // Newest first: the card row was added after the cash row.
-    expect(first).toMatch(/\bSales at events\b/);
-    expect(first).toMatch(/\bCard\b/);
-    expect(first).not.toMatch(/\bCash\b/);
-    expect(amountsIn(first)).toEqual(["$2,000.50"]);
-    expect(second).toMatch(/\bSales at events\b/);
-    expect(second).toMatch(/\bCash\b/);
-    expect(second).not.toMatch(/\bCard\b/);
-    expect(amountsIn(second)).toEqual(["$1,000.00"]);
+    // Newest first: the card row was added after the cash row. Exact parts,
+    // so the card row can't also say "Cash" (and the other way round).
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", "Card"], "$2,000.50");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", "Cash"], "$1,000.00");
   });
 
   test("both rows are dated today (2026-07-01, shown 01/07/2026)", async ({ page }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "100", card: "250" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): checked on Sales at events (the <time> element is gone, see the header).
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
     for (let i = 0; i < 2; i++) {
-      await expect(rows(page).nth(i).locator("time")).toHaveAttribute("datetime", SYDNEY_TODAY);
-      await expect(rows(page).nth(i).locator("time")).toHaveText("01/07/2026");
+      expect(hasToken(await rowText(rows(page).nth(i)), "01/07/2026"), `row ${i + 1} is dated 01/07/2026`).toBe(true);
     }
   });
 
@@ -1417,14 +1453,11 @@ test.describe("Sales at events: saving", () => {
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, event: MARKET, cash: "100", card: "250" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on Sales at events; a linked row also shows its payment label (S5).
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    const texts = [await rowText(rows(page).nth(0)), await rowText(rows(page).nth(1))];
-    for (const text of texts) {
-      expect(text).toMatch(/\bSales at events\b/);
-      expect(text).toContain(MARKET);
-    }
-    expect(texts.map((t) => amountsIn(t))).toEqual([["$250.00"], ["$100.00"]]);
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", linked(MARKET, "Card")], "$250.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", linked(MARKET, "Cash")], "$100.00");
   });
 
   test("$0 cash and $0 card still save both rows: Home says \"Today: $0.00 from 2 sales\"", async ({
@@ -1441,14 +1474,11 @@ test.describe("Sales at events: saving", () => {
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "0", card: "80" });
     await saveAndExpect(page, touch(testInfo));
     await expect(exactText(page, "Today: $80.00 from 2 sales")).toBeVisible();
-    await goToTransactions(page);
+    // CHANGED (T1.17b): checked on Sales at events.
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    const first = await rowText(rows(page).nth(0));
-    const second = await rowText(rows(page).nth(1));
-    expect(first).toMatch(/\bCard\b/);
-    expect(amountsIn(first)).toEqual(["$80.00"]);
-    expect(second).toMatch(/\bCash\b/);
-    expect(amountsIn(second)).toEqual(["$0.00"]);
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", "Card"], "$80.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", "Cash"], "$0.00");
   });
 
   test("double-clicking Save adds the two rows once: $350.00 from 2 sales", async ({ page }) => {
@@ -1457,7 +1487,7 @@ test.describe("Sales at events: saving", () => {
     await saveButton(page).dblclick();
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
     await expect(exactText(page, "Today: $350.00 from 2 sales")).toBeVisible();
-    await goToTransactions(page);
+    await goToStream(page, SALES_AT_EVENTS); // CHANGED (T1.17b): was Transactions
     await expect(rows(page)).toHaveCount(2);
   });
 
@@ -1546,19 +1576,17 @@ test.describe("other streams: saving", () => {
     await expect(exactText(page, "Today: $1,234.56 from 1 sale")).toBeVisible();
   });
 
-  test("on Transactions, the Wholesale row shows Wholesale, Bank transfer, $1,234.56 and today's date", async ({
+  // CHANGED (T1.17b): was "on Transactions, the Wholesale row shows Wholesale, …"; listed on
+  // the Wholesale page is what now proves the stream.
+  test("on the Wholesale page, the row shows Bank transfer, $1,234.56 and today's date", async ({
     page,
   }, testInfo) => {
     await openForm(page);
     await fillForm(page, { stream: "Wholesale", amount: "1,234.56", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToStream(page, "Wholesale");
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bWholesale\b/);
-    expect(text).toMatch(/\bBank transfer\b/);
-    expect(amountsIn(text)).toEqual(["$1,234.56"]);
-    await expect(rows(page).first().locator("time")).toHaveAttribute("datetime", SYDNEY_TODAY);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Bank transfer"], "$1,234.56");
   });
 
   // Each radio saves its own payment method: the row (no event) shows its label.
@@ -1567,31 +1595,35 @@ test.describe("other streams: saving", () => {
       await openForm(page);
       await fillForm(page, { stream: "Commissions", amount: "5", payment: method });
       await saveAndExpect(page, touch(testInfo));
-      await goToTransactions(page);
+      // CHANGED (T1.17b): on the Commissions page. Exact parts, so no other label can appear.
+      await goToStream(page, "Commissions");
       await expect(rows(page)).toHaveCount(1);
-      const text = await rowText(rows(page).first());
-      expect(text).toMatch(/\bCommissions\b/);
-      const others = PAYMENT_LABELS.filter((m) => m !== method);
-      expect(text).toContain(method);
-      for (const other of others) {
-        // "Card" and "Cash" are whole words; check none of the other labels appears.
-        expect(text, `row text "${text}" must not say "${other}"`).not.toMatch(new RegExp(`\\b${other}\\b`));
-      }
-      expect(amountsIn(text)).toEqual(["$5.00"]);
+      expectRowParts(await rowText(rows(page).first()), ["01/07/2026", method], "$5.00");
     });
   }
 
+  // CHANGED (T1.17b): was "listed under its own stream's name" on Transactions. Now: listed
+  // on its own stream's page, and on no other stream's page (the /income list shows
+  // "Income $9.99" for that stream only).
   for (const stream of ONE_AMOUNT_STREAMS) {
-    test(`a ${stream} income is listed under its own stream's name`, async ({ page }, testInfo) => {
+    test(`a ${stream} income is listed on its own stream's page, and counted under no other stream`, async ({
+      page,
+    }, testInfo) => {
       await openForm(page);
       await fillForm(page, { stream, amount: "9.99", payment: "Online" });
       await saveAndExpect(page, touch(testInfo));
       await expect(exactText(page, "Today: $9.99 from 1 sale")).toBeVisible();
-      await goToTransactions(page);
+      await goToStream(page, stream);
       await expect(rows(page)).toHaveCount(1);
-      const text = await rowText(rows(page).first());
-      const labels = STREAM_NAMES.filter((s) => new RegExp(`\\b${escapeRegExp(s)}\\b`).test(text));
-      expect(labels).toEqual([stream]);
+      expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Online"], "$9.99");
+      await goClientSide(page, "/income");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Income");
+      for (const other of STREAM_NAMES) {
+        const link = main(page).getByRole("link", { name: new RegExp(`^\\s*${escapeRegExp(other)}`) });
+        await expect(link).toHaveCount(1);
+        const incomeLine = other === stream ? "Income $9.99" : "Income $0.00";
+        await expect(link.getByText(incomeLine, { exact: true }), `${other} shows "${incomeLine}"`).toHaveCount(1);
+      }
     });
   }
 
@@ -1608,13 +1640,12 @@ test.describe("other streams: saving", () => {
     await openForm(page);
     await fillForm(page, { stream: VENDOR_SHELF, event: SHELF, amount: "45", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Vendor shelf rental page. A linked row now shows the
+    // payment label too ("Pretend gallery shelf · Bank transfer", S5), where the
+    // Transactions row showed only the event.
+    await goToStream(page, VENDOR_SHELF);
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bVendor shelf rental\b/);
-    expect(text).toContain(SHELF);
-    expect(text).not.toMatch(/\bBank transfer\b/);
-    expect(amountsIn(text)).toEqual(["$45.00"]);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", linked(SHELF, "Bank transfer")], "$45.00");
   });
 
   test('Vendor shelf rental left on "Not assigned yet" is listed by its payment method', async ({
@@ -1623,11 +1654,10 @@ test.describe("other streams: saving", () => {
     await openForm(page);
     await fillForm(page, { stream: VENDOR_SHELF, amount: "45", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Vendor shelf rental page; exact parts, so no event.
+    await goToStream(page, VENDOR_SHELF);
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bBank transfer\b/);
-    expect(text).not.toContain(SHELF);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Bank transfer"], "$45.00");
   });
 
   test("double-clicking Save adds exactly one income", async ({ page }) => {
@@ -1666,12 +1696,10 @@ test.describe("switching streams clears an event the new stream can't have", () 
     await fillForm(page, { stream: VENDOR_SHELF, event: SHELF });
     await fillForm(page, { stream: "Wholesale", amount: "60", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Wholesale page; exact parts, so no event.
+    await goToStream(page, "Wholesale");
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bWholesale\b/);
-    expect(text).toMatch(/\bBank transfer\b/);
-    expect(text).not.toContain(SHELF);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Bank transfer"], "$60.00");
   });
 
   test("Vendor shelf rental with the shelf, switched to Social media and back, shows \"Not assigned yet\"", async ({
@@ -1969,12 +1997,10 @@ test.describe("pre-fill from the page address", () => {
     await expect.poll(() => selectedText(streamField(page))).toBe("Online sales");
     await fillForm(page, { amount: "12", payment: "Online" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Online sales page; exact parts, so no event.
+    await goToStream(page, "Online sales");
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bOnline sales\b/);
-    expect(text).not.toContain(COMIC_CON);
-    expect(amountsIn(text)).toEqual(["$12.00"]);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", "Online"], "$12.00");
   });
 
   test("takings saved from ?event=pretend-event-comic-con are linked to the convention", async ({
@@ -1985,13 +2011,11 @@ test.describe("pre-fill from the page address", () => {
     await fillForm(page, { cash: "1,000", card: "2,000" });
     await saveAndExpect(page, touch(testInfo));
     await expect(exactText(page, "Today: $3,000.00 from 2 sales")).toBeVisible();
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on Sales at events; a linked row also shows its payment label (S5).
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    for (let i = 0; i < 2; i++) {
-      const text = await rowText(rows(page).nth(i));
-      expect(text).toMatch(/\bSales at events\b/);
-      expect(text).toContain(COMIC_CON);
-    }
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", linked(COMIC_CON, "Card")], "$2,000.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", linked(COMIC_CON, "Cash")], "$1,000.00");
   });
 
   test("a pre-filled stream can still be changed", async ({ page }) => {
@@ -2050,7 +2074,7 @@ test.describe("after Save: the safe back address", () => {
       await openFormFromHome(page, formWithBack(value));
       await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
       await saveAndExpect(page, touch(testInfo), value, heading);
-      await goToTransactions(page);
+      await goToStream(page, "Online sales"); // CHANGED (T1.17b): was Transactions
       await expect(rows(page)).toHaveCount(1);
     });
   }
@@ -2119,13 +2143,15 @@ test.describe("Cancel", () => {
     await expect(exactText(page, HOME_NO_INCOME)).toBeVisible();
   });
 
-  test("after Cancel, Transactions still has no entries", async ({ page }, testInfo) => {
+  // CHANGED (T1.17b): was "after Cancel, Transactions still has no entries".
+  test("after Cancel, Online sales still has no income", async ({ page }, testInfo) => {
     await openFormFromHome(page);
     await fillForm(page, { stream: "Online sales", amount: "5", payment: "Online" });
     await press(cancelLink(page), touch(testInfo));
     await expect(page).toHaveURL(urlOnThisServer(page, "/"));
-    await goToTransactions(page);
-    await expect(exactText(page, EMPTY_TRANSACTIONS)).toBeVisible();
+    await goToStream(page, "Online sales");
+    await expect(exactText(page, NO_INCOME)).toBeVisible();
+    await expect(rows(page)).toHaveCount(0);
   });
 });
 
@@ -2615,12 +2641,10 @@ test.describe("T1.12b: moving between the two event streams keeps the event", ()
     await fillForm(page, { stream: SALES_AT_EVENTS, event: COMIC_CON });
     await fillForm(page, { stream: VENDOR_SHELF, amount: "45", payment: "Bank transfer" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on the Vendor shelf rental page; a linked row also shows its payment label (S5).
+    await goToStream(page, VENDOR_SHELF);
     await expect(rows(page)).toHaveCount(1);
-    const text = await rowText(rows(page).first());
-    expect(text).toMatch(/\bVendor shelf rental\b/);
-    expect(text).toContain(COMIC_CON);
-    expect(amountsIn(text)).toEqual(["$45.00"]);
+    expectRowParts(await rowText(rows(page).first()), ["01/07/2026", linked(COMIC_CON, "Bank transfer")], "$45.00");
   });
 
   test('then switching to Online sales removes the Event field, and back to Sales at events shows "Not assigned yet"', async ({
@@ -2645,11 +2669,11 @@ test.describe("T1.12b: moving between the two event streams keeps the event", ()
     expect(await selectedText(eventField(page))).toBe(SHELF);
     await fillForm(page, { cash: "10", card: "20" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    // CHANGED (T1.17b): on Sales at events; a linked row also shows its payment label (S5).
+    await goToStream(page, SALES_AT_EVENTS);
     await expect(rows(page)).toHaveCount(2);
-    for (let i = 0; i < 2; i++) {
-      expect(await rowText(rows(page).nth(i))).toContain(SHELF);
-    }
+    expectRowParts(await rowText(rows(page).nth(0)), ["01/07/2026", linked(SHELF, "Card")], "$20.00");
+    expectRowParts(await rowText(rows(page).nth(1)), ["01/07/2026", linked(SHELF, "Cash")], "$10.00");
   });
 });
 
@@ -2981,7 +3005,7 @@ test.describe("T1.16b: the amount cap in Cash and Card (Sales at events)", () =>
     await openForm(page);
     await fillForm(page, { stream: SALES_AT_EVENTS, cash: "9999999.99", card: "9999999.99" });
     await saveAndExpect(page, touch(testInfo));
-    await goToTransactions(page);
+    await goToStream(page, SALES_AT_EVENTS); // CHANGED (T1.17b): was Transactions
     await expect(rows(page)).toHaveCount(2);
     expect(amountsIn(await rowText(rows(page).nth(0)))).toEqual(["$9,999,999.99"]);
     expect(amountsIn(await rowText(rows(page).nth(1)))).toEqual(["$9,999,999.99"]);

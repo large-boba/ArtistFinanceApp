@@ -12,7 +12,7 @@
 // they show as skipped, which is expected.
 //
 // How data gets in: the test seam window.__bentoTest.addIncome / addExpense
-// (entries-list.spec.ts S0–S6) for tests about what the pages SHOW, and the
+// (test-seam.spec.ts S0–S6; entries-list.spec.ts until T1.17b) for tests about what the pages SHOW, and the
 // real forms through "+ Add" for tests about the FLOW (the owner's worked
 // example, the round trips). The "Other costs" figure has no seam: it is
 // always set through the page itself. Entries live in memory, so every move
@@ -178,6 +178,8 @@
 //     - The figure belongs to its event only, stays while moving around the
 //       app (client-side), and is NOT added to anything else: the events
 //       list's Result, Home's totals and the Transactions list don't change.
+//       CHANGED (T1.17b): the Transactions list is removed; the Expenses tab
+//       takes its place in that check (no "$777.00" row, still 3 costs).
 //
 //     - ADDED (T1.16, from the T1.15 review): where focus goes when the
 //       form closes, so keyboard and screen-reader users aren't dropped on
@@ -381,7 +383,7 @@ async function seed(page: Page, income: readonly IncomeInput[], expenses: readon
       { timeout: HOOK_WAIT_MS },
     )
     .catch(() => {
-      throw new Error(`test seam window.${HOOK_NAME} never appeared (see entries-list.spec.ts)`);
+      throw new Error(`test seam window.${HOOK_NAME} never appeared (see test-seam.spec.ts)`);
     });
   await page.evaluate(
     ({ name, income, expenses }) => {
@@ -1288,17 +1290,22 @@ test.describe("T1.15: other costs", () => {
     await expect(main(page).getByText("Today's expenses: $50.00", { exact: true })).toBeVisible();
   });
 
-  test("not added to other totals: the Transactions list has no $777.00 entry", async ({ page }, testInfo) => {
+  // CHANGED (T1.17b): was "the Transactions list has no $777.00 entry"; /transactions is
+  // removed, so the Expenses tab is checked instead (the income rows are on the stream
+  // pages, where income-streams.spec.ts S7 already checks other costs never count).
+  test("not added to other totals: the Expenses tab has no $777.00 entry", async ({ page }, testInfo) => {
     await openExample(page);
     // $777 appears nowhere in the example, so any "$777.00" on the list would be the figure.
     await setOtherCosts(page, touch(testInfo), "777");
     await expectLine(otherCosts(page), "Other costs $777.00");
     await page.evaluate(() =>
-      (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/transactions"),
+      (window as unknown as { next: { router: { push(href: string): void } } }).next.router.push("/expenses"),
     );
-    await expect(heading(page)).toHaveText("Transactions");
-    // 6 income rows + 3 costs from the example, nothing else.
-    await expect(main(page).getByRole("list").getByRole("listitem")).toHaveCount(9);
+    await expect(heading(page)).toHaveText("Expenses");
+    // The 3 costs from the example, nothing else.
+    await expect(
+      main(page).getByRole("region", { name: "All expenses", exact: true }).getByRole("listitem"),
+    ).toHaveCount(3);
     expect((await textOf(main(page))).includes("$777.00")).toBe(false);
   });
 });

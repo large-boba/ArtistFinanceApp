@@ -743,13 +743,43 @@ Evidence:
   - a comment updated.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1090/1090). `CI=1 npx playwright test` gave **2451 passed, 0 failed** (21.9 minutes). After the two tidy-ups, which don't change behaviour: `npm run check` exit 0, with 1090 unit tests.
 
-### T1.17b — Retire the old Transactions page                 Status: todo
+### T1.17b — Retire the old Transactions page                 Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: yes, light (the test seam's safety tests move to a new file and must stay just as strong)
 Outcome:
 - `/transactions` and `EntriesList` are removed; `/transactions` is a real 404.
 - The seam-lock tests (S0–S6) move to their own spec, unchanged in strength.
 - Tests that checked saves on the Transactions list now check the Expenses tab and the stream pages.
 Done when: the full suite passes; CI's seam grep still passes; `npm run check` exits 0.
+Evidence:
+- **Tests first** (test engineer):
+  - the seam-lock tests S0–S6 move to the new `e2e/test-seam.spec.ts`, with S4b added (a 127.0.0.1 control);
+  - Home's "today" lines, the live region and persistence move to the new `e2e/home.spec.ts`;
+  - `e2e/entries-list.spec.ts` is deleted, after a claim-by-claim mapping in the test engineer's report;
+  - expense-form and income-form now check saves on the Expenses tab and the stream pages;
+  - app-shell claim 18: /transactions is a 404 on both servers, and nothing links to it.
+  - Red run: only the 3 new 404 claims failed (×2 projects). Proof with a scratch removal: 2452 passed.
+- **Built** (the lead): `src/app/transactions/` and `src/components/EntriesList.tsx` deleted; two stale comments updated.
+- **Security review: SECURE.** The seam tests are at least as strong as before (S4b makes them slightly stronger). EntriesProvider, next.config and the CI grep are untouched.
+- **Code review: ACCEPT.** The ports keep their intent, and most are stronger.
+- **Logged for T1.17c:**
+  - `role="list"` on the new lists and `<time datetime>` on rows (both dropped with the old list);
+  - a test that an entry added while a list is open appears at once in its place (not ported).
+- **Note:** after deleting a route, a local build can fail on stale `.next` types. Clearing `.next` and `.next-e2e` fixes it; CI's fresh checkout is unaffected.
+- **Lead re-ran from a clean build:**
+  - `npm run check` exit 0 (vitest 1090/1090, check-rules 0 errors);
+  - `CI=1 npx playwright test` gave **2452 passed, 0 failed** (21.8 minutes);
+  - the Cloudflare build gave no `__bentoTest` in `.open-next`.
+
+  The two comment fixes came after the run and don't change behaviour; lint was re-run.
+
+### T1.17c — List accessibility and live updates           Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
+Source: the T1.17b test engineer's and code reviewer's findings.
+Outcome:
+- **Lists keep their list meaning:** every list of rows (expenses, a stream's income and costs, an event's takings and costs, the events and streams lists) has `role="list"`, because Safari and VoiceOver drop list meaning when the bullets are hidden.
+- **Machine-readable dates:** each row's date is a `<time datetime="YYYY-MM-DD">`.
+- **Live updates:** an entry added while a list is on screen appears at once, in its newest-first place.
+Done when: the new tests pass; the full suite and `npm run check` are green.
 Evidence:
 
 ### T1.18 — Home summary                                    Status: todo
