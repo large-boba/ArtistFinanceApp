@@ -134,6 +134,20 @@
 //       "Costs count here when they're tagged with this stream, or linked to an event that usually earns from it."
 //     (ASCII apostrophe). Production costs and untagged, unlinked costs never
 //     appear on any stream page; "Other costs" figures never count.
+//     CHANGED (T1.17, lead):
+//     - each cost is now the SHARED cost row, the same as on the Expenses tab
+//       and the event page (expenses.spec.ts X5). Its rendered lines are
+//       exactly, in order: the date; the category; the supplier (when set);
+//       "<event name> · <stream name>" when it has both, or just the one it
+//       has (no line when it has neither); the notes (when set); the amount.
+//       Nothing else. So a cost counted here through its event's usual
+//       stream shows the event's name, and a tagged cost shows its stream's
+//       name.
+//     - the explanation is now exactly
+//       "Costs count here when they're tagged with this stream, or, with no stream tag, linked to an event that usually earns from it."
+//       (more exact: a tagged cost counts only toward its tag; T1.16 review).
+//     The intent is unchanged: each row shows what the cost is, the
+//     explanation says which costs count, and only those costs are listed.
 //
 // S7. Result: the line "Result $X" (income − costs; negative as "-$X").
 //
@@ -182,8 +196,9 @@ const SHELF = { id: "pretend-event-shelf", name: "Pretend gallery shelf" };
 
 const NO_INCOME = "No income yet.";
 const NO_COSTS = "No costs yet.";
+// CHANGED (T1.17): the lead's more exact wording (S6).
 const COSTS_EXPLANATION =
-  "Costs count here when they're tagged with this stream, or linked to an event that usually earns from it.";
+  "Costs count here when they're tagged with this stream, or, with no stream tag, linked to an event that usually earns from it.";
 
 const HOOK_NAME = "__bentoTest";
 const HOOK_WAIT_MS = 10_000;
@@ -389,6 +404,17 @@ function expectRowParts(text: string, parts: readonly string[], amount: string):
   let rest = text;
   for (const part of [...parts, amount]) rest = rest.replace(part, "");
   expect(rest.replace(/[\s·•,;:|()–—-]/g, ""), `left over in "${text}"`).toBe("");
+}
+
+/**
+ * A cost row's rendered lines (S6, CHANGED (T1.17); expenses.spec.ts X5):
+ * innerText split at line breaks, each collapsed and trimmed, empties dropped.
+ */
+async function rowLines(row: Locator): Promise<string[]> {
+  return (await row.innerText())
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line !== "");
 }
 
 async function setMarker(page: Page): Promise<void> {
@@ -652,7 +678,8 @@ test.describe('T1.16: "+ Add" on a stream page', () => {
     await press(main(page).getByRole("button", { name: "Save", exact: true }), t);
     await expect(page).toHaveURL(urlOnThisServer(page, streamPath(COMMISSIONS)));
     await expect(costRows(page)).toHaveCount(1);
-    expectRowParts(await textOf(costRows(page).first()), ["01/07/2026", "Marketing"], "$15.00");
+    // CHANGED (T1.17): the shared cost row (S6) also shows the stream tag.
+    expect(await rowLines(costRows(page).first())).toEqual(["01/07/2026", "Marketing", "Commissions", "$15.00"]);
     await expectLine(region(page, "Costs"), "Costs $15.00");
     // 0 − 1500 = −1500 cents.
     await expectLine(region(page, "Result"), "Result -$15.00");
@@ -808,7 +835,7 @@ test.describe("T1.16: cost rows", () => {
   });
 
   for (const stream of [SALES, ONLINE, SOCIAL]) {
-    test(`on ${stream.name}, the Costs section explains exactly which costs count`, async ({ page }) => {
+    test(`on ${stream.name}, the Costs section explains exactly which costs count (wording CHANGED (T1.17))`, async ({ page }) => {
       await openStream(page, stream);
       await expect(region(page, "Costs").getByText(COSTS_EXPLANATION, { exact: true })).toBeVisible();
     });
@@ -820,13 +847,22 @@ test.describe("T1.16: cost rows", () => {
     await openStream(page, SALES);
     await seedOwner(page);
     await expect(costRows(page)).toHaveCount(3);
-    expectRowParts(await textOf(costRows(page).nth(0)), ["24/06/2026", "Accommodation", "Harbour Hotel"], "$299.00");
-    expectRowParts(await textOf(costRows(page).nth(1)), ["23/06/2026", "Meals"], "$200.00");
-    expectRowParts(
-      await textOf(costRows(page).nth(2)),
-      ["22/06/2026", "Stall or table fees", "Comic con organisers"],
+    // CHANGED (T1.17): exact shared-row lines (S6); untagged, so the event's name shows.
+    expect(await rowLines(costRows(page).nth(0))).toEqual([
+      "24/06/2026",
+      "Accommodation",
+      "Harbour Hotel",
+      COMIC_CON.name,
+      "$299.00",
+    ]);
+    expect(await rowLines(costRows(page).nth(1))).toEqual(["23/06/2026", "Meals", COMIC_CON.name, "$200.00"]);
+    expect(await rowLines(costRows(page).nth(2))).toEqual([
+      "22/06/2026",
+      "Stall or table fees",
+      "Comic con organisers",
+      COMIC_CON.name,
       "$500.00",
-    );
+    ]);
   });
 
   test('the owner\'s example: "Costs $999.00" and no empty-state line', async ({ page }) => {
@@ -840,7 +876,8 @@ test.describe("T1.16: cost rows", () => {
     await openStream(page, SALES);
     await seedMixed(page);
     await expect(costRows(page)).toHaveCount(4);
-    expectRowParts(await textOf(costRows(page).nth(0)), ["01/07/2026", "Parking", "Market carpark"], "$33.30");
+    // CHANGED (T1.17): exact shared-row lines (S6).
+    expect(await rowLines(costRows(page).nth(0))).toEqual(["01/07/2026", "Parking", "Market carpark", MARKET.name, "$33.30"]);
     await expectLine(region(page, "Costs"), "Costs $1,032.30");
   });
 
@@ -855,16 +892,49 @@ test.describe("T1.16: cost rows", () => {
     await followStreamLink(page, ONLINE, t);
     await expect(costRows(page)).toHaveCount(2);
     // Newest first: 29/06 Marketing, then 23/06 Parking.
-    expectRowParts(await textOf(costRows(page).nth(0)), ["29/06/2026", "Marketing", "Insta ads"], "$25.00");
-    expectRowParts(await textOf(costRows(page).nth(1)), ["23/06/2026", "Parking", "City carpark"], "$40.00");
+    // CHANGED (T1.17): exact shared-row lines (S6), with the stream tag, and
+    // for the Parking the convention it's linked to as well.
+    expect(await rowLines(costRows(page).nth(0))).toEqual(["29/06/2026", "Marketing", "Insta ads", "Online sales", "$25.00"]);
+    expect(await rowLines(costRows(page).nth(1))).toEqual([
+      "23/06/2026",
+      "Parking",
+      "City carpark",
+      `${COMIC_CON.name} \u00B7 Online sales`,
+      "$40.00",
+    ]);
     await expectLine(region(page, "Costs"), "Costs $65.00");
+  });
+
+  test("a cost with notes shows them as their own line, before the amount (ADDED (T1.17))", async ({ page }) => {
+    await openStream(page, WHOLESALE);
+    await seed(
+      page,
+      [],
+      [{ date: "2026-06-10", amountCents: 3000, categoryId: "equipment", supplier: "Camera shop", streamId: "wholesale", notes: "  Tripod  " }],
+    );
+    await expect(costRows(page)).toHaveCount(1);
+    expect(await rowLines(costRows(page).first())).toEqual([
+      "10/06/2026",
+      "Equipment",
+      "Camera shop",
+      "Wholesale",
+      "Tripod",
+      "$30.00",
+    ]);
   });
 
   test("an untagged cost linked to the shelf counts on Vendor shelf rental", async ({ page }) => {
     await openStream(page, SHELF_STREAM);
     await seedMixed(page);
     await expect(costRows(page)).toHaveCount(1);
-    expectRowParts(await textOf(costRows(page).first()), ["01/06/2026", "Vendor shelf rent", "Gallery Co"], "$150.00");
+    // CHANGED (T1.17): exact shared-row lines (S6).
+    expect(await rowLines(costRows(page).first())).toEqual([
+      "01/06/2026",
+      "Vendor shelf rent",
+      "Gallery Co",
+      SHELF.name,
+      "$150.00",
+    ]);
     await expectLine(region(page, "Costs"), "Costs $150.00");
   });
 

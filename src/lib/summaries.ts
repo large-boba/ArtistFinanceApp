@@ -210,3 +210,61 @@ export function rangeTotals(state: EntriesState, from: string, to: string): Rang
   }
   return { incomeCents, expensesCents, netCents: subtractCents(incomeCents, expensesCents) };
 }
+
+// ─── The Expenses tab ────────────────────────────────────────────────────────
+
+export type ExpensesSummary = {
+  expenses: readonly ExpenseEntry[]; // every expense, newest first
+  productionCents: number; // the production expenses added up
+  eventVenueCents: number; // the event & venue expenses added up
+  operatingCents: number; // the operating expenses added up
+  totalCents: number; // production + event & venue + operating
+};
+
+/**
+ * Everything the Expenses tab shows: every expense, newest first, and a total
+ * for each of the three groups plus a grand total.
+ *
+ * - The list holds the store's own entry objects (each once), so a screen can
+ *   open one to edit it. Income is never in it.
+ * - Each cost is added to the group stored on the entry itself.
+ * - "Other costs" figures never count (see the top of this file).
+ * - The totals aren't limited by the $9,999,999.99 per-entry cap: many big
+ *   costs can add up to more than that.
+ *
+ * Throws RangeError if a group total or the grand total would go past
+ * Number.MAX_SAFE_INTEGER cents.
+ */
+export function expensesSummary(state: EntriesState): ExpensesSummary {
+  const expenses: ExpenseEntry[] = [];
+  let productionCents = 0;
+  let eventVenueCents = 0;
+  let operatingCents = 0;
+  // entriesNewestFirst gives the list its order: later date first, and on the
+  // same date the entry added later first. It returns a new list, so the
+  // state's own list is left as it was.
+  for (const entry of entriesNewestFirst(state.entries)) {
+    if (entry.kind !== "expense") continue;
+    expenses.push(entry);
+    switch (entry.group) {
+      case "production":
+        productionCents = addCents(productionCents, entry.amountCents);
+        break;
+      case "event_venue":
+        eventVenueCents = addCents(eventVenueCents, entry.amountCents);
+        break;
+      case "operating":
+        operatingCents = addCents(operatingCents, entry.amountCents);
+        break;
+      default: {
+        // If a fourth group is ever added, TypeScript stops the build here
+        // instead of quietly counting its costs as one of the three above.
+        const unknownGroup: never = entry.group;
+        throw new RangeError(`unknown expense group: ${String(unknownGroup)}`);
+      }
+    }
+  }
+
+  const totalCents = addCents(addCents(productionCents, eventVenueCents), operatingCents);
+  return { expenses, productionCents, eventVenueCents, operatingCents, totalCents };
+}

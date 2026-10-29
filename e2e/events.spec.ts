@@ -139,6 +139,14 @@
 //     "Event costs $X". With none: "No event & venue costs yet." and no list
 //     items. Production costs, unlinked costs and other events' costs never
 //     appear, and neither do other events' takings or unlinked income.
+//     CHANGED (T1.17, lead): each cost is now the SHARED cost row, the same
+//     as on the Expenses tab and the stream pages (expenses.spec.ts X5). Its
+//     rendered lines are exactly, in order: the date; the category; the
+//     supplier (when set); "<event name> · <stream name>", or just the event
+//     name when it has no stream tag (every cost here is linked to this
+//     event, so this line is always there); the notes (when set); the amount.
+//     Nothing else. The intent is unchanged: each row shows what the cost is,
+//     and only this event's event & venue costs are listed.
 //
 // E7. Result: the line "Result $X" (takings − event costs; negative shown as
 //     "-$X").
@@ -431,6 +439,17 @@ function hasToken(text: string, token: string): boolean {
 /** Every money amount in a piece of text ("$1,234.56", "-$50.00"). */
 function amountsIn(text: string): string[] {
   return text.match(/-?\$\d[\d,]*\.\d{2}/g) ?? [];
+}
+
+/**
+ * A cost row's rendered lines (E6, CHANGED (T1.17); expenses.spec.ts X5):
+ * innerText split at line breaks, each collapsed and trimmed, empties dropped.
+ */
+async function rowLines(row: Locator): Promise<string[]> {
+  return (await row.innerText())
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line !== "");
 }
 
 function dayRows(page: Page): Locator {
@@ -930,29 +949,58 @@ test.describe("T1.15: event & venue costs", () => {
     expect(categories).toEqual(["Stall or table fees", "Meals", "Accommodation"]);
   });
 
+  // CHANGED (T1.17): these were "holds the date, category, supplier and one
+  // amount" checks; they now pin the shared row's exact lines (E6), which
+  // add the event's name.
   const COSTS = [
     { index: 0, date: "22/06/2026", category: "Stall or table fees", supplier: "Comic con organisers", amount: "$500.00" },
     { index: 2, date: "24/06/2026", category: "Accommodation", supplier: "Harbour Hotel", amount: "$299.00" },
   ] as const;
   for (const c of COSTS) {
-    test(`the ${c.category} cost shows ${c.date}, "${c.category}", "${c.supplier}" and ${c.amount}`, async ({ page }) => {
+    test(`the ${c.category} cost reads exactly ${c.date} | ${c.category} | ${c.supplier} | ${COMIC_CON.name} | ${c.amount} (CHANGED (T1.17))`, async ({
+      page,
+    }) => {
       await openExample(page);
-      const text = await textOf(costRows(page).nth(c.index));
-      for (const token of [c.date, c.category, c.supplier]) {
-        expect(hasToken(text, token), `"${text}" holds "${token}"`).toBe(true);
-      }
-      expect(amountsIn(text), "the only money amount in the row").toEqual([c.amount]);
+      expect(await rowLines(costRows(page).nth(c.index))).toEqual([c.date, c.category, c.supplier, COMIC_CON.name, c.amount]);
     });
   }
 
-  test('a cost with no supplier shows only its date, category and amount: "23/06/2026", "Meals", "$200.00"', async ({
+  test(`a cost with no supplier reads exactly 23/06/2026 | Meals | ${COMIC_CON.name} | $200.00 (CHANGED (T1.17))`, async ({
     page,
   }) => {
     await openExample(page);
-    const text = await textOf(costRows(page).nth(1));
-    expect(amountsIn(text)).toEqual(["$200.00"]);
-    const rest = text.replace("23/06/2026", "").replace("Meals", "").replace("$200.00", "");
-    expect(rest.replace(/[\s·•,;:|()–—-]/g, ""), `left over in "${text}"`).toBe("");
+    expect(await rowLines(costRows(page).nth(1))).toEqual(["23/06/2026", "Meals", COMIC_CON.name, "$200.00"]);
+  });
+
+  test("a cost with a stream tag and notes reads exactly date | category | supplier | event · stream | notes | amount (ADDED (T1.17))", async ({
+    page,
+  }) => {
+    await openEvent(page, COMIC_CON);
+    await seed(
+      page,
+      [],
+      [
+        {
+          date: "2026-06-23",
+          amountCents: 4000,
+          categoryId: "parking",
+          supplier: "City carpark",
+          eventId: COMIC_CON.id,
+          streamId: "online-sales",
+          notes: "  Saturday  ",
+        },
+      ],
+    );
+    await expect(costRows(page)).toHaveCount(1);
+    expect(await rowLines(costRows(page).first())).toEqual([
+      "23/06/2026",
+      "Parking",
+      "City carpark",
+      `${COMIC_CON.name} \u00B7 Online sales`,
+      "Saturday",
+      "$40.00",
+    ]);
+    await expectLine(region(page, "Event & venue costs"), "Event costs $40.00");
   });
 
   test('the owner\'s example: "Event costs $999.00" (50000 + 20000 + 29900 cents)', async ({ page }) => {

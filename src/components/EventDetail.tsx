@@ -15,16 +15,17 @@
 // once, as a production cost on the day it was bought. Adding it to a
 // total as well would count the same money twice. So it shows on THIS page
 // only, as the extra line "Result after other costs", and the events list,
-// Home and the Transactions list never include it.
+// Home, the Expenses tab and the Transactions list never include it.
 //
 // The page waits for useDevice (the device's language and today's date) before
 // it draws anything, because the pretend events' dates depend on "today".
 
 import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
-import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
+import { pretendEvents } from "@/lib/pretend-data";
 import { eventSummary } from "@/lib/summaries";
 import { formatEventDates } from "@/lib/event-dates";
+import CostRow from "./CostRow";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage } from "./form-parts";
 import OtherCostsEditor from "./OtherCostsEditor";
@@ -102,14 +103,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         ) : (
           <ul className="mt-3 flex flex-col gap-3">
             {summary.costs.map((cost) => (
-              <li key={cost.id} className={itemClass}>
-                <p className="text-base break-words">{day(cost.date)}</p>
-                <p className="text-lg font-bold break-words">
-                  {DRAFT_CATEGORIES.find((c) => c.id === cost.categoryId)?.name ?? "Unknown category"}
-                </p>
-                {cost.supplier !== "" && <p className="text-base break-words">{cost.supplier}</p>}
-                <p className="text-base font-bold break-words">{money(cost.amountCents)}</p>
-              </li>
+              <CostRow key={cost.id} cost={cost} events={events} locale={locale} />
             ))}
           </ul>
         )}

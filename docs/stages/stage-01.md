@@ -709,7 +709,7 @@ Evidence:
   - Logged (DECISIONS follow-ups): a matching database CHECK in Stage 2.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1066/1066, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **2367 passed, 0 failed** (20.2 minutes). The tidy-ups are an import order and a comment; lint was re-run after them.
 
-### T1.17 — Expenses tab                                    Status: tests
+### T1.17 — Expenses tab                                    Status: done
 Owner agent: backend-engineer (one small summary function), then frontend-engineer (the screen)   Tests: test-engineer (Vitest + Playwright)   Security review: no
 Guide: §7 (three groups), §12; DECISIONS.md "Linking costs to events and streams".
 Outcome:
@@ -723,6 +723,25 @@ Outcome:
 Out of scope: removing `/transactions` (T1.17b); editing and deleting entries.
 Done when: the tests pass; `npm run check` exits 0.
 Evidence:
+- **Lead decisions (2026-10-29):**
+  - Event-page cost rows repeat the event's name, so a cost reads the same on all three pages (the owner may prefer otherwise).
+  - The markup of the totals is free; only the lines, their order and the amounts are pinned.
+  - The usage limit interrupted the test engineer's planted-bug run. The lead confirmed the feature files were restored before building.
+- **Tests first** (test engineer):
+  - `summaries.test.ts` decision I (24 tests for `expensesSummary`);
+  - new `e2e/expenses.spec.ts` (X1–X9);
+  - events E6, income-streams S6/S3 and app-shell claim 7, all CHANGED (T1.17).
+  - Red run: 24 unit and 104 e2e failures for the intended reasons. Planted bugs were caught: wrong order, copies instead of the store's objects, a wrong group, the row joined with " - ", the event name hidden on the event page.
+- **Built:**
+  - backend engineer: `expensesSummary`;
+  - frontend engineer: a shared `CostRow` (used by the event, stream and expenses pages), `ExpensesOverview`, and the new stream-page explanation wording.
+  - **Lead viewed the phone screenshot:**
+    - Totals: Production $120.00, Event & venue $999.00, Operating $15.00, **Total expenses $1,134.00**;
+    - the rows are newest first.
+- **Code review: ACCEPT.** Taken by the lead:
+  - an exhaustive `switch` on the group, so a fourth group would stop the build instead of being counted as operating;
+  - a comment updated.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1090/1090). `CI=1 npx playwright test` gave **2451 passed, 0 failed** (21.9 minutes). After the two tidy-ups, which don't change behaviour: `npm run check` exit 0, with 1090 unit tests.
 
 ### T1.17b — Retire the old Transactions page                 Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: yes, light (the test seam's safety tests move to a new file and must stay just as strong)

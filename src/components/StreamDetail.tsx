@@ -20,8 +20,9 @@ import Link from "next/link";
 import { STREAMS_WITH_EVENTS } from "@/lib/entries";
 import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
-import { DRAFT_CATEGORIES, INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
+import { INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import { streamSummary } from "@/lib/summaries";
+import CostRow from "./CostRow";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage, PAYMENT_LABELS } from "./form-parts";
 import { useDevice } from "./useDevice";
@@ -90,21 +91,14 @@ export default function StreamDetail({ streamId }: { streamId: string }) {
           Costs
         </h2>
         <p className={mutedClass}>
-          Costs count here when they&apos;re tagged with this stream, or linked to an event that usually earns from it.
+          Costs count here when they&apos;re tagged with this stream, or, with no stream tag, linked to an event that usually earns from it.
         </p>
         {summary.costs.length === 0 ? (
           <p className={mutedClass}>No costs yet.</p>
         ) : (
           <ul className="mt-3 flex flex-col gap-3">
             {summary.costs.map((cost) => (
-              <li key={cost.id} className={itemClass}>
-                <p className="text-base break-words">{day(cost.date)}</p>
-                <p className="text-lg font-bold break-words">
-                  {DRAFT_CATEGORIES.find((c) => c.id === cost.categoryId)?.name ?? "Unknown category"}
-                </p>
-                {cost.supplier !== "" && <p className="text-base break-words">{cost.supplier}</p>}
-                <p className="text-base font-bold break-words">{money(cost.amountCents)}</p>
-              </li>
+              <CostRow key={cost.id} cost={cost} events={events} locale={locale} />
             ))}
           </ul>
         )}

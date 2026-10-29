@@ -79,6 +79,22 @@
 // direct() instead of the reducer (marked CHANGED (T1.16b)). The summaries
 // themselves keep decision B unchanged.
 //
+// T1.17 (Expenses tab), lead's decision (2026-10-29), ADDED:
+//  I. expensesSummary(state) → {
+//       expenses: ExpenseEntry[],   // EVERY expense in the state, newest first
+//                                   // (entriesNewestFirst's order: later date
+//                                   // first; same date, added later first),
+//                                   // the store's own objects (decision H)
+//       productionCents,            // the production expenses added up
+//       eventVenueCents,            // the event & venue expenses added up
+//       operatingCents,             // the operating expenses added up
+//       totalCents,                 // production + event & venue + operating
+//     }
+//     Income is never in it. "Other costs" figures never count (decision F).
+//     Exact whole cents with a RangeError past Number.MAX_SAFE_INTEGER, like
+//     the others (decision B; not limited by the T1.16b cap). Pure: the state
+//     is never changed. The groups come from each entry's own `group`.
+//
 // Every expected value is worked out by hand (sums in the comments). None
 // comes from the code under test.
 
@@ -91,7 +107,7 @@ import {
   type Entry,
 } from "@/lib/entries";
 import { DRAFT_CATEGORIES, pretendEvents, type PretendEvent } from "@/lib/pretend-data";
-import { eventSummary, rangeTotals, streamSummary } from "@/lib/summaries";
+import { eventSummary, expensesSummary, rangeTotals, streamSummary } from "@/lib/summaries";
 
 // ─── Helpers and fixed facts ─────────────────────────────────────────────────
 
@@ -806,3 +822,258 @@ describe("decision H: the summary lists hold the store's own entries", () => {
   });
 });
 
+
+// ─── expensesSummary (T1.17, decision I) ─────────────────────────────────────
+
+describe("expensesSummary — every expense, newest first, with a total per group (T1.17)", () => {
+  // THE OWNER'S EXAMPLE FOR THE EXPENSES TAB (lead, T1.17): the convention's
+  // three costs (table 50000, hotel 29900, food 20000, all event & venue) plus
+  //   "prints" production Printing 12000, 20 Jun, "Zine printer"
+  //   "adobe"  operating  Software  1500, 30 Jun, "Adobe", tagged Online sales
+  // The state also holds the six takings rows and the $600 other costs.
+  //   production   12000                      → $120.00
+  //   event_venue  50000 + 29900 + 20000 = 99900 → $999.00
+  //   operating    1500                       → $15.00
+  //   total        12000 + 99900 + 1500 = 113400 → $1,134.00
+  // Newest first: adobe 30/06, hotel 24/06, food 23/06, table 22/06, prints 20/06.
+  const PRINTS = expenseRow("prints", "2026-06-20", "Zine printer", 12000, "Printing", "production", null);
+  const ADOBE = expenseRow("adobe", "2026-06-30", "Adobe", 1500, "Software", "operating", null, ONLINE_SALES);
+  const ownerExpensesState = () =>
+    build(
+      ...OWNER_ACTIONS,
+      expense("prints", "2026-06-20", 12000, "Printing", { supplier: "Zine printer" }),
+      expense("adobe", "2026-06-30", 1500, "Software", { supplier: "Adobe", streamId: ONLINE_SALES }),
+    );
+
+  // A HAND-WORKED MIX of all three groups (on top of the owner's convention):
+  //   "boxes"   production  Packaging          3450, 26 Jun
+  //   "ads"     operating   Marketing          2599, 23 Jun (added after "food", same date)
+  //   "parking" event_venue Parking            3330,  1 Jul, linked to the market
+  //   "free"    event_venue Meals                 0, 24 Jun, linked to the market ($0 still listed)
+  //   "etsy"    INCOME Online sales           12345, 30 Jun (never in the summary)
+  //   production   12000 + 3450                 = 15450
+  //   event_venue  99900 + 3330 + 0              = 103230
+  //   operating    1500 + 2599                  = 4099
+  //   total        15450 + 103230 + 4099        = 122779
+  // Newest first (same date: added later first):
+  //   parking 01/07; adobe 30/06; boxes 26/06; free 24/06 (added after hotel), hotel 24/06;
+  //   ads 23/06 (added after food), food 23/06; table 22/06; prints 20/06.
+  const mixedState = () =>
+    build(
+      ...OWNER_ACTIONS,
+      expense("prints", "2026-06-20", 12000, "Printing", { supplier: "Zine printer" }),
+      expense("adobe", "2026-06-30", 1500, "Software", { supplier: "Adobe", streamId: ONLINE_SALES }),
+      expense("boxes", "2026-06-26", 3450, "Packaging"),
+      expense("ads", "2026-06-23", 2599, "Marketing"),
+      expense("parking", "2026-07-01", 3330, "Parking", { eventId: MARKET }),
+      expense("free", "2026-06-24", 0, "Meals", { eventId: MARKET }),
+      income("etsy", "2026-06-30", 12345, ONLINE_SALES, "online"),
+    );
+
+  it("the owner's example: production 12000, event & venue 99900, operating 1500, total 113400, newest first", () => {
+    expect(expensesSummary(ownerExpensesState())).toStrictEqual({
+      expenses: [ADOBE, HOTEL, FOOD, TABLE, PRINTS],
+      productionCents: 12000,
+      eventVenueCents: 99900,
+      operatingCents: 1500,
+      totalCents: 113400,
+    });
+  });
+
+  it("the mix: production 15450, event & venue 103230, operating 4099, total 122779", () => {
+    const { productionCents, eventVenueCents, operatingCents, totalCents } = expensesSummary(mixedState());
+    expect({ productionCents, eventVenueCents, operatingCents, totalCents }).toStrictEqual({
+      productionCents: 15450,
+      eventVenueCents: 103230,
+      operatingCents: 4099,
+      totalCents: 122779,
+    });
+  });
+
+  it("the mix lists all nine expenses newest first (same date: added later first), and no income", () => {
+    expect(ids(expensesSummary(mixedState()).expenses)).toEqual([
+      "parking",
+      "adobe",
+      "boxes",
+      "free",
+      "hotel",
+      "ads",
+      "food",
+      "table",
+      "prints",
+    ]);
+  });
+
+  it("an empty state: no expenses and four zeros", () => {
+    expect(expensesSummary(build())).toStrictEqual({
+      expenses: [],
+      productionCents: 0,
+      eventVenueCents: 0,
+      operatingCents: 0,
+      totalCents: 0,
+    });
+  });
+
+  it("income is never included: a state with only the owner's six takings rows (450000) is empty and all zeros", () => {
+    expect(expensesSummary(build(...OWNER_ACTIONS.slice(0, 3)))).toStrictEqual({
+      expenses: [],
+      productionCents: 0,
+      eventVenueCents: 0,
+      operatingCents: 0,
+      totalCents: 0,
+    });
+  });
+
+  it("income is never included: adding the 12345 Etsy income leaves the owner's example exactly as it was", () => {
+    const withIncome = build(...OWNER_ACTIONS, income("etsy", "2026-06-30", 12345, ONLINE_SALES, "online"));
+    expect(expensesSummary(withIncome)).toStrictEqual({
+      expenses: [HOTEL, FOOD, TABLE],
+      productionCents: 0,
+      eventVenueCents: 99900,
+      operatingCents: 0,
+      totalCents: 99900,
+    });
+  });
+
+  it("other costs never count: the convention's 60000 figure is in the state, yet event & venue is 99900 and total 113400", () => {
+    const state = ownerExpensesState();
+    expect(state.otherCosts[CONVENTION]?.amountCents).toBe(60000); // the figure really is there
+    const s = expensesSummary(state);
+    expect([s.eventVenueCents, s.totalCents]).toEqual([99900, 113400]);
+  });
+
+  it("other costs never count: the summary is the same with or without the 60000 figure", () => {
+    const withoutFigure = build(
+      ...OWNER_ACTIONS.slice(0, -1),
+      expense("prints", "2026-06-20", 12000, "Printing", { supplier: "Zine printer" }),
+      expense("adobe", "2026-06-30", 1500, "Software", { supplier: "Adobe", streamId: ONLINE_SALES }),
+    );
+    expect(expensesSummary(ownerExpensesState())).toStrictEqual(expensesSummary(withoutFigure));
+  });
+
+  it("each group counts only its own: a single 777 operating cost gives 0 / 0 / 777 / 777", () => {
+    const s = expensesSummary(build(expense("x", "2026-06-01", 777, "Insurance")));
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([0, 0, 777, 777]);
+  });
+
+  it("each group counts only its own: a single 888 production cost gives 888 / 0 / 0 / 888", () => {
+    const s = expensesSummary(build(expense("x", "2026-06-01", 888, "Art materials")));
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([888, 0, 0, 888]);
+  });
+
+  it("each group counts only its own: a single unlinked 999 event & venue cost gives 0 / 999 / 0 / 999", () => {
+    const s = expensesSummary(build(expense("x", "2026-06-01", 999, "Flights")));
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([0, 999, 0, 999]);
+  });
+
+  it("follows edits and deletes: after the hotel goes to 30000 and the food is deleted, event & venue is 50000 + 30000 = 80000", () => {
+    const state = build(
+      ...OWNER_ACTIONS,
+      { type: "edit", id: "hotel", changes: { amountCents: 30000 } },
+      { type: "delete", id: "food" },
+    );
+    const s = expensesSummary(state);
+    expect(ids(s.expenses)).toEqual(["hotel", "table"]);
+    expect([s.eventVenueCents, s.totalCents]).toEqual([80000, 80000]);
+  });
+
+  it("an edit doesn't move an entry: the table edited last still sorts by its date (22 Jun, after food 23 Jun)", () => {
+    const state = build(...OWNER_ACTIONS, { type: "edit", id: "table", changes: { supplier: "Con HQ Pty Ltd" } });
+    expect(ids(expensesSummary(state).expenses)).toEqual(["hotel", "food", "table"]);
+  });
+
+  it("holds the store's own entries (decision H): expenses[0] is the very same object as the store's 'parking'", () => {
+    const state = mixedState();
+    const parking = state.entries.find((e) => e.id === "parking");
+    expect(parking).toBeDefined();
+    expect(expensesSummary(state).expenses[0]).toBe(parking);
+  });
+
+  it("holds every expense entry of the store exactly once, and nothing else", () => {
+    const state = mixedState();
+    const listed = expensesSummary(state).expenses;
+    const storeExpenses = state.entries.filter((e) => e.kind === "expense");
+    expect(listed.length).toBe(9);
+    expect(new Set(listed).size).toBe(9);
+    expect(listed.every((e) => storeExpenses.includes(e))).toBe(true);
+  });
+
+  it("never changes the state it was given", () => {
+    const state = mixedState();
+    const before = snapshot(state);
+    expensesSummary(state);
+    expect(state).toStrictEqual(before);
+  });
+
+  it("doesn't reorder the state's own entries list", () => {
+    const state = mixedState();
+    const order = ids(state.entries);
+    expensesSummary(state);
+    expect(ids(state.entries)).toEqual(order);
+  });
+
+  it("isn't limited by the owner's cap: two capped amounts, 999999999 + 999999999 = 1999999998", () => {
+    const state = build(
+      expense("a", "2026-06-01", 999999999, "Printing"),
+      expense("b", "2026-06-02", 999999999, "Website"),
+    );
+    const s = expensesSummary(state);
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([
+      999999999, 0, 999999999, 1999999998,
+    ]);
+  });
+
+  // Built with direct() (no reducer), as the other MAX_SAFE_INTEGER tests are (T1.16b).
+  it("throws RangeError when the production total would pass MAX_SAFE_INTEGER (MAX + 1)", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Printing", "production", null),
+      expenseRow("b", "2026-06-02", "", 1, "Packaging", "production", null),
+    ]);
+    expect(() => expensesSummary(state)).toThrow(RangeError);
+  });
+
+  it("throws RangeError when the event & venue total would pass MAX_SAFE_INTEGER (MAX + 1)", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Flights", "event_venue", null),
+      expenseRow("b", "2026-06-02", "", 1, "Parking", "event_venue", null),
+    ]);
+    expect(() => expensesSummary(state)).toThrow(RangeError);
+  });
+
+  it("throws RangeError when the operating total would pass MAX_SAFE_INTEGER (MAX + 1)", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Website", "operating", null),
+      expenseRow("b", "2026-06-02", "", 1, "Phone", "operating", null),
+    ]);
+    expect(() => expensesSummary(state)).toThrow(RangeError);
+  });
+
+  it("throws RangeError when only the TOTAL would pass MAX_SAFE_INTEGER (production MAX, operating 1)", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Printing", "production", null),
+      expenseRow("b", "2026-06-02", "", 1, "Website", "operating", null),
+    ]);
+    expect(() => expensesSummary(state)).toThrow(RangeError);
+  });
+
+  it("is exact right at the limit: production 4503599627370495 + operating 4503599627370496 = 9007199254740991", () => {
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", 4503599627370495, "Printing", "production", null),
+      expenseRow("b", "2026-06-02", "", 4503599627370496, "Website", "operating", null),
+    ]);
+    const s = expensesSummary(state);
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([
+      4503599627370495, 0, 4503599627370496, 9007199254740991,
+    ]);
+  });
+
+  it("income past MAX_SAFE_INTEGER doesn't matter: it is never added (MAX + 1 income, one 500 cost)", () => {
+    const state = direct([
+      incomeRow("i1", "2026-06-01", MAX, WHOLESALE, "bank_transfer", null),
+      incomeRow("i2", "2026-06-02", 1, WHOLESALE, "bank_transfer", null),
+      expenseRow("c", "2026-06-03", "", 500, "Website", "operating", null),
+    ]);
+    const s = expensesSummary(state);
+    expect([s.productionCents, s.eventVenueCents, s.operatingCents, s.totalCents]).toEqual([0, 0, 500, 500]);
+  });
+});

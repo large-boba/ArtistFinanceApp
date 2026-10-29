@@ -80,6 +80,13 @@
 //    replaces its note with the seven income streams
 //    (income-streams.spec.ts S1), so only Expenses must say "coming next"
 //    (until T1.17), and Income must NOT.
+//    CHANGED (T1.17): Expenses is no longer a "coming next" page. T1.17
+//    replaces its note with the totals per group and the expense list
+//    (expenses.spec.ts X1–X5), so Expenses must NOT say "coming next". No
+//    page is left with a "coming next" note, so that half of the claim is
+//    retired: the list of "coming next" pages and its loop are removed
+//    rather than left empty (an empty loop makes no tests and would read as
+//    if something were still checked).
 //
 // 8. Home button. Home has exactly one control whose accessible name is
 //    exactly "+ Add" (since T1.14; it was "+ Expense", see the CHANGED notes
@@ -238,9 +245,9 @@ type Screen = (typeof SCREENS)[number];
 // now lists the pretend events, so only Settings is left.
 const PLACEHOLDER_SCREENS = SCREENS.filter((s) => ["Settings"].includes(s.name));
 
-// The simple pages (claim 7, T1.11): a "coming next" note until T1.17
-// (Expenses) fills it in. CHANGED (T1.16): Income now lists the streams.
-const COMING_NEXT_SCREENS = SCREENS.filter((s) => ["Expenses"].includes(s.name));
+// The simple pages (claim 7, T1.11) had a "coming next" note. CHANGED (T1.16):
+// Income now lists the streams. CHANGED (T1.17): Expenses now lists the
+// expenses, so no page has the note and the list is retired (see claim 7).
 
 // Removed and de-tabbed pages (claims 16\u201318).
 const REPORTS_PATH = "/reports";
@@ -551,12 +558,10 @@ test.describe("bottom navigation", () => {
     await expect(page.getByRole("main")).not.toContainText(/\bcoming next\b/i);
   });
 
-  for (const screen of COMING_NEXT_SCREENS) {
-    test(`${screen.name} shows a "coming next" note`, async ({ page }) => {
-      await open(page, screen.path);
-      await expect(page.getByRole("main")).toContainText(/\bcoming next\b/i);
-    });
-  }
+  test('Expenses no longer shows a "coming next" note (CHANGED (T1.17))', async ({ page }) => {
+    await open(page, "/expenses");
+    await expect(page.getByRole("main")).not.toContainText(/\bcoming next\b/i);
+  });
 
   // Claim 3, icons (T1.11: "each with an icon").
   for (const screen of SCREENS) {
