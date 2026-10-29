@@ -709,11 +709,28 @@ Evidence:
   - Logged (DECISIONS follow-ups): a matching database CHECK in Stage 2.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1066/1066, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **2367 passed, 0 failed** (20.2 minutes). The tidy-ups are an import order and a comment; lint was re-run after them.
 
-### T1.17 — Expenses tab                                    Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §7, §12.
-Outcome: the expense list (newest first), totals per group (production, event & venue, operating), and the "+" button.
-Done when: the Playwright tests pass; `npm run check` exits 0.
+### T1.17 — Expenses tab                                    Status: tests
+Owner agent: backend-engineer (one small summary function), then frontend-engineer (the screen)   Tests: test-engineer (Vitest + Playwright)   Security review: no
+Guide: §7 (three groups), §12; DECISIONS.md "Linking costs to events and streams".
+Outcome:
+- **`/expenses`** replaces its "coming next" note with:
+  - **totals per group:** Production, Event & venue, Operating, and **Total expenses**, from a new pure `expensesSummary(state)` in `src/lib/summaries.ts`;
+  - **the expense list**, newest first. Each row shows the date, category, supplier (when set), the event (when linked), the stream (when tagged), the notes (when set) and the amount;
+  - an empty state;
+  - "+ Add" stays at the top.
+- **One shared cost-row component**, used by the event page, the stream page and this list (T1.16 review). The rows look the same everywhere.
+- **The stream page's costs line** becomes: "Costs count here when they're tagged with this stream, or, with no stream tag, linked to an event that usually earns from it." (lead wording, more exact; T1.16 review).
+Out of scope: removing `/transactions` (T1.17b); editing and deleting entries.
+Done when: the tests pass; `npm run check` exits 0.
+Evidence:
+
+### T1.17b — Retire the old Transactions page                 Status: todo
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: yes, light (the test seam's safety tests move to a new file and must stay just as strong)
+Outcome:
+- `/transactions` and `EntriesList` are removed; `/transactions` is a real 404.
+- The seam-lock tests (S0–S6) move to their own spec, unchanged in strength.
+- Tests that checked saves on the Transactions list now check the Expenses tab and the stream pages.
+Done when: the full suite passes; CI's seam grep still passes; `npm run check` exits 0.
 Evidence:
 
 ### T1.18 — Home summary                                    Status: todo
