@@ -834,9 +834,23 @@ Evidence:
 ### T1.9 — Owner tries it on a real phone                   Status: todo
 Owner agent: **owner**
 Steps:
-1. Open the Cloudflare link (or a PR preview link) on your phone.
-2. Enter the takings for a 3-day event (cash and card per day), three event costs, one online sale and one operating cost. Then check the event page and the stream pages.
-3. Note anything awkward, too small or confusing.
+1. **Open it.** Open the preview link Cloudflare posts on the Stage 1 pull request (or the `workers.dev` link once it's merged) on your phone. Entries are pretend data and vanish on refresh, which is expected until Stage 2.
+2. **Enter a 3-day event.** On the Events tab, open the pretend "Comic Con" event and tap "+ Add" → Income. Enter cash and card takings for each of its three days (e.g. $1,000, $2,000 and $1,500 in total).
+3. **Add its costs.** From the same event page, "+ Add" → Expense, three times: a table fee, a hotel and food. Check that the event is already filled in.
+4. **Other costs.** On the event page, add "Other costs" (e.g. $600 COGS). Check that it appears separately from the result.
+5. **Other streams.** On the Income tab, open "Online sales". Add one sale ("+ Add" → Income) and one operating cost ("+ Add" → Expense). Check that the stream is filled in.
+6. **Check the totals.** Look at Home's "This month", the event page, the Online sales page and the Expenses tab. Do the totals match what you entered?
+7. **Things logged for this check:**
+   - do the down and up arrows read as expenses and income?
+   - tapping Notes: does the page jump or scroll twice?
+   - with your phone's text size turned up, does anything overlap or get cut off?
+   - if your phone uses a comma for decimals, the number keypad may have no "." key. Note it (comma decimals arrive in Stage 4);
+   - **optional, with VoiceOver (iPhone) or TalkBack (Android):**
+     - is the payment-method error read twice?
+     - when you pick a production category and the event fields disappear, is that announced?
+     - are the "Reads as" lines and Home's totals read out without being noisy?
+     - after a failed save, does focus land on the first bad field?
+8. **Report back.** Note anything awkward, too small or confusing, with a screenshot if you can.
 Done when: the owner reports back, and any fixes are made.
 Evidence:
 
