@@ -632,7 +632,7 @@ Evidence:
   - No separate security review was run; the card says why. The event id from the address is only matched against three fixed ids; any other is a real 404.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1949 passed, 0 failed**. After the three small fixes: `npm run check` exit 0, and the events, add-button and app-shell specs gave **923 passed, 0 failed**.
 
-### T1.16 — Income tab and stream pages                     Status: tests
+### T1.16 — Income tab and stream pages                     Status: building
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright + small Vitest additions)   Security review: no (the stream id from the address is only matched against a fixed list)
 Guide: §10 (seven default streams), §12 "By income stream"; DECISIONS.md "Linking costs to events and streams", "The '+' button".
 Outcome:
@@ -653,6 +653,12 @@ Outcome:
   - income notes are stored and shown (T1.12).
 Out of scope: removing `/transactions` and the Expenses tab (T1.17); renaming or archiving streams (later stage).
 Done when: the Playwright and Vitest tests pass, including the owner's example on Sales at events (income $4,500.00; costs $999.00 through the convention's usual stream; Result $3,501.00). `npm run check` exits 0.
+Lead decisions (2026-10-29); the full spec is S1–S11 in `e2e/income-streams.spec.ts`:
+- **Linked income rows** show the event AND the payment method, e.g. "Pretend comic convention · Cash", so a day's cash and card rows can be told apart. Unlinked rows show the payment method only.
+- **Wording** (the owner may reword it): "No income yet.", "No costs yet.", "Costs count here when they're tagged with this stream, or linked to an event that usually earns from it."
+- **`event-dates`** moves to `src/lib` as `formatEventDates`, with unit tests. The build fails until the move, on purpose.
+- **Still to decide at the stage gate:** whether the Events and Income tabs show as current on their sub-pages.
+- **The usage limit** interrupted the test engineer's proof. The lead confirmed the feature files were restored before the build.
 Evidence:
 
 ### T1.16b — Amount cap: $9,999,999.99 per entry              Status: todo
