@@ -798,11 +798,23 @@ Evidence:
   - **Logged for the next test round:** event-date wording now lives in two places (`formatEventDates`, unit-tested, and the `EventDates` component). The e2e exact-text tests catch any drift today. A shared pure "date parts" helper would make it one source.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1090/1090). `CI=1 npx playwright test` gave **2538 passed, 0 failed** (19.8 minutes). The comment fix came after the run; lint was re-run.
 
-### T1.18 — Home summary                                    Status: todo
-Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
-Guide: §12 (main profit view, simplified for pretend data).
-Outcome: Home shows this month's income, expenses and net, and the "+" button with nothing pre-filled. It replaces "today" totals, which suited live selling.
-Done when: the Playwright tests pass; `npm run check` exits 0.
+### T1.18 — Home summary: this month                         Status: tests
+Owner agent: backend-engineer (one small date helper), then frontend-engineer (Home)   Tests: test-engineer (Vitest + Playwright)   Security review: no
+Guide: §12 (main profit view, simplified for pretend data); DECISIONS.md "Navigation" (report figures live on Home and the event and stream pages).
+Outcome:
+- **Layout:** Home shows its heading and "+ Add" (as now), then a **"This month"** section headed with the month's name (e.g. "October 2026" in the device's language). It has three lines:
+  - **Income $X**;
+  - **Expenses $X**;
+  - **Net $X** (negative when costs are higher).
+
+  All three come from `rangeTotals` over the device's current calendar month, first to last day.
+- **Live region:** the summary is a polite live region, re-targeting the old "today" live-region test (D10), as promised at T1.8.
+- **What goes:** the old "Today: … from N sales" and "Today's expenses" lines are removed. `totalsForDate` becomes unused and is removed with its tests (`rangeTotals` covers it).
+- **Stays:** the practice-mode note.
+- **New helper:** a small pure `monthRange(today)` in `src/lib/dates.ts` gives the first and last day of the month as YYYY-MM-DD, including February in leap years. It does no time-zone maths and never uses `new Date("YYYY-MM-DD")`.
+- **"Other costs"** never count (`rangeTotals` already ensures this).
+Out of scope: a full reports screen (Stage 6); choosing other periods.
+Done when: the tests pass, including the owner's example dated this month (Income $4,500.00, Expenses $999.00, Net $3,501.00); `npm run check` exits 0.
 Evidence:
 
 ### T1.9 — Owner tries it on a real phone                   Status: todo
