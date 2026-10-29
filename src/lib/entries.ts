@@ -23,6 +23,7 @@
 // src/lib/entries.test.ts.
 
 import { isIsoDate } from "@/lib/dates";
+import { MAX_AMOUNT_CENTS } from "@/lib/money";
 import { DRAFT_CATEGORIES, INCOME_STREAMS } from "@/lib/pretend-data";
 
 export const EXPENSE_GROUPS = ["production", "event_venue", "operating"] as const;
@@ -180,11 +181,28 @@ export function createEntriesState(eventIds: readonly string[]): EntriesState {
  * -0 is refused too: `-0 < 0` is false, so it needs its own check
  * (Object.is tells -0 and 0 apart).
  */
-function checkAmountCents(value: unknown, field = "amountCents"): number {
+function checkWholeNonNegativeCents(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
     throw new RangeError(`${field} must be a whole number of cents, 0 or more`);
   }
   return value;
+}
+
+/**
+ * An amount the artist is SAVING (T1.16b): whole cents from 0 up to the
+ * owner's cap, $9,999,999.99 = 999,999,999 cents (MAX_AMOUNT_CENTS, owner
+ * decision 2026-10-26). Every action that takes an amount uses this: expense
+ * and income amounts (adding and editing), event takings cash and card, and
+ * an event's "Other costs". The forms already refuse bigger amounts; the store
+ * refuses them too, so no other route can slip one in. Keeping every entry
+ * this small also keeps totals far below JavaScript's exact-number limit.
+ */
+function checkAmountCents(value: unknown, field = "amountCents"): number {
+  const cents = checkWholeNonNegativeCents(value, field);
+  if (cents > MAX_AMOUNT_CENTS) {
+    throw new RangeError(`${field} must be at most ${MAX_AMOUNT_CENTS} cents ($9,999,999.99)`);
+  }
+  return cents;
 }
 
 function checkDate(value: unknown): string {
@@ -500,6 +518,8 @@ export function subtractCents(a: number, b: number): number {
  * go past Number.MAX_SAFE_INTEGER cents (beyond that it could no longer be
  * exact). Negative amounts are rejected for now; refunds arrive in Stage 4 as
  * linked negative income rows, and real totals move to SQL (§12).
+ * Not limited by the owner's $9,999,999.99 cap (T1.16b): that rule is for
+ * saving entries, and a reader adds up whatever it's given.
  */
 export function totalsForDate(
   entries: readonly Entry[],
@@ -511,7 +531,12 @@ export function totalsForDate(
   let expensesCents = 0;
 
   // Adds one entry's amount (refusing a negative one for now) to a total.
-  const add = (total: number, amount: number): number => addCents(total, checkAmountCents(amount));
+  // On purpose this does NOT use the owner's cap (checkAmountCents): the cap
+  // is a rule for what may be SAVED. This function only READS entries, so it
+  // must add up exactly whatever it's given, refusing only what it can't add
+  // exactly (fractions of a cent, or totals past Number.MAX_SAFE_INTEGER).
+  const add = (total: number, amount: number): number =>
+    addCents(total, checkWholeNonNegativeCents(amount, "amountCents"));
 
   for (const entry of entries) {
     if (entry.date !== date) continue;

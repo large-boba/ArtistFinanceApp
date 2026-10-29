@@ -213,6 +213,24 @@
 //     200% text works in all three shapes (no category; event & venue with
 //     Event and Income stream; production with the note).
 //
+// ─── Added for T1.16b (the owner's amount cap) ─────────────────────────────
+//
+// F17. Owner (DECISIONS.md "Typed amounts: detailed rules", 2026-10-26):
+//     every amount is at most $9,999,999.99 per entry. Lead's decisions:
+//     - "9999999.99" (and "$9,999,999.99", "9,999,999.99") is a valid amount:
+//       "Reads as $9,999,999.99" shows, and Save adds it.
+//     - Anything above it that is otherwise well-formed ("10000000",
+//       "10,000,000.00", "$10,000,000") is too large: NO "Reads as" while
+//       typing, and after Save exactly "Enter an amount up to $9,999,999.99."
+//       (a new shared text in form-parts), the Amount field gets
+//       aria-invalid="true" and aria-describedby pointing at it, focus moves
+//       to Amount, and nothing is saved. Like every error, it only appears
+//       after Save and goes as soon as the amount is fixed.
+//     - A format mistake keeps the F4 format message and never shows the cap
+//       message, even when the number is also too large ("10000000.001":
+//       three decimals is a format mistake first, test engineer's reading
+//       matching money.test.ts amountProblem).
+//
 // ═══ HAND-WORKED VALUES ═════════════════════════════════════════════════════
 //
 // The device clock is frozen at 2026-06-30T15:30:00Z. In Australia/Sydney
@@ -221,6 +239,9 @@
 // Australia/Perth (UTC+8) it's 23:30 on 30 June, so today = "2026-06-30".
 // Day-rollover check: 13:59Z is 23:59 on 30 June in Sydney; 14:01Z is 00:01
 // on 1 July.
+//
+// T1.16b: "9999999.99" = 9,999,999 × 100 + 99 = 999,999,999 cents, shown
+// "$9,999,999.99"; "10000000" = 1,000,000,000 cents, one cent over the cap.
 //
 // Every expected string below is written out by hand. None is computed with
 // the app's own code (parseAmountToCents, formatCents, formatDateForDisplay,
@@ -256,6 +277,8 @@ const ERROR_AMOUNT_INVALID =
   "Enter an amount like 12.50 or $1,234.50, with no minus sign and at most 2 decimal places.";
 const ERROR_CATEGORY = "Choose a category.";
 const ERROR_DATE = "Choose a date.";
+// T1.16b: the owner's cap, $9,999,999.99 per entry (lead's wording; the owner may reword it).
+const ERROR_AMOUNT_TOO_LARGE = "Enter an amount up to $9,999,999.99.";
 
 const CATEGORY_PLACEHOLDER = "Choose a category";
 const NOT_ASSIGNED = "Not assigned yet";
@@ -2325,5 +2348,164 @@ test.describe("T1.14: picking an event by hand leaves the stream alone", () => {
     expect(await selectedOptionText(eventField(page))).toBe(COMIC_CON);
     await nextFrame(page);
     expect(await selectedOptionText(streamField(page))).toBe(NO_STREAM);
+  });
+});
+
+// ═══ T1.16b. The owner's amount cap, $9,999,999.99 (F17) ══════════════════
+
+test.describe("T1.16b: the amount cap, $9,999,999.99", () => {
+  for (const typed of ["9999999.99", "$9,999,999.99", "9,999,999.99"]) {
+    test(`"${typed}" shows "Reads as $9,999,999.99"`, async ({ page }) => {
+      await openForm(page);
+      await fillForm(page, { amount: typed });
+      await expect(exactText(page, "Reads as $9,999,999.99")).toBeVisible();
+    });
+  }
+
+  test('"9999999.99" saves: Home says exactly "Today\'s expenses: $9,999,999.99"', async ({ page }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "9999999.99", category: "Printing" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $9,999,999.99")).toBeVisible();
+  });
+
+  test('"$9,999,999.99" saves one expense, listed on Transactions as $9,999,999.99', async ({ page }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "$9,999,999.99", category: "Equipment" });
+    await saveAndExpectHome(page, touch(testInfo));
+    await goToTransactions(page);
+    await expect(rows(page)).toHaveCount(1);
+    expect(amountsIn(await rowText(rows(page).first()))).toEqual(["$9,999,999.99"]);
+  });
+
+  test('typing "10000000" shows no "Reads as" text', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000" });
+    await expect(readsAs(page)).toHaveCount(0);
+  });
+
+  test('changing a valid "9999999.99" to "99999999.99" removes the feedback (no stale value)', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "9999999.99" });
+    await expect(exactText(page, "Reads as $9,999,999.99")).toBeVisible();
+    await amountField(page).fill("99999999.99");
+    await expect(readsAs(page)).toHaveCount(0);
+  });
+
+  test('typing "10000000" shows no error until Save is pressed', async ({ page }) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toHaveCount(0);
+    await expect(amountField(page)).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  for (const typed of ["10000000", "10,000,000.00", "$10,000,000"]) {
+    test(`"${typed}": Save shows exactly "${ERROR_AMOUNT_TOO_LARGE}", not the format message, and no "Reads as"`, async ({
+      page,
+    }, testInfo) => {
+      await openForm(page);
+      await fillForm(page, { amount: typed, category: "Printing" });
+      await press(saveButton(page), touch(testInfo));
+      await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+      await expect(exactText(page, ERROR_AMOUNT_INVALID)).toHaveCount(0);
+      await expect(exactText(page, ERROR_AMOUNT_EMPTY)).toHaveCount(0);
+      await expect(readsAs(page)).toHaveCount(0);
+    });
+
+    test(`"${typed}": Save is blocked: the form stays open and Home's expenses stay $0.00`, async ({
+      page,
+    }, testInfo) => {
+      await openForm(page);
+      await fillForm(page, { amount: typed, category: "Printing" });
+      await press(saveButton(page), touch(testInfo));
+      await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+      await expect(page).toHaveURL(urlWithPath(FORM_PATH));
+      await goToTab(page, "Home", "/", touch(testInfo));
+      await expect(exactText(page, HOME_EMPTY_EXPENSES)).toBeVisible();
+    });
+  }
+
+  test('"10000000": the Amount field gets aria-invalid="true" and aria-describedby points at the cap message', async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(amountField(page)).toHaveAttribute("aria-invalid", "true");
+    expect(await describedByTexts(amountField(page))).toContain(ERROR_AMOUNT_TOO_LARGE);
+  });
+
+  test('"10000000": after the blocked Save, focus moves to the Amount field', async ({ page }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await expect(amountField(page)).toBeFocused();
+  });
+
+  test('"10000000" with no category: both errors show and focus goes to Amount (first in order)', async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await expect(exactText(page, ERROR_CATEGORY)).toBeVisible();
+    await expect(amountField(page)).toBeFocused();
+  });
+
+  for (const { typed, why } of [
+    { typed: "9999999.991", why: "three decimals, as before" },
+    { typed: "10000000.001", why: "three decimals AND too large: a format mistake first" },
+    { typed: "-10000000", why: "a minus sign AND too large" },
+  ]) {
+    test(`"${typed}" (${why}): Save shows the format message, not the cap message`, async ({ page }, testInfo) => {
+      await openForm(page);
+      await fillForm(page, { amount: typed, category: "Printing" });
+      await press(saveButton(page), touch(testInfo));
+      await expect(exactText(page, ERROR_AMOUNT_INVALID)).toBeVisible();
+      await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toHaveCount(0);
+      expect(await describedByTexts(amountField(page))).toContain(ERROR_AMOUNT_INVALID);
+    });
+  }
+
+  test('fixing "10000000" to "9999999.99" removes the error and aria-invalid, and shows "Reads as $9,999,999.99"', async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await amountField(page).fill("9999999.99");
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toHaveCount(0);
+    await expect(amountField(page)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(exactText(page, "Reads as $9,999,999.99")).toBeVisible();
+  });
+
+  test("after Save, the error follows the text: too large, then a format mistake, then too large again", async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await amountField(page).fill("abc");
+    await expect(exactText(page, ERROR_AMOUNT_INVALID)).toBeVisible();
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toHaveCount(0);
+    await amountField(page).fill("10,000,000.00");
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await expect(exactText(page, ERROR_AMOUNT_INVALID)).toHaveCount(0);
+  });
+
+  test('after fixing "10000000" to "9999999.99", Save adds it: Home says "Today\'s expenses: $9,999,999.99"', async ({
+    page,
+  }, testInfo) => {
+    await openForm(page);
+    await fillForm(page, { amount: "10000000", category: "Printing" });
+    await press(saveButton(page), touch(testInfo));
+    await expect(exactText(page, ERROR_AMOUNT_TOO_LARGE)).toBeVisible();
+    await amountField(page).fill("9999999.99");
+    await saveAndExpectHome(page, touch(testInfo));
+    await expect(exactText(page, "Today's expenses: $9,999,999.99")).toBeVisible();
   });
 });

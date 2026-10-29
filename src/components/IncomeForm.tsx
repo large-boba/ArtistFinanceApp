@@ -33,11 +33,11 @@ import { INCOME_STREAMS, pretendEvents } from "@/lib/pretend-data";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
 import {
+  amountError,
   badBorder,
   cancelClass,
   describe,
   ERROR_AMOUNT_EMPTY,
-  ERROR_AMOUNT_INVALID,
   ERROR_DATE,
   errorClass,
   Field,
@@ -70,9 +70,8 @@ type Errors = {
 
 /** What the typed text for one amount means: its cents, or why it is not usable. */
 function readAmount(text: string, emptyMessage: string): { cents: number | null; error?: string } {
-  if (text.trim() === "") return { cents: null, error: emptyMessage };
   const cents = parseAmountToCents(text);
-  if (cents === null) return { cents: null, error: ERROR_AMOUNT_INVALID };
+  if (cents === null) return { cents: null, error: amountError(text, emptyMessage) };
   return { cents };
 }
 

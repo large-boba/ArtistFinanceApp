@@ -32,11 +32,10 @@ import type { ExpenseGroup } from "@/lib/entries";
 import { useDevice } from "./useDevice";
 import { useEntries } from "./EntriesProvider";
 import {
+  amountError,
   badBorder,
   cancelClass,
   describe,
-  ERROR_AMOUNT_EMPTY,
-  ERROR_AMOUNT_INVALID,
   ERROR_DATE,
   errorClass,
   Field,
@@ -143,8 +142,8 @@ function FormFields({
   // What is wrong right now. Shown only after Save has been pressed.
   const found: Errors = {};
   if (!isIsoDate(date)) found.date = ERROR_DATE;
-  if (amount.trim() === "") found.amount = ERROR_AMOUNT_EMPTY;
-  else if (cents === null) found.amount = ERROR_AMOUNT_INVALID;
+  const amountMessage = amountError(amount);
+  if (amountMessage !== undefined) found.amount = amountMessage;
   if (category === undefined) found.category = ERROR_CATEGORY;
   const shown: Errors = tried ? found : {};
 

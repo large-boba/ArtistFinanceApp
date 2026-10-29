@@ -74,6 +74,10 @@
 //     with Other costs 10000: −5000 − 10000 = −15000 → "-$150.00"
 //   Shelf: bank transfer 25000 on 2026-06-15 → Cash $0.00, Card $0.00,
 //     Other $250.00, Total $250.00; Takings $250.00
+//   T1.16b, the cap: Other costs "9999999.99" = 9,999,999 × 100 + 99
+//     = 999,999,999 cents → "Other costs $9,999,999.99";
+//     350100 − 999999999 = −999649899 → "Result after other costs -$9,996,498.99".
+//     "10000000" = 1,000,000,000 cents, one cent over the cap.
 //
 // ═══ DECISIONS (lead's, written out here so the tests can be exact) ════════
 //
@@ -173,6 +177,14 @@
 //       ("Add other costs", or "Change"); Save puts it on "Change"; Clear
 //       puts it on "Add other costs".
 //
+//     - ADDED (T1.16b, the owner's cap of $9,999,999.99 per entry; lead's
+//       decisions, as expense-form F17): "9999999.99" is valid ("Reads as
+//       $9,999,999.99", and Save keeps it). A well-formed amount above it
+//       ("10000000", "10,000,000.00") shows no "Reads as", and after Save
+//       exactly "Enter an amount up to $9,999,999.99." with aria-invalid,
+//       aria-describedby and focus on Amount, and nothing is saved. A format
+//       mistake keeps the format message, never the cap message.
+//
 // E9. The note: an element in <main> whose whole text is exactly
 //     "Production costs aren't included here." (ASCII apostrophe).
 //
@@ -212,6 +224,8 @@ const NO_COSTS = "No event & venue costs yet.";
 const ERROR_AMOUNT_EMPTY = "Enter an amount.";
 const ERROR_AMOUNT_INVALID =
   "Enter an amount like 12.50 or $1,234.50, with no minus sign and at most 2 decimal places.";
+// T1.16b: the owner's cap, $9,999,999.99 per entry (lead's wording; the owner may reword it).
+const ERROR_AMOUNT_TOO_LARGE = "Enter an amount up to $9,999,999.99.";
 
 const HOOK_NAME = "__bentoTest";
 const HOOK_WAIT_MS = 10_000;
@@ -1456,3 +1470,95 @@ test.describe("T1.16: focus after Cancel, Save and Clear in other costs", () => 
   });
 });
 
+
+// ═══ E8, added in T1.16b: the owner's amount cap, $9,999,999.99 ════════════
+
+test.describe("T1.16b: the amount cap in other costs", () => {
+  test('typing "9999999.99" shows "Reads as $9,999,999.99", part of the Amount field\'s description', async ({
+    page,
+  }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), touch(testInfo));
+    await ocAmount(page).fill("9999999.99");
+    await expect(otherCosts(page).getByText("Reads as $9,999,999.99", { exact: true })).toBeVisible();
+    expect(await describedByTexts(ocAmount(page))).toContain("Reads as $9,999,999.99");
+  });
+
+  test('"$9,999,999.99" saves: "Other costs $9,999,999.99" and "Result after other costs -$9,996,498.99"', async ({
+    page,
+  }, testInfo) => {
+    await openExample(page);
+    await setOtherCosts(page, touch(testInfo), "$9,999,999.99");
+    await expectLine(otherCosts(page), "Other costs $9,999,999.99");
+    await expectLine(main(page), "Result after other costs -$9,996,498.99");
+  });
+
+  test('typing "10000000" shows no "Reads as" text', async ({ page }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), touch(testInfo));
+    await ocAmount(page).fill("10000000");
+    await expect(otherCosts(page).getByText(/^\s*Reads as\b/)).toHaveCount(0);
+  });
+
+  for (const typed of ["10000000", "10,000,000.00"]) {
+    test(`Save with "${typed}" shows exactly "${ERROR_AMOUNT_TOO_LARGE}" (not the format message), marks Amount invalid, focuses it and saves nothing`, async ({
+      page,
+    }, testInfo) => {
+      await openExample(page);
+      await press(addOtherCostsButton(page), touch(testInfo));
+      await ocAmount(page).fill(typed);
+      await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toHaveCount(0);
+      await press(ocSave(page), touch(testInfo));
+      await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toBeVisible();
+      await expect(otherCosts(page).getByText(ERROR_AMOUNT_INVALID, { exact: true })).toHaveCount(0);
+      await expect(ocAmount(page)).toHaveAttribute("aria-invalid", "true");
+      expect(await describedByTexts(ocAmount(page))).toContain(ERROR_AMOUNT_TOO_LARGE);
+      await expect(ocAmount(page)).toBeFocused();
+      await expect(otherCosts(page).getByText(/^\s*Reads as\b/)).toHaveCount(0);
+      await expectNoLineStarting(otherCosts(page), "Other costs $");
+      await expectNoLineStarting(main(page), "Result after other costs");
+    });
+  }
+
+  test('"Change" to "10000000" is refused and the saved $600.00 stays', async ({ page }, testInfo) => {
+    const t = touch(testInfo);
+    await openExample(page);
+    await setOtherCosts(page, t, "600");
+    await press(ocChange(page), t);
+    await ocAmount(page).fill("10000000");
+    await press(ocSave(page), t);
+    await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toBeVisible();
+    await press(ocCancel(page), t);
+    await expectLine(otherCosts(page), "Other costs $600.00");
+    await expectLine(main(page), "Result after other costs $2,901.00");
+  });
+
+  test('Save with "9999999.991" (three decimals) shows the format message, not the cap message', async ({
+    page,
+  }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), touch(testInfo));
+    await ocAmount(page).fill("9999999.991");
+    await press(ocSave(page), touch(testInfo));
+    await expect(otherCosts(page).getByText(ERROR_AMOUNT_INVALID, { exact: true })).toBeVisible();
+    await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toHaveCount(0);
+    expect(await describedByTexts(ocAmount(page))).toContain(ERROR_AMOUNT_INVALID);
+  });
+
+  test('fixing "10000000" to "9999999.99" removes the error and aria-invalid, shows "Reads as", and Save keeps it', async ({
+    page,
+  }, testInfo) => {
+    const t = touch(testInfo);
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), t);
+    await ocAmount(page).fill("10000000");
+    await press(ocSave(page), t);
+    await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toBeVisible();
+    await ocAmount(page).fill("9999999.99");
+    await expect(otherCosts(page).getByText(ERROR_AMOUNT_TOO_LARGE, { exact: true })).toHaveCount(0);
+    await expect(ocAmount(page)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(otherCosts(page).getByText("Reads as $9,999,999.99", { exact: true })).toBeVisible();
+    await press(ocSave(page), t);
+    await expectLine(otherCosts(page), "Other costs $9,999,999.99");
+  });
+});

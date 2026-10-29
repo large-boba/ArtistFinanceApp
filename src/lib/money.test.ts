@@ -19,9 +19,15 @@
 //
 // Every expected value below was worked out by hand: cents = whole × 100 +
 // the two fraction digits. None comes from the code under test.
+//
+// T1.16b (owner's amount cap, 2026-10-26): every amount is at most
+// $9,999,999.99 per entry (999,999,999 cents). Tests that expected larger
+// amounts to be accepted are marked "CHANGED (T1.16b, owner cap)". The new
+// amountProblem() is tested on the same table as parseAmountToCents. formatCents
+// is a general helper and is NOT capped: its large-number tests are unchanged.
 
 import { describe, expect, it } from "vitest";
-import { formatCents, parseAmountToCents } from "@/lib/money";
+import { amountProblem, formatCents, parseAmountToCents } from "@/lib/money";
 
 type Accepted = { input: string; cents: number; why: string };
 
@@ -339,41 +345,41 @@ describe("parseAmountToCents — no floating-point errors", () => {
   }
 });
 
-describe("parseAmountToCents — very large amounts stay exact integers", () => {
-  // Number.MAX_SAFE_INTEGER is 9007199254740991. Above it, JavaScript numbers
-  // can't hold every integer, so a cent could silently go missing.
+describe("parseAmountToCents — very large amounts (CHANGED (T1.16b, owner cap))", () => {
+  // CHANGED (T1.16b, owner cap): T1.4 accepted everything up to
+  // Number.MAX_SAFE_INTEGER (9007199254740991) cents. The owner's business
+  // maximum (DECISIONS.md "Typed amounts: detailed rules", 2026-10-26) is
+  // $9,999,999.99 per entry = 999,999,999 cents, so each amount that used to
+  // be accepted here is now rejected (null). The values are the same as
+  // before; only the expected answer changed. The new cap itself is pinned
+  // in "the owner's cap" below.
 
-  it('reads "999999999999.99" as 99999999999999 cents (999999999999 × 100 + 99)', () => {
-    expectCents("999999999999.99", 99999999999999);
+  it('rejects "999999999999.99" (CHANGED (T1.16b, owner cap): 99999999999999 cents is above 999999999)', () => {
+    expectRejected("999999999999.99");
   });
 
-  it('reads "1,000,000,000,000.00" as 100000000000000 cents (10^12 × 100)', () => {
-    expectCents("1,000,000,000,000.00", 100000000000000);
+  it('rejects "1,000,000,000,000.00" (CHANGED (T1.16b, owner cap): 10^12 dollars is above the cap)', () => {
+    expectRejected("1,000,000,000,000.00");
   });
 
-  // The largest amount that fits: 90071992547409 × 100 + 91 = MAX_SAFE_INTEGER.
-  it('reads "90071992547409.91" as exactly Number.MAX_SAFE_INTEGER cents', () => {
-    expectCents("90071992547409.91", 9007199254740991);
+  it('rejects "90071992547409.91" (CHANGED (T1.16b, owner cap): exactly Number.MAX_SAFE_INTEGER cents, far above the cap)', () => {
+    expectRejected("90071992547409.91");
   });
 
-  // Near the limit a float parse goes wrong by a cent:
-  // Math.round(parseFloat("90071992547409.01") * 100) is 9007199254740902,
-  // and for ".10" it is 9007199254740909. Parsing the whole and fraction
-  // parts as integers (as the card requires) gets them exactly.
-  it('reads "90071992547409.01" as exactly 9007199254740901 cents (90071992547409 × 100 + 1)', () => {
-    expectCents("90071992547409.01", 9007199254740901);
+  it('rejects "90071992547409.01" (CHANGED (T1.16b, owner cap): above the cap)', () => {
+    expectRejected("90071992547409.01");
   });
 
-  it('reads "90071992547409.10" as exactly 9007199254740910 cents (90071992547409 × 100 + 10)', () => {
-    expectCents("90071992547409.10", 9007199254740910);
+  it('rejects "90071992547409.10" (CHANGED (T1.16b, owner cap): above the cap)', () => {
+    expectRejected("90071992547409.10");
   });
 
-  it('reads "90,071,992,547,409.91" as exactly Number.MAX_SAFE_INTEGER cents (with commas)', () => {
-    expectCents("90,071,992,547,409.91", 9007199254740991);
+  it('rejects "90,071,992,547,409.91" (CHANGED (T1.16b, owner cap): above the cap, with commas)', () => {
+    expectRejected("90,071,992,547,409.91");
   });
 
-  // DECISION: anything above Number.MAX_SAFE_INTEGER cents is rejected
-  // (null), never rounded to a nearby number.
+  // Unchanged: these were already rejected (above the safe limit) and are
+  // still rejected (above the cap too). Never rounded to a nearby number.
   it('rejects "90071992547409.92" (one cent above Number.MAX_SAFE_INTEGER)', () => {
     expectRejected("90071992547409.92");
   });
@@ -384,6 +390,127 @@ describe("parseAmountToCents — very large amounts stay exact integers", () => 
 
   it('rejects "1" followed by 30 zeros (far above the safe limit)', () => {
     expectRejected("1" + "0".repeat(30));
+  });
+});
+
+// ─── T1.16b: the owner's cap, $9,999,999.99 per entry ───────────────────────
+//
+// Owner (DECISIONS.md "Typed amounts: detailed rules", 2026-10-26): every
+// amount is at most $9,999,999.99 = 9999999 × 100 + 99 = 999,999,999 cents.
+//
+// LEAD'S DECISIONS (T1.16b):
+//   - parseAmountToCents returns null above 999,999,999 cents.
+//   - A new pure function in money.ts tells the forms WHY an amount was
+//     refused, so they can show the right message:
+//       amountProblem(input: string): "empty" | "format" | "too-large" | null
+//     null means the amount is fine. It agrees with parseAmountToCents on
+//     every input: amountProblem(x) === null exactly when
+//     parseAmountToCents(x) !== null.
+//
+// TEST ENGINEER'S READINGS (the lead may overrule):
+//   - "empty" is the input after trimming (String.prototype.trim) being "",
+//     the same "only spaces counts as empty" rule as the forms.
+//   - "format" wins over "too-large": a text that breaks the T1.4 rules is a
+//     format mistake whatever its size. So "10000000.001" is "format", and
+//     "9999999.991" stays "format" (three decimals, as before), never
+//     "too-large".
+//   - Anything that passes the T1.4 rules but is above the cap is
+//     "too-large", however big ("1" followed by 30 zeros included), and
+//     leading zeros don't matter ("00010000000" is 10,000,000 dollars).
+//
+// Every number below is worked out by hand: cents = dollars × 100 + cents.
+
+type CapCase = {
+  input: string;
+  cents: number | null;
+  problem: "empty" | "format" | "too-large" | null;
+  why: string;
+};
+
+const CAP_TABLE: readonly CapCase[] = [
+  // Accepted: at or below the cap.
+  { input: "9999999.99", cents: 999999999, problem: null, why: "the cap itself: 9999999 × 100 + 99" },
+  { input: "$9,999,999.99", cents: 999999999, problem: null, why: "the cap with $ and thousands commas" },
+  { input: "9,999,999.99", cents: 999999999, problem: null, why: "the cap with thousands commas" },
+  { input: "  $9,999,999.99  ", cents: 999999999, problem: null, why: "the cap with spaces around (trimmed)" },
+  { input: "0009999999.99", cents: 999999999, problem: null, why: "the cap with leading zeros" },
+  { input: "9999999.98", cents: 999999998, problem: null, why: "one cent below the cap: 9999999 × 100 + 98" },
+  { input: "9999999.9", cents: 999999990, problem: null, why: "one decimal: 9999999 × 100 + 90" },
+  { input: "9999999", cents: 999999900, problem: null, why: "whole dollars: 9999999 × 100" },
+  { input: "1,000,000.50", cents: 100000050, problem: null, why: "a million and 50 cents: 1000000 × 100 + 50" },
+  { input: "0", cents: 0, problem: null, why: "zero is still allowed" },
+  { input: "12.30", cents: 1230, problem: null, why: "an everyday amount: 12 × 100 + 30" },
+
+  // Too large: valid T1.4 text above 999,999,999 cents.
+  { input: "10000000", cents: null, problem: "too-large", why: "$10,000,000.00 = 1,000,000,000 cents, one cent above the cap" },
+  { input: "10,000,000.00", cents: null, problem: "too-large", why: "the same with commas and cents" },
+  { input: "$10,000,000", cents: null, problem: "too-large", why: "the same with $" },
+  { input: "10000000.00", cents: null, problem: "too-large", why: "the same, plain with two decimals" },
+  { input: "10000000.01", cents: null, problem: "too-large", why: "1,000,000,001 cents" },
+  { input: "00010000000", cents: null, problem: "too-large", why: "leading zeros don't hide the size" },
+  { input: "99999999.99", cents: null, problem: "too-large", why: "ten times the cap" },
+  { input: "90071992547409.91", cents: null, problem: "too-large", why: "the old limit, Number.MAX_SAFE_INTEGER cents" },
+  { input: "90071992547409.92", cents: null, problem: "too-large", why: "one cent above the old limit" },
+  { input: "1" + "0".repeat(30), cents: null, problem: "too-large", why: "a 31-digit number" },
+
+  // Format mistakes: refused by the T1.4 rules, whatever the size.
+  { input: "9999999.991", cents: null, problem: "format", why: "three decimals, as before (not too-large)" },
+  { input: "10000000.001", cents: null, problem: "format", why: "three decimals AND above the cap: format wins" },
+  { input: "-10000000", cents: null, problem: "format", why: "a minus sign, whatever the size" },
+  { input: "10,000,00", cents: null, problem: "format", why: "a 2-digit group after a comma" },
+  { input: "10.505", cents: null, problem: "format", why: "three decimals" },
+  { input: "-5", cents: null, problem: "format", why: "negative" },
+  { input: "abc", cents: null, problem: "format", why: "letters" },
+  { input: "$ 5", cents: null, problem: "format", why: "a space after $" },
+  { input: "12,50", cents: null, problem: "format", why: "comma decimals wait for Stage 4" },
+  { input: ".5", cents: null, problem: "format", why: "no digit before the point" },
+  { input: "1e9", cents: null, problem: "format", why: "exponent notation is letters, not a big number" },
+
+  // Empty: nothing but whitespace.
+  { input: "", cents: null, problem: "empty", why: "nothing typed" },
+  { input: "   ", cents: null, problem: "empty", why: "only spaces" },
+  { input: "\t\n", cents: null, problem: "empty", why: "only a tab and a newline" },
+];
+
+describe("parseAmountToCents — the owner's cap, $9,999,999.99 (T1.16b)", () => {
+  for (const c of CAP_TABLE) {
+    if (c.cents === null) {
+      it(`rejects ${show(c.input)} (${c.why})`, () => {
+        expectRejected(c.input);
+      });
+    } else {
+      it(`reads ${show(c.input)} as ${c.cents} cents (${c.why})`, () => {
+        expectCents(c.input, c.cents as number);
+      });
+    }
+  }
+});
+
+describe("amountProblem — why an amount is refused (T1.16b)", () => {
+  for (const c of CAP_TABLE) {
+    it(`gives ${JSON.stringify(c.problem)} for ${show(c.input)} (${c.why})`, () => {
+      // toBe: exactly the string (or exactly null), not undefined or "".
+      expect(amountProblem(c.input)).toBe(c.problem);
+    });
+  }
+
+  for (const c of CAP_TABLE) {
+    it(`agrees with parseAmountToCents on ${show(c.input)}: no problem exactly when there are cents`, () => {
+      expect(amountProblem(c.input) === null).toBe(parseAmountToCents(c.input) !== null);
+    });
+  }
+
+  it('gives the same answer twice in a row ("10000000" is "too-large" both times)', () => {
+    expect(amountProblem("10000000")).toBe("too-large");
+    expect(amountProblem("10000000")).toBe("too-large");
+  });
+
+  it("gives the right answer after a different one (no hidden state between calls)", () => {
+    expect(amountProblem("abc")).toBe("format");
+    expect(amountProblem("9999999.99")).toBeNull();
+    expect(amountProblem("10000000")).toBe("too-large");
+    expect(amountProblem("")).toBe("empty");
+    expect(amountProblem("9999999.99")).toBeNull();
   });
 });
 
@@ -476,7 +603,9 @@ describe("parseAmountToCents and formatCents together", () => {
     ["$1,234.56", "$1,234.56"],
     ["1000", "$1,000.00"],
     ["0", "$0.00"],
-    ["90071992547409.91", "$90,071,992,547,409.91"],
+    // CHANGED (T1.16b, owner cap): the largest accepted amount is now the
+    // owner's cap. It was "90071992547409.91" → "$90,071,992,547,409.91".
+    ["9999999.99", "$9,999,999.99"],
   ];
   for (const [typed, shown] of roundTrips) {
     it(`shows typed ${show(typed)} as ${show(shown)} in AUD for en-AU`, () => {

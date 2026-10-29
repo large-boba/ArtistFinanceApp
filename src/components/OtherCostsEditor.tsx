@@ -19,9 +19,8 @@ import { useEntries } from "./EntriesProvider";
 import {
   badBorder,
   cancelClass,
+  amountError,
   describe,
-  ERROR_AMOUNT_EMPTY,
-  ERROR_AMOUNT_INVALID,
   errorClass,
   Field,
   fieldClass,
@@ -148,7 +147,7 @@ function OtherCostsForm({
   }, []);
 
   const cents = amount.trim() === "" ? null : parseAmountToCents(amount);
-  const error = amount.trim() === "" ? ERROR_AMOUNT_EMPTY : cents === null ? ERROR_AMOUNT_INVALID : undefined;
+  const error = amountError(amount);
   const shown = tried ? error : undefined;
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {

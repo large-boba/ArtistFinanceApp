@@ -74,6 +74,11 @@
 // stream, Sales at events: that stream's result is also $3,501. June's range
 // total is income 450000, expenses 99900, net 350100: the $600 isn't in it.
 //
+// T1.16b (owner's amount cap): the store now refuses amounts above
+// 999,999,999 cents, so the MAX_SAFE_INTEGER tests build their states with
+// direct() instead of the reducer (marked CHANGED (T1.16b)). The summaries
+// themselves keep decision B unchanged.
+//
 // Every expected value is worked out by hand (sums in the comments). None
 // comes from the code under test.
 
@@ -197,6 +202,20 @@ const incomeRow = (
   paymentMethod: string,
   eventId: string | null,
 ) => ({ kind: "income", id, date, streamId, amountCents, paymentMethod, eventId, notes: "" });
+
+/**
+ * A frozen state written out directly, WITHOUT the reducer (T1.16b). Only for
+ * the MAX_SAFE_INTEGER tests: the store now refuses amounts above the owner's
+ * cap (999,999,999 cents), but the summaries must still add up exactly
+ * whatever they're given (decision B), e.g. figures loaded from elsewhere.
+ */
+function direct(entries: readonly object[], otherCostsByEvent: EntriesState["otherCosts"] = {}): EntriesState {
+  return deepFreeze({
+    ...createEntriesState(EVENTS.map((e) => e.id)),
+    entries: entries as Entry[],
+    otherCosts: otherCostsByEvent,
+  });
+}
 
 // ─── The owner's worked example ──────────────────────────────────────────────
 
@@ -438,13 +457,24 @@ describe("eventSummary — refuses what it can't answer exactly", () => {
     expect(() => eventSummary(ownerState(), EVENTS, "Pretend comic convention")).toThrow(RangeError);
   });
 
+  // CHANGED (T1.16b): the five MAX tests below were built through the
+  // reducer, which now refuses amounts above 999,999,999 cents. They now hold
+  // the very same entries, written out with direct(), so they still prove
+  // that eventSummary adds up exactly to ±MAX_SAFE_INTEGER and throws past it
+  // (decision B). The cap belongs to the store's actions, not to the sums.
   it("throws RangeError when the takings would pass MAX_SAFE_INTEGER (MAX cash + 1 card)", () => {
-    const state = build(takings("d1", "2026-06-22", MAX, 1));
+    const state = direct([
+      incomeRow("d1-cash", "2026-06-22", MAX, SALES_AT_EVENTS, "cash", CONVENTION),
+      incomeRow("d1-card", "2026-06-22", 1, SALES_AT_EVENTS, "card", CONVENTION),
+    ]);
     expect(() => eventSummary(state, EVENTS, CONVENTION)).toThrow(RangeError);
   });
 
   it("is exact right at the limit: 4503599627370495 + 4503599627370496 = 9007199254740991", () => {
-    const state = build(takings("d1", "2026-06-22", 4503599627370495, 4503599627370496));
+    const state = direct([
+      incomeRow("d1-cash", "2026-06-22", 4503599627370495, SALES_AT_EVENTS, "cash", CONVENTION),
+      incomeRow("d1-card", "2026-06-22", 4503599627370496, SALES_AT_EVENTS, "card", CONVENTION),
+    ]);
     expect(eventSummary(state, EVENTS, CONVENTION)).toMatchObject({
       days: [{ date: "2026-06-22", cashCents: 4503599627370495, cardCents: 4503599627370496, otherCents: 0, totalCents: MAX }],
       takingsCents: MAX,
@@ -453,20 +483,22 @@ describe("eventSummary — refuses what it can't answer exactly", () => {
   });
 
   it("throws RangeError when the event costs would pass MAX_SAFE_INTEGER", () => {
-    const state = build(
-      expense("a", "2026-06-22", MAX, "Flights", { eventId: CONVENTION }),
-      expense("b", "2026-06-22", 1, "Meals", { eventId: CONVENTION }),
-    );
+    const state = direct([
+      expenseRow("a", "2026-06-22", "", MAX, "Flights", "event_venue", CONVENTION),
+      expenseRow("b", "2026-06-22", "", 1, "Meals", "event_venue", CONVENTION),
+    ]);
     expect(() => eventSummary(state, EVENTS, CONVENTION)).toThrow(RangeError);
   });
 
   it("allows a result of exactly −MAX_SAFE_INTEGER (0 takings, MAX costs)", () => {
-    const state = build(expense("a", "2026-06-22", MAX, "Flights", { eventId: CONVENTION }));
+    const state = direct([expenseRow("a", "2026-06-22", "", MAX, "Flights", "event_venue", CONVENTION)]);
     expect(eventSummary(state, EVENTS, CONVENTION).resultCents).toBe(-MAX);
   });
 
   it("throws RangeError when the result after other costs would go below −MAX_SAFE_INTEGER (−MAX − 1)", () => {
-    const state = build(expense("a", "2026-06-22", MAX, "Flights", { eventId: CONVENTION }), otherCosts(CONVENTION, 1));
+    const state = direct([expenseRow("a", "2026-06-22", "", MAX, "Flights", "event_venue", CONVENTION)], {
+      [CONVENTION]: { amountCents: 1, notes: "" },
+    });
     expect(() => eventSummary(state, EVENTS, CONVENTION)).toThrow(RangeError);
   });
 });
@@ -617,16 +649,21 @@ describe("streamSummary — income and other costs", () => {
     });
   }
 
+  // CHANGED (T1.16b): these two were built through the reducer, which now
+  // refuses amounts above 999,999,999 cents; same entries, written with direct().
   it("throws RangeError when the stream's income would pass MAX_SAFE_INTEGER", () => {
-    const state = build(income("a", "2026-06-01", MAX, WHOLESALE, "bank_transfer"), income("b", "2026-06-02", 1, WHOLESALE, "bank_transfer"));
+    const state = direct([
+      incomeRow("a", "2026-06-01", MAX, WHOLESALE, "bank_transfer", null),
+      incomeRow("b", "2026-06-02", 1, WHOLESALE, "bank_transfer", null),
+    ]);
     expect(() => streamSummary(state, EVENTS, WHOLESALE)).toThrow(RangeError);
   });
 
   it("throws RangeError when the stream's costs would pass MAX_SAFE_INTEGER", () => {
-    const state = build(
-      expense("a", "2026-06-01", MAX, "Website", { streamId: WHOLESALE }),
-      expense("b", "2026-06-02", 1, "Website", { streamId: WHOLESALE }),
-    );
+    const state = direct([
+      expenseRow("a", "2026-06-01", "", MAX, "Website", "operating", null, WHOLESALE),
+      expenseRow("b", "2026-06-02", "", 1, "Website", "operating", null, WHOLESALE),
+    ]);
     expect(() => streamSummary(state, EVENTS, WHOLESALE)).toThrow(RangeError);
   });
 });
@@ -716,13 +753,18 @@ describe("rangeTotals — income, expenses and net for an inclusive date range",
     });
   }
 
+  // CHANGED (T1.16b): these two were built through the reducer, which now
+  // refuses amounts above 999,999,999 cents; same entries, written with direct().
   it("throws RangeError when the range's income would pass MAX_SAFE_INTEGER", () => {
-    const state = build(income("a", "2026-06-01", MAX, WHOLESALE, "bank_transfer"), income("b", "2026-06-02", 1, WHOLESALE, "bank_transfer"));
+    const state = direct([
+      incomeRow("a", "2026-06-01", MAX, WHOLESALE, "bank_transfer", null),
+      incomeRow("b", "2026-06-02", 1, WHOLESALE, "bank_transfer", null),
+    ]);
     expect(() => rangeTotals(state, "2026-06-01", "2026-06-30")).toThrow(RangeError);
   });
 
   it("allows a net of exactly −MAX_SAFE_INTEGER (no income, MAX expenses)", () => {
-    const state = build(expense("a", "2026-06-01", MAX, "Website"));
+    const state = direct([expenseRow("a", "2026-06-01", "", MAX, "Website", "operating", null)]);
     expect(rangeTotals(state, "2026-06-01", "2026-06-30")).toStrictEqual({ incomeCents: 0, expensesCents: MAX, netCents: -MAX });
   });
 });

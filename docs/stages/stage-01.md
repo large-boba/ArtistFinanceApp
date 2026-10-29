@@ -684,7 +684,7 @@ Evidence:
     - the summary error state before real data. The T1.16b cap makes overflow practically impossible.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 927/927, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **2233 passed, 0 failed** (18.8 minutes; the first attempt hit the lead's own 10-minute command limit, not a test failure).
 
-### T1.16b — Amount cap: $9,999,999.99 per entry              Status: todo
+### T1.16b — Amount cap: $9,999,999.99 per entry              Status: done
 Owner agent: backend-engineer (`src/lib`), then frontend-engineer (form messages)   Tests: test-engineer (Vitest + Playwright)   Security review: no
 Guide: §7; DECISIONS.md "Typed amounts: detailed rules" (owner, 2026-10-26: business maximum $9,999,999.99).
 Outcome:
@@ -693,6 +693,21 @@ Outcome:
 - Totals stay far from the exact-number limit, so a page can't crash on an extreme amount (T1.15 review).
 Done when: the unit and browser tests pass, including $9,999,999.99 (accepted) and $10,000,000.00 (rejected with the new message) in every amount field; `npm run check` exits 0.
 Evidence:
+- **Lead decisions (2026-10-29):**
+  - a format mistake beats size;
+  - edits are capped too;
+  - `totalsForDate`, the summaries and `addCents`/`subtractCents` aren't capped (totals must always show what was saved).
+- **Tests first** (test engineer):
+  - money.test (a 35-row table run through `parseAmountToCents` and the new `amountProblem`), entries.test (every action at 999,999,999 and at 1,000,000,000) and summaries.test (huge-value tests built directly; the same claims);
+  - e2e expense-form F17, income-form I21, events E8.
+  - Red run: 111 unit and 82 e2e failures for the intended reasons. Proof: 2367 passed. Planted bugs were caught, among them `>=` vs `>`, one cent over, size checked before format, no store cap, and totals inheriting the cap.
+- **Built:**
+  - backend engineer: `MAX_AMOUNT_CENTS`, `amountProblem`, and a capped `checkAmountCents` (`totalsForDate` keeps its own uncapped check);
+  - frontend engineer: a shared `ERROR_AMOUNT_TOO_LARGE` and `amountError`, used by the expense form, the income form (cash, card, amount) and Other costs.
+- **Code review: ACCEPT.** The reviewer probed 17 extra inputs (odd spaces, 22 leading zeros, 25-digit amounts): 0 disagreements between parse and message.
+  - Taken by the lead: the import order, and a comment tying the message to `MAX_AMOUNT_CENTS`.
+  - Logged (DECISIONS follow-ups): a matching database CHECK in Stage 2.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1066/1066, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **2367 passed, 0 failed** (20.2 minutes). The tidy-ups are an import order and a comment; lint was re-run after them.
 
 ### T1.17 — Expenses tab                                    Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no

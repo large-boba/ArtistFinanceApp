@@ -5,7 +5,7 @@
 
 import type { ReactNode } from "react";
 import type { PaymentMethod } from "@/lib/entries";
-import { formatCents } from "@/lib/money";
+import { amountProblem, formatCents } from "@/lib/money";
 
 // ─── Words ───────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,19 @@ export const ERROR_DATE = "Choose a date.";
 export const ERROR_AMOUNT_EMPTY = "Enter an amount.";
 export const ERROR_AMOUNT_INVALID =
   "Enter an amount like 12.50 or $1,234.50, with no minus sign and at most 2 decimal places.";
+// Change this together with MAX_AMOUNT_CENTS in src/lib/money.ts (the owner's cap).
+export const ERROR_AMOUNT_TOO_LARGE = "Enter an amount up to $9,999,999.99.";
+
+/**
+ * The message for a typed amount, or undefined when it is fine. Empty gets the
+ * field's own message; a format mistake beats size; too large gets its own.
+ */
+export function amountError(text: string, emptyMessage: string = ERROR_AMOUNT_EMPTY): string | undefined {
+  const problem = amountProblem(text);
+  if (problem === null) return undefined;
+  if (problem === "empty") return emptyMessage;
+  return problem === "too-large" ? ERROR_AMOUNT_TOO_LARGE : ERROR_AMOUNT_INVALID;
+}
 
 /** How each way of being paid is written on screen (forms and the entries list). */
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {

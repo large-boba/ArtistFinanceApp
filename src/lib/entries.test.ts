@@ -197,6 +197,12 @@
 //     (Test engineer's call, allowed by the lead: null-prototype objects pass,
 //     since they can't inherit anything.)
 //
+// T1.16b (owner's amount cap, 2026-10-26; lead's decision): the store refuses
+// any amount above $9,999,999.99 = 999,999,999 cents, on every action that
+// takes one (see the T1.16b block at the end). Decision 2's "safe
+// non-negative integers" now means "0 to 999,999,999". Tests that relied on
+// larger amounts going through the reducer are marked CHANGED (T1.16b).
+//
 // Every expected value was worked out by hand (sums written in the comments).
 // None comes from the code under test.
 
@@ -311,6 +317,28 @@ const addExpense = (id: string, date: string, amountCents: number): EntriesActio
 });
 
 const ids = (entries: readonly Entry[]) => entries.map((e) => e.id);
+
+/** The expense entry addExpense makes, written out by hand (T1.16b: for entries the reducer would now refuse). */
+const expenseRow = (id: string, date: string, amountCents: number): Entry => ({
+  kind: "expense",
+  id,
+  date,
+  supplier: "Officeworks",
+  amountCents,
+  categoryId: PRINTING,
+  group: "production",
+  eventId: null,
+  streamId: null,
+  notes: "",
+});
+
+/**
+ * A frozen list of entries written out directly, WITHOUT the reducer (T1.16b).
+ * Only for the sum tests: amounts above the owner's cap can't be added through
+ * the store any more, but totalsForDate must still add up exactly whatever
+ * it's given (decision 7).
+ */
+const hugeEntries = (...rows: object[]): readonly Entry[] => deepFreeze(rows as Entry[]);
 
 // ─── Starting point and the lists ───────────────────────────────────────────
 
@@ -461,9 +489,11 @@ describe("add-expense", () => {
     expect(run(addExpense("e1", TODAY, 0)).entries[0]).toMatchObject({ amountCents: 0 });
   });
 
-  it("allows the largest exact amount, Number.MAX_SAFE_INTEGER cents", () => {
-    expect(run(addExpense("e1", TODAY, Number.MAX_SAFE_INTEGER)).entries[0]).toMatchObject({
-      amountCents: 9007199254740991,
+  // CHANGED (T1.16b, owner cap): the largest amount is now the owner's
+  // $9,999,999.99 = 999,999,999 cents. It was Number.MAX_SAFE_INTEGER.
+  it("allows the owner's cap, 999,999,999 cents ($9,999,999.99)", () => {
+    expect(run(addExpense("e1", TODAY, 999_999_999)).entries[0]).toMatchObject({
+      amountCents: 999999999,
     });
   });
 
@@ -601,10 +631,10 @@ describe("add-income", () => {
     expect(run(addIncome("i1", TODAY, 0)).entries[0]).toStrictEqual(incomeRow("i1", TODAY, 0));
   });
 
-  it("allows the largest exact amount, Number.MAX_SAFE_INTEGER cents", () => {
-    expect(run(addIncome("i1", TODAY, Number.MAX_SAFE_INTEGER)).entries[0]).toMatchObject({
-      amountCents: 9007199254740991,
-    });
+  // CHANGED (T1.16b, owner cap): the largest amount is now the owner's
+  // $9,999,999.99 = 999,999,999 cents. It was Number.MAX_SAFE_INTEGER.
+  it("allows the owner's cap, 999,999,999 cents ($9,999,999.99)", () => {
+    expect(run(addIncome("i1", TODAY, 999_999_999)).entries[0]).toStrictEqual(incomeRow("i1", TODAY, 999999999));
   });
 
   it("never stores the old kind \"sale\"", () => {
@@ -740,6 +770,10 @@ describe("rejects bad amounts with RangeError and leaves the state untouched", (
     [-500, "negative"],
     [-0, "negative zero: Number.isSafeInteger(-0) is true and -0 < 0 is false, so it needs its own check"],
     [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER, no longer exact"],
+    // ADDED (T1.16b, owner cap): above $9,999,999.99 = 999,999,999 cents.
+    [1_000_000_000, "one cent above the owner's cap of 999,999,999"],
+    [1_000_000_001, "above the owner's cap"],
+    [Number.MAX_SAFE_INTEGER, "MAX_SAFE_INTEGER, far above the owner's cap (was allowed before T1.16b)"],
     [Number.NaN, "NaN"],
     [Number.POSITIVE_INFINITY, "Infinity"],
     ["1000", "a string, not a number"],
@@ -1659,8 +1693,14 @@ describe("totalsForDate (income rows count where sales did)", () => {
     expect(totalsForDate(after.entries, "2026-06-30")).toStrictEqual({ salesCents: 103332, salesCount: 2, expensesCents: 50000 });
   });
 
+  // CHANGED (T1.16b): the next three tests used to make their huge entries
+  // through the reducer, which now refuses anything above 999,999,999 cents.
+  // They now write the entries out directly (hugeEntries), so they still
+  // prove what they proved: totalsForDate, a READER like the summaries, adds
+  // up exactly to MAX_SAFE_INTEGER and throws past it (decision 7). The cap
+  // belongs to the store's actions, not to the sums.
   it("is exact right up to MAX_SAFE_INTEGER: 4503599627370495 + 4503599627370496 = 9007199254740991", () => {
-    const entries = frozenState(addIncome("i1", TODAY, 4503599627370495), addIncome("i2", TODAY, 4503599627370496)).entries;
+    const entries = hugeEntries(incomeRow("i1", TODAY, 4503599627370495), incomeRow("i2", TODAY, 4503599627370496));
     expect(totalsForDate(entries, TODAY)).toStrictEqual({
       salesCents: 9007199254740991,
       salesCount: 2,
@@ -1669,12 +1709,12 @@ describe("totalsForDate (income rows count where sales did)", () => {
   });
 
   it("throws RangeError when the day's income would pass MAX_SAFE_INTEGER (no longer exact)", () => {
-    const entries = frozenState(addIncome("i1", TODAY, Number.MAX_SAFE_INTEGER), addIncome("i2", TODAY, 1)).entries;
+    const entries = hugeEntries(incomeRow("i1", TODAY, Number.MAX_SAFE_INTEGER), incomeRow("i2", TODAY, 1));
     expect(() => totalsForDate(entries, TODAY)).toThrow(RangeError);
   });
 
   it("throws RangeError when the day's expenses would pass MAX_SAFE_INTEGER", () => {
-    const entries = frozenState(addExpense("e1", TODAY, Number.MAX_SAFE_INTEGER), addExpense("e2", TODAY, 1)).entries;
+    const entries = hugeEntries(expenseRow("e1", TODAY, Number.MAX_SAFE_INTEGER), expenseRow("e2", TODAY, 1));
     expect(() => totalsForDate(entries, TODAY)).toThrow(RangeError);
   });
 
@@ -1845,9 +1885,11 @@ describe("add-event-takings: two rows, cash then card (T1.10b, decision 12)", ()
     ]);
   });
 
-  it("allows the largest exact amounts, Number.MAX_SAFE_INTEGER cents in each row", () => {
-    const state = run(addTakings("c1", "k1", { cashCents: Number.MAX_SAFE_INTEGER, cardCents: Number.MAX_SAFE_INTEGER }));
-    expect(state.entries.map((e) => e.amountCents)).toStrictEqual([9007199254740991, 9007199254740991]);
+  // CHANGED (T1.16b, owner cap): the largest amount in each row is now the
+  // owner's 999,999,999 cents. It was Number.MAX_SAFE_INTEGER in each row.
+  it("allows the owner's cap, 999,999,999 cents, in each row", () => {
+    const state = run(addTakings("c1", "k1", { cashCents: 999_999_999, cardCents: 999_999_999 }));
+    expect(state.entries.map((e) => e.amountCents)).toStrictEqual([999999999, 999999999]);
   });
 
   it("takes the Vendor shelf rental stream for the shelf", () => {
@@ -1936,6 +1978,9 @@ describe("add-event-takings: all or nothing — RangeError and no row added (dec
     [-0, "negative zero"],
     [10.5, "a fraction of a cent"],
     [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER"],
+    // ADDED (T1.16b, owner cap): above $9,999,999.99 = 999,999,999 cents.
+    [1_000_000_000, "one cent above the owner's cap"],
+    [Number.MAX_SAFE_INTEGER, "MAX_SAFE_INTEGER, far above the owner's cap"],
     [Number.NaN, "NaN"],
     ["40000", "a string"],
     [null, "null"],
@@ -2305,6 +2350,9 @@ describe("set-event-other-costs (T1.10b, decision 14)", () => {
     [-0, "negative zero"],
     [0.5, "half a cent"],
     [Number.MAX_SAFE_INTEGER + 1, "above MAX_SAFE_INTEGER"],
+    // ADDED (T1.16b, owner cap): above $9,999,999.99 = 999,999,999 cents.
+    [1_000_000_000, "one cent above the owner's cap"],
+    [Number.MAX_SAFE_INTEGER, "MAX_SAFE_INTEGER, far above the owner's cap"],
     [Number.POSITIVE_INFINITY, "Infinity"],
     ["600", "a string"],
     [null, "null"],
@@ -2653,4 +2701,105 @@ describe("subtractCents", () => {
       expect(() => subtractCents(1, bad as number)).toThrow(RangeError);
     });
   }
+});
+
+// ─── T1.16b: the owner's cap, $9,999,999.99 per entry ───────────────────────
+//
+// Owner (DECISIONS.md "Typed amounts: detailed rules", 2026-10-26): every
+// amount is at most $9,999,999.99 = 999,999,999 cents. LEAD'S DECISION: the
+// store refuses larger amounts too (RangeError, state untouched), for every
+// action that takes an amount: add-expense and add-income amountCents,
+// add-event-takings cashCents and cardCents, set-event-other-costs
+// amountCents. TEST ENGINEER'S READING: an edit's amountCents is the same
+// field as add's, so the cap applies to edits too (the bad-amount table above
+// already runs every bad amount through both edits).
+// addCents/subtractCents keep their ±MAX_SAFE_INTEGER limits (general helpers,
+// tested below unchanged), and so does totalsForDate (decision 7, a reader).
+//
+// The boundary pair, worked out by hand: 9,999,999 × 100 + 99 = 999,999,999
+// (allowed); 999,999,999 + 1 = 1,000,000,000 (refused).
+
+describe("T1.16b: the store's amount cap, 999,999,999 cents", () => {
+  const CAP = 999_999_999;
+  const OVER = 1_000_000_000;
+
+  /** Runs one action against a frozen state, expecting RangeError and an unchanged state. */
+  const expectRefused = (before: EntriesState, action: EntriesAction) => {
+    const copy = snapshot(before);
+    expect(() => entriesReducer(before, action)).toThrow(RangeError);
+    expect(before).toStrictEqual(copy);
+  };
+
+  it("add-expense stores exactly 999,999,999 cents", () => {
+    expect(run(addExpense("e1", TODAY, CAP)).entries).toStrictEqual([expenseRow("e1", TODAY, 999999999)]);
+  });
+
+  it("add-expense refuses 1,000,000,000 cents and adds nothing", () => {
+    expectRefused(frozenState(addIncome("i0", TODAY, 100)), addExpense("e1", TODAY, OVER));
+  });
+
+  it("add-income stores exactly 999,999,999 cents", () => {
+    expect(run(addIncome("i1", TODAY, CAP)).entries).toStrictEqual([incomeRow("i1", TODAY, 999999999)]);
+  });
+
+  it("add-income refuses 1,000,000,000 cents and adds nothing", () => {
+    expectRefused(frozenState(addExpense("e0", TODAY, 100)), addIncome("i1", TODAY, OVER));
+  });
+
+  it("add-event-takings stores 999,999,999 cash and 999,999,999 card as two rows", () => {
+    const state = run(addTakings("c1", "k1", { cashCents: CAP, cardCents: CAP }));
+    expect(state.entries).toStrictEqual([
+      incomeRow("c1", "2026-06-22", 999999999, { paymentMethod: "cash", eventId: CONVENTION }),
+      incomeRow("k1", "2026-06-22", 999999999, { paymentMethod: "card", eventId: CONVENTION }),
+    ]);
+  });
+
+  it("add-event-takings refuses cashCents 1,000,000,000, so the good card row isn't added either", () => {
+    expectRefused(frozenState(addExpense("e0", TODAY, 100)), addTakings("c1", "k1", { cashCents: OVER, cardCents: 60000 }));
+  });
+
+  it("add-event-takings refuses cardCents 1,000,000,000, so the good cash row isn't added either", () => {
+    expectRefused(frozenState(addExpense("e0", TODAY, 100)), addTakings("c1", "k1", { cashCents: 40000, cardCents: OVER }));
+  });
+
+  it("set-event-other-costs stores exactly 999,999,999 cents", () => {
+    expect(run(setOther(CONVENTION, CAP, "stock")).otherCosts).toStrictEqual({
+      [CONVENTION]: { amountCents: 999999999, notes: "stock" },
+    });
+  });
+
+  it("set-event-other-costs refuses 1,000,000,000 cents and keeps the old figure", () => {
+    expectRefused(frozenState(setOther(CONVENTION, 60000, "kept")), setOther(CONVENTION, OVER, "new"));
+  });
+
+  it("an expense can be edited up to exactly 999,999,999 cents", () => {
+    const after = entriesReducer(frozenState(addExpense("e1", TODAY, 100)), {
+      type: "edit",
+      id: "e1",
+      changes: { amountCents: CAP },
+    });
+    expect(after.entries).toStrictEqual([expenseRow("e1", TODAY, 999999999)]);
+  });
+
+  it("an income can be edited up to exactly 999,999,999 cents", () => {
+    const after = entriesReducer(frozenState(addIncome("i1", TODAY, 100)), {
+      type: "edit",
+      id: "i1",
+      changes: { amountCents: CAP },
+    });
+    expect(after.entries).toStrictEqual([incomeRow("i1", TODAY, 999999999)]);
+  });
+
+  it("an expense edit to 1,000,000,000 cents is refused and the entry keeps 100", () => {
+    expectRefused(frozenState(addExpense("e1", TODAY, 100)), { type: "edit", id: "e1", changes: { amountCents: OVER } });
+  });
+
+  it("an income edit to 1,000,000,000 cents is refused and the entry keeps 100", () => {
+    expectRefused(frozenState(addIncome("i1", TODAY, 100)), { type: "edit", id: "i1", changes: { amountCents: OVER } });
+  });
+
+  it("two capped incomes on one day add up exactly: 999,999,999 + 999,999,999 = 1,999,999,998", () => {
+    const entries = frozenState(addIncome("i1", TODAY, CAP), addIncome("i2", TODAY, CAP)).entries;
+    expect(totalsForDate(entries, TODAY)).toStrictEqual({ salesCents: 1999999998, salesCount: 2, expensesCents: 0 });
+  });
 });
