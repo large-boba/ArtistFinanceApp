@@ -24,7 +24,7 @@ import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { pretendEvents } from "@/lib/pretend-data";
 import { eventSummary } from "@/lib/summaries";
-import { formatEventDates } from "@/lib/event-dates";
+import EventDates from "./EventDates";
 import CostRow from "./CostRow";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage } from "./form-parts";
@@ -66,7 +66,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 
   return (
     <>
-      <p className="mt-4 text-lg break-words">{formatEventDates(event, locale)}</p>
+      <p className="mt-4 text-lg break-words"><EventDates event={event} locale={locale} /></p>
 
       <section aria-labelledby="event-takings" className={sectionClass}>
         <h2 id="event-takings" className={h2Class}>
@@ -75,10 +75,10 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         {summary.days.length === 0 ? (
           <p className={mutedClass}>No takings yet.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-3">
+          <ul role="list" className="mt-3 flex flex-col gap-3">
             {summary.days.map((d) => (
               <li key={d.date} className={itemClass}>
-                <p className="text-lg font-bold break-words">{day(d.date)}</p>
+                <p className="text-lg font-bold break-words"><time dateTime={d.date}>{day(d.date)}</time></p>
                 <Line label="Cash" amount={money(d.cashCents)} />
                 <Line label="Card" amount={money(d.cardCents)} />
                 {d.otherCents !== 0 && <Line label="Other" amount={money(d.otherCents)} />}
@@ -101,7 +101,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         {summary.costs.length === 0 ? (
           <p className={mutedClass}>No event &amp; venue costs yet.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-3">
+          <ul role="list" className="mt-3 flex flex-col gap-3">
             {summary.costs.map((cost) => (
               <CostRow key={cost.id} cost={cost} events={events} locale={locale} />
             ))}

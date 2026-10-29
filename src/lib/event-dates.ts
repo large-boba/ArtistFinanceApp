@@ -1,5 +1,6 @@
-// How an event's dates are written on screen (T1.15), shared by the events
-// list and the event page so the two always agree. Only text is made here;
+// How an event's dates are written (T1.15), as plain text. The screens use
+// src/components/EventDates.tsx, which writes the same words but wraps each
+// date in a <time> element (T1.17c); keep the two in step. Only text is made here;
 // the dates are formatted with formatDateForDisplay, never with `new Date(...)`.
 //   one day:  "01/07/2026"
 //   several:  "22/06/2026 to 24/06/2026"

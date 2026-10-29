@@ -16,7 +16,7 @@ import Link from "next/link";
 import { formatCents } from "@/lib/money";
 import { pretendEvents } from "@/lib/pretend-data";
 import { eventSummary } from "@/lib/summaries";
-import { formatEventDates } from "@/lib/event-dates";
+import EventDates from "./EventDates";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage } from "./form-parts";
 import { useDevice } from "./useDevice";
@@ -32,8 +32,9 @@ export default function EventsList() {
   // Empty state (the list is fixed for now, but Stage 4 lets artists add events).
   if (events.length === 0) return <p className="mt-6 text-base">No events yet.</p>;
 
+  // role="list": Safari and VoiceOver drop list meaning when bullets are hidden by CSS.
   return (
-    <ul className="mt-6 flex flex-col gap-3">
+    <ul role="list" className="mt-6 flex flex-col gap-3">
       {events.map((event) => {
         const { resultCents } = eventSummary(state, events, event.id);
         return (
@@ -44,7 +45,7 @@ export default function EventsList() {
             >
               <span className="block text-xl font-bold break-words">{event.name}</span>
               <span className="mt-1 block text-base break-words text-zinc-700 dark:text-zinc-300">
-                {formatEventDates(event, device.locale)}
+                <EventDates event={event} locale={device.locale} />
               </span>
               <span className="mt-1 block text-lg break-words">
                 Result <span className="font-bold">{formatCents(resultCents, "AUD", device.locale)}</span>

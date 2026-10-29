@@ -28,8 +28,9 @@ export default function StreamsList() {
 
   const events = pretendEvents(device.today);
 
+  // role="list": Safari and VoiceOver drop list meaning when bullets are hidden by CSS.
   return (
-    <ul className="mt-6 flex flex-col gap-3">
+    <ul role="list" className="mt-6 flex flex-col gap-3">
       {INCOME_STREAMS.map((stream) => {
         const { incomeCents, resultCents } = streamSummary(state, events, stream.id);
         return (

@@ -167,6 +167,35 @@
 //     sideways and keep every element in <main> inside 0–320 px.
 //
 // S11. No uncaught errors and no React hydration errors during any test.
+//
+// S12. ADDED (T1.17c, lead): lists keep their list meaning (Safari and
+//     VoiceOver drop it when the bullets are hidden). Each of these is a
+//     <ul>/<ol> with an EXPLICIT role="list" attribute whose direct children
+//     are all <li>:
+//       - /income: the list holding the seven stream links (7 items, one
+//         link in each);
+//       - a stream page: the one list in "Income", in "Costs" and in
+//         "Events" (with data, so the lists exist).
+//
+// S13. ADDED (T1.17c, lead): machine-readable dates. Every income row and
+//     every cost row on a stream page wraps its date in exactly one <time>:
+//     `datetime` is the stored date, exactly "YYYY-MM-DD"; its text is
+//     exactly the displayed date ("24/06/2026").
+//
+// S14. ADDED (T1.17c, lead): live updates. With Sales at events on screen and
+//     no move in between (same document, same URL), takings added for the
+//     convention appear at once in their newest-first place, and the lines
+//     follow. Hand-worked (cents):
+//       first: the owner's days 1 and 3 (22/06 cash 40000, card 60000;
+//              24/06 cash 50000, card 100000) and the owner's three costs
+//         → rows 24/06 Card, 24/06 Cash, 22/06 Card, 22/06 Cash;
+//           Income 40000 + 60000 + 50000 + 100000 = 250000 → $2,500.00;
+//           Result 250000 − 99900 = 150100 → $1,501.00
+//       then: day 2 (23/06 cash 80000, then card 120000)
+//         → rows 24/06 Card, 24/06 Cash, 23/06 Card, 23/06 Cash (positions
+//           3 and 4), 22/06 Card, 22/06 Cash;
+//           Income 250000 + 80000 + 120000 = 450000 → $4,500.00;
+//           Result 450000 − 99900 = 350100 → $3,501.00.
 
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 // Type-only imports (erased at run time): the seam takes the store's own input types.
@@ -1126,5 +1155,177 @@ test.describe("T1.17b: on a US-English device (from entries-list D1)", () => {
     expectRowParts(await textOf(incomeRows(page).nth(0)), ["6/30/2026", "Card"], "A$35.50");
     expectRowParts(await textOf(incomeRows(page).nth(1)), ["6/28/2026", "Online", "Etsy order 1042"], "A$120.00");
     await expectLine(region(page, "Income"), "Income A$155.50");
+  });
+});
+
+// ═══ ADDED (T1.17c): list meaning, machine-readable dates, live updates ═════
+
+/** Every <ul>/<ol> inside `container`: its role ATTRIBUTE (explicit, not implicit) and its children's tags. */
+function listsIn(container: Locator): Promise<{ role: string | null; children: string[] }[]> {
+  return container.evaluate((root) =>
+    Array.from(root.querySelectorAll("ul, ol")).map((list) => ({
+      role: list.getAttribute("role"),
+      children: Array.from(list.children).map((c) => c.tagName),
+    })),
+  );
+}
+
+/** Every <time> inside `row`: its datetime attribute and its text (whitespace collapsed). */
+function timesIn(row: Locator): Promise<{ datetime: string | null; text: string }[]> {
+  return row.evaluate((el) =>
+    Array.from(el.querySelectorAll("time")).map((t) => ({
+      datetime: t.getAttribute("datetime"),
+      text: (t.textContent ?? "").replace(/\s+/g, " ").trim(),
+    })),
+  );
+}
+
+async function allRowTimes(rows: Locator): Promise<{ datetime: string | null; text: string }[][]> {
+  const out: { datetime: string | null; text: string }[][] = [];
+  for (const row of await rows.all()) out.push(await timesIn(row));
+  return out;
+}
+
+/** One <time> per row: [stored ISO date, displayed date]. */
+function oneTime(datetime: string, text: string): { datetime: string; text: string }[] {
+  return [{ datetime, text }];
+}
+
+test.describe("T1.17c: lists keep their list meaning (S12)", () => {
+  test('on /income, the stream links sit in one list with an explicit role="list": 7 <li> children, one link in each', async ({
+    page,
+  }) => {
+    await open(page, "/income");
+    await expect(streamLink(page, SALES)).toHaveCount(1);
+    const shape = await streamLink(page, SALES).evaluate((a) => {
+      const list = a.closest("ul, ol");
+      if (!list) return "the Sales at events link is not inside a <ul> or <ol>";
+      return {
+        role: list.getAttribute("role"),
+        children: Array.from(list.children).map((c) => c.tagName),
+        linksPerChild: Array.from(list.children).map((c) => c.querySelectorAll("a").length),
+      };
+    });
+    expect(shape).toEqual({ role: "list", children: Array(7).fill("LI"), linksPerChild: Array(7).fill(1) });
+  });
+
+  const LISTS = [
+    { name: "Income", items: 6 },
+    { name: "Costs", items: 4 },
+    { name: "Events", items: 2 },
+  ] as const;
+  for (const l of LISTS) {
+    test(`on Sales at events (mixed dataset), the "${l.name}" list has an explicit role="list" and ${l.items} <li> children`, async ({
+      page,
+    }) => {
+      await openStream(page, SALES);
+      await seedMixed(page);
+      await expect(region(page, l.name).locator("li")).toHaveCount(l.items);
+      expect(await listsIn(region(page, l.name))).toEqual([{ role: "list", children: Array(l.items).fill("LI") }]);
+    });
+  }
+});
+
+test.describe("T1.17c: each row's date is one <time datetime> (S13)", () => {
+  test("Sales at events (owner's example): the six income rows' <time>s, newest first", async ({ page }) => {
+    await openStream(page, SALES);
+    await seedOwner(page);
+    await expect(incomeRows(page)).toHaveCount(6);
+    expect(await allRowTimes(incomeRows(page))).toEqual([
+      oneTime("2026-06-24", "24/06/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-22", "22/06/2026"),
+      oneTime("2026-06-22", "22/06/2026"),
+    ]);
+  });
+
+  test("Online sales (mixed dataset): the income rows' <time>s are 2026-06-30 then 2026-06-28", async ({ page }) => {
+    await openStream(page, ONLINE);
+    await seedMixed(page);
+    await expect(incomeRows(page)).toHaveCount(2);
+    expect(await allRowTimes(incomeRows(page))).toEqual([
+      oneTime("2026-06-30", "30/06/2026"),
+      oneTime("2026-06-28", "28/06/2026"),
+    ]);
+  });
+
+  test("Sales at events (mixed dataset): the four cost rows' <time>s, newest first", async ({ page }) => {
+    await openStream(page, SALES);
+    await seedMixed(page);
+    await expect(costRows(page)).toHaveCount(4);
+    // 01/07 Market carpark, 24/06 Harbour Hotel, 23/06 Meals, 22/06 Comic con organisers.
+    expect(await allRowTimes(costRows(page))).toEqual([
+      oneTime("2026-07-01", "01/07/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-22", "22/06/2026"),
+    ]);
+  });
+
+  test("the <time> doesn't change an income row's parts: Online sales' 28/06 row still holds exactly its parts", async ({
+    page,
+  }) => {
+    await openStream(page, ONLINE);
+    await seedMixed(page);
+    await expect(incomeRows(page)).toHaveCount(2);
+    expectRowParts(await textOf(incomeRows(page).nth(1)), ["28/06/2026", "Online", "Etsy order 1042"], "$120.00");
+  });
+});
+
+test.describe("T1.17c: takings added while Sales at events is on screen appear at once (S14)", () => {
+  const DAYS_1_AND_3 = OWNER_INCOME.slice(0, 4); // 24/06 cash, 24/06 card, 22/06 cash, 22/06 card
+  const DAY_2 = OWNER_INCOME.slice(4); // 23/06 cash, then 23/06 card
+  const linked = (label: string) => `${COMIC_CON.name} · ${label}`;
+  const BEFORE = [
+    ["24/06/2026", "Card", "$1,000.00"],
+    ["24/06/2026", "Cash", "$500.00"],
+    ["22/06/2026", "Card", "$600.00"],
+    ["22/06/2026", "Cash", "$400.00"],
+  ] as const;
+  const AFTER = [
+    ["24/06/2026", "Card", "$1,000.00"],
+    ["24/06/2026", "Cash", "$500.00"],
+    ["23/06/2026", "Card", "$1,200.00"],
+    ["23/06/2026", "Cash", "$800.00"],
+    ["22/06/2026", "Card", "$600.00"],
+    ["22/06/2026", "Cash", "$400.00"],
+  ] as const;
+
+  async function expectIncomeRows(page: Page, wanted: readonly (readonly [string, string, string])[]): Promise<void> {
+    await expect(incomeRows(page)).toHaveCount(wanted.length);
+    const rows = await incomeRows(page).all();
+    for (let i = 0; i < wanted.length; i++) {
+      const [date, label, amount] = wanted[i];
+      expectRowParts(await textOf(rows[i]), [date, linked(label)], amount);
+    }
+  }
+
+  /** Opens Sales at events, seeds days 1 and 3 plus the costs (checking them), marks the document, seeds day 2. */
+  async function addDay2WhileOnScreen(page: Page): Promise<string> {
+    await openStream(page, SALES);
+    await seed(page, DAYS_1_AND_3, OWNER_COSTS);
+    await expectIncomeRows(page, BEFORE);
+    await expectLine(region(page, "Income"), "Income $2,500.00");
+    await expectLine(region(page, "Result"), "Result $1,501.00");
+    const url = page.url();
+    await setMarker(page);
+    await seed(page, DAY_2, []);
+    return url;
+  }
+
+  test("day 2's cash and card rows appear in positions 3 and 4 of 6, with no move", async ({ page }) => {
+    const url = await addDay2WhileOnScreen(page);
+    await expectIncomeRows(page, AFTER);
+    expect(page.url(), "still on the same address").toBe(url);
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
+  });
+
+  test('the lines follow at once: "Income $4,500.00" and "Result $3,501.00"', async ({ page }) => {
+    await addDay2WhileOnScreen(page);
+    await expectLine(region(page, "Income"), "Income $4,500.00");
+    await expectLine(region(page, "Result"), "Result $3,501.00");
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
   });
 });

@@ -59,7 +59,7 @@ export default function ExpensesOverview() {
         {summary.expenses.length === 0 ? (
           <p className="mt-2 text-base text-zinc-700 dark:text-zinc-300">No expenses yet.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-3">
+          <ul role="list" className="mt-3 flex flex-col gap-3">
             {summary.expenses.map((cost) => (
               <CostRow key={cost.id} cost={cost} events={events} locale={locale} />
             ))}

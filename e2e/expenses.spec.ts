@@ -121,6 +121,31 @@
 //     sideways and keeps every element in <main> inside 0–320 px.
 //
 // X9. No uncaught errors and no React hydration errors during any test.
+//
+// X10. ADDED (T1.17c, lead): the All expenses list keeps its list meaning
+//     (Safari and VoiceOver drop it when the bullets are hidden): the one
+//     <ul>/<ol> in the section has an EXPLICIT role="list" attribute, and its
+//     direct children are all <li>.
+//
+// X11. ADDED (T1.17c, lead): machine-readable dates. Every cost row (this
+//     list, the event page's and the stream page's) wraps its date in
+//     exactly one <time>: its `datetime` is the stored date, exactly
+//     "YYYY-MM-DD", and its text is exactly the displayed date ("30/06/2026";
+//     "6/30/2026" on an en-US device). The row's lines (X5) don't change.
+//
+// X12. ADDED (T1.17c, lead): live updates. With /expenses on screen and no
+//     move in between (same document, same URL), an expense added through
+//     the seam appears at once in its newest-first place, and the Totals
+//     follow. Hand-worked (cents):
+//       first three: 20/06 Printing "Zine printer" 12000 (production),
+//                    24/06 Accommodation "Harbour Hotel" 29900 (convention),
+//                    30/06 Software "Adobe" 1500 (operating)
+//         → newest first 30/06, 24/06, 20/06; Totals $120.00, $299.00,
+//           $15.00, 12000 + 29900 + 1500 = 43400 → $434.00
+//       then: 27/06 Packaging "Box Co" 3450 (production)
+//         → newest first 30/06, 27/06 (position 2), 24/06, 20/06;
+//           Production 12000 + 3450 = 15450 → $154.50; Event & venue $299.00;
+//           Operating $15.00; Total 43400 + 3450 = 46850 → $468.50.
 
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 // Type-only imports (erased at run time): the seam takes the store's own input types.
@@ -983,5 +1008,167 @@ test.describe("T1.17b: the list is accessible and clear of the nav (from entries
     const last = await box(expenseRows(page).last());
     const nav = await box(mainNav(page));
     expect(last.y + last.height, "bottom of the last row vs top of the nav (px)").toBeLessThanOrEqual(nav.y + 1);
+  });
+});
+
+// ═══ ADDED (T1.17c): list meaning, machine-readable dates, live updates ═════
+
+/** Every <ul>/<ol> inside `container`: its role ATTRIBUTE (explicit, not implicit) and its children's tags. */
+function listsIn(container: Locator): Promise<{ role: string | null; children: string[] }[]> {
+  return container.evaluate((root) =>
+    Array.from(root.querySelectorAll("ul, ol")).map((list) => ({
+      role: list.getAttribute("role"),
+      children: Array.from(list.children).map((c) => c.tagName),
+    })),
+  );
+}
+
+/** Every <time> inside `row`: its datetime attribute and its text (whitespace collapsed). */
+function timesIn(row: Locator): Promise<{ datetime: string | null; text: string }[]> {
+  return row.evaluate((el) =>
+    Array.from(el.querySelectorAll("time")).map((t) => ({
+      datetime: t.getAttribute("datetime"),
+      text: (t.textContent ?? "").replace(/\s+/g, " ").trim(),
+    })),
+  );
+}
+
+async function allRowTimes(rows: Locator): Promise<{ datetime: string | null; text: string }[][]> {
+  const out: { datetime: string | null; text: string }[][] = [];
+  for (const row of await rows.all()) out.push(await timesIn(row));
+  return out;
+}
+
+/** One <time> per row: [stored ISO date, displayed date]. */
+function oneTime(datetime: string, text: string): { datetime: string; text: string }[] {
+  return [{ datetime, text }];
+}
+
+test.describe("T1.17c: All expenses keeps its list meaning (X10)", () => {
+  test('the All expenses list has an explicit role="list" and its 8 children are all <li>', async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], ROWS_COSTS);
+    await expect(expenseRows(page)).toHaveCount(8);
+    expect(await listsIn(allExpenses(page))).toEqual([{ role: "list", children: Array(8).fill("LI") }]);
+  });
+});
+
+test.describe("T1.17c: each cost row's date is one <time datetime> (X11)", () => {
+  test("the rows dataset: each of the 8 rows has exactly one <time>, datetime = stored date, text = shown date", async ({
+    page,
+  }) => {
+    await openExpenses(page);
+    await seed(page, [], ROWS_COSTS);
+    await expect(expenseRows(page)).toHaveCount(8);
+    // Newest first (header): c, b, h, d, e, a, g, f.
+    expect(await allRowTimes(expenseRows(page))).toEqual([
+      oneTime("2026-07-01", "01/07/2026"),
+      oneTime("2026-06-29", "29/06/2026"),
+      oneTime("2026-06-28", "28/06/2026"),
+      oneTime("2026-06-28", "28/06/2026"),
+      oneTime("2026-06-26", "26/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-10", "10/06/2026"),
+      oneTime("2026-06-01", "01/06/2026"),
+    ]);
+  });
+
+  test("the <time> doesn't change a row's lines: the City carpark row still reads exactly as X5", async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], [ROWS_COSTS[0]]);
+    await expect(expenseRows(page)).toHaveCount(1);
+    expect(await timesIn(expenseRows(page).first())).toEqual(oneTime("2026-06-23", "23/06/2026"));
+    expect(await rowLines(expenseRows(page).first())).toEqual(ROW_A);
+  });
+
+  test("the City carpark row's <time> is the same on /expenses, the convention's page and Online sales", async ({
+    page,
+  }) => {
+    const WANTED = oneTime("2026-06-23", "23/06/2026");
+    await openExpenses(page);
+    await seed(page, [], [ROWS_COSTS[0]]);
+    await expect(expenseRows(page)).toHaveCount(1);
+    const here = await timesIn(expenseRows(page).first());
+    await routerPush(page, `/events/${COMIC_CON.id}`, COMIC_CON.name);
+    const eventRows = region(page, "Event & venue costs").getByRole("listitem");
+    await expect(eventRows).toHaveCount(1);
+    const onEvent = await timesIn(eventRows.first());
+    await routerPush(page, "/income/online-sales", "Online sales");
+    const streamRows = region(page, "Costs").getByRole("listitem");
+    await expect(streamRows).toHaveCount(1);
+    const onStream = await timesIn(streamRows.first());
+    expect([here, onEvent, onStream]).toEqual([WANTED, WANTED, WANTED]);
+  });
+});
+
+test.describe("T1.17c: on a US-English device, <time> keeps the ISO datetime (X11)", () => {
+  test.use({ locale: "en-US" });
+
+  test('the owner\'s example: datetime "2026-06-30" with text "6/30/2026", and so on, newest first', async ({ page }) => {
+    await openExpenses(page);
+    await seed(page, [], OWNER_COSTS);
+    await expect(expenseRows(page)).toHaveCount(5);
+    expect(await allRowTimes(expenseRows(page))).toEqual([
+      oneTime("2026-06-30", "6/30/2026"),
+      oneTime("2026-06-24", "6/24/2026"),
+      oneTime("2026-06-23", "6/23/2026"),
+      oneTime("2026-06-22", "6/22/2026"),
+      oneTime("2026-06-20", "6/20/2026"),
+    ]);
+  });
+});
+
+test.describe("T1.17c: an expense added while /expenses is on screen appears at once (X12)", () => {
+  const FIRST_THREE: readonly ExpenseInput[] = [
+    { date: "2026-06-20", amountCents: 12000, categoryId: "printing", supplier: "Zine printer" },
+    { date: "2026-06-24", amountCents: 29900, categoryId: "accommodation", supplier: "Harbour Hotel", eventId: COMIC_CON.id },
+    { date: "2026-06-30", amountCents: 1500, categoryId: "software", supplier: "Adobe" },
+  ];
+  const FOURTH: ExpenseInput = { date: "2026-06-27", amountCents: 3450, categoryId: "packaging", supplier: "Box Co" };
+  const SOFTWARE = ["30/06/2026", "Software", "Adobe", "$15.00"];
+  const PACKAGING = ["27/06/2026", "Packaging", "Box Co", "$34.50"];
+  const ACCOMMODATION = ["24/06/2026", "Accommodation", "Harbour Hotel", COMIC_CON.name, "$299.00"];
+  const PRINTING = ["20/06/2026", "Printing", "Zine printer", "$120.00"];
+
+  /** Opens /expenses, seeds the first three (checking them), marks the document, then seeds the fourth. */
+  async function addFourthWhileOnScreen(page: Page): Promise<string> {
+    await openExpenses(page);
+    await seed(page, [], FIRST_THREE);
+    await expect(expenseRows(page)).toHaveCount(3);
+    expect(await allRowLines(expenseRows(page))).toEqual([SOFTWARE, ACCOMMODATION, PRINTING]);
+    await expectTotals(page, totalsLines("$120.00", "$299.00", "$15.00", "$434.00"));
+    const url = page.url();
+    await setMarker(page);
+    await seed(page, [], [FOURTH]);
+    return url;
+  }
+
+  test("the 27/06 Packaging cost appears second of four, newest first, with no move", async ({ page }) => {
+    const url = await addFourthWhileOnScreen(page);
+    await expect(expenseRows(page)).toHaveCount(4);
+    expect(await allRowLines(expenseRows(page))).toEqual([SOFTWARE, PACKAGING, ACCOMMODATION, PRINTING]);
+    expect(page.url(), "still on the same address").toBe(url);
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
+  });
+
+  test("the Totals follow at once: Production $154.50, Event & venue $299.00, Operating $15.00, Total expenses $468.50", async ({
+    page,
+  }) => {
+    await addFourthWhileOnScreen(page);
+    await expectTotals(page, totalsLines("$154.50", "$299.00", "$15.00", "$468.50"));
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
+  });
+
+  test("the new row's <time> is in place too: datetimes 2026-06-30, 2026-06-27, 2026-06-24, 2026-06-20", async ({
+    page,
+  }) => {
+    await addFourthWhileOnScreen(page);
+    await expect(expenseRows(page)).toHaveCount(4);
+    expect(await allRowTimes(expenseRows(page))).toEqual([
+      oneTime("2026-06-30", "30/06/2026"),
+      oneTime("2026-06-27", "27/06/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+      oneTime("2026-06-20", "20/06/2026"),
+    ]);
   });
 });

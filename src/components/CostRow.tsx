@@ -38,7 +38,9 @@ export default function CostRow({
 
   return (
     <li className={rowClass}>
-      <p className="text-base break-words">{formatDateForDisplay(cost.date, locale)}</p>
+      <p className="text-base break-words">
+        <time dateTime={cost.date}>{formatDateForDisplay(cost.date, locale)}</time>
+      </p>
       <p className="text-lg font-bold break-words">{category}</p>
       {cost.supplier !== "" && <p className="text-base break-words">{cost.supplier}</p>}
       {link !== "" && <p className="text-base break-words">{link}</p>}

@@ -64,10 +64,12 @@ export default function StreamDetail({ streamId }: { streamId: string }) {
         {summary.income.length === 0 ? (
           <p className={mutedClass}>No income yet.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-3">
+          <ul role="list" className="mt-3 flex flex-col gap-3">
             {summary.income.map((row) => (
               <li key={row.id} className={itemClass}>
-                <p className="text-base break-words">{day(row.date)}</p>
+                <p className="text-base break-words">
+                  <time dateTime={row.date}>{day(row.date)}</time>
+                </p>
                 <p className="text-lg font-bold break-words">
                   {row.eventId === null
                     ? PAYMENT_LABELS[row.paymentMethod]
@@ -96,7 +98,7 @@ export default function StreamDetail({ streamId }: { streamId: string }) {
         {summary.costs.length === 0 ? (
           <p className={mutedClass}>No costs yet.</p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-3">
+          <ul role="list" className="mt-3 flex flex-col gap-3">
             {summary.costs.map((cost) => (
               <CostRow key={cost.id} cost={cost} events={events} locale={locale} />
             ))}
@@ -126,7 +128,7 @@ export default function StreamDetail({ streamId }: { streamId: string }) {
           {streamEvents.length === 0 ? (
             <p className={mutedClass}>No events yet.</p>
           ) : (
-            <ul className="mt-3 flex flex-col gap-3">
+            <ul role="list" className="mt-3 flex flex-col gap-3">
               {streamEvents.map((event) => (
                 <li key={event.id}>
                   <Link href={`/events/${event.id}`} className={linkClass}>

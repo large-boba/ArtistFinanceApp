@@ -207,6 +207,46 @@
 //     table.
 //
 // E11. No uncaught errors and no React hydration errors during any test.
+//
+// E12. ADDED (T1.17c, lead): lists keep their list meaning (Safari and
+//     VoiceOver drop it when the bullets are hidden). Each of these is a
+//     <ul>/<ol> with an EXPLICIT role="list" attribute whose direct children
+//     are all <li>:
+//       - /events: the list holding the three event links (3 items, one link
+//         in each);
+//       - the event page: the one list in "Takings by day" and in
+//         "Event & venue costs" (with data, so the lists exist).
+//
+// E13. ADDED (T1.17c, lead): machine-readable dates.
+//     - Every "Takings by day" row and every cost row wraps its date in
+//       exactly one <time>: `datetime` is the stored date, exactly
+//       "YYYY-MM-DD"; its text is exactly the displayed date ("22/06/2026").
+//     - An event's dates (E1, E2), on /events (inside the event's link) and on
+//       its page (with no entries, so no rows): each date shown is a <time>,
+//       inside the element that reads exactly the dates, and there are no
+//       other <time>s there:
+//         multi-day: the start and the end, each a <time>, in that order
+//                    (Sydney: 2026-06-22 "22/06/2026", 2026-06-24 "24/06/2026");
+//         one day:   one <time> (the market: 2026-07-01 "01/07/2026"). Test
+//                    engineer's reading: a one-day event shows one date, so
+//                    there is one <time>, not the same date twice;
+//         shelf:     the "From …" start is one <time> (2026-05-02
+//                    "02/05/2026"); "ongoing" is not a date.
+//       Perth (today 2026-06-30): convention 2026-06-21 and 2026-06-23,
+//       market 2026-06-30, shelf 2026-05-01 (header, pretendEvents).
+//     The texts of E1 and E2 don't change.
+//
+// E14. ADDED (T1.17c, lead): live updates. With the convention's page on
+//     screen and no move in between (same document, same URL), takings added
+//     for a new day in the middle of the range appear at once, in date order
+//     (oldest first, E5), and the lines follow. Hand-worked (cents):
+//       first: days 1 and 3 of the owner's example plus its three costs
+//         → day rows 22/06, 24/06; Takings 100000 + 150000 = 250000 →
+//           $2,500.00; Result 250000 − 99900 = 150100 → $1,501.00
+//       then: day 2, 23/06 cash 80000 and card 120000
+//         → day rows 22/06, 23/06 (position 2: Cash $800.00, Card $1,200.00,
+//           Total $2,000.00), 24/06; Takings 250000 + 200000 = 450000 →
+//           $4,500.00; Result 450000 − 99900 = 350100 → $3,501.00.
 
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 // Type-only imports (erased at run time): the seam takes the store's own input types.
@@ -1615,5 +1655,244 @@ test.describe("T1.16b: the amount cap in other costs", () => {
     await expect(otherCosts(page).getByText("Reads as $9,999,999.99", { exact: true })).toBeVisible();
     await press(ocSave(page), t);
     await expectLine(otherCosts(page), "Other costs $9,999,999.99");
+  });
+});
+
+// ═══ ADDED (T1.17c): list meaning, machine-readable dates, live updates ═════
+
+type TimeTag = { datetime: string | null; text: string };
+
+/** Every <ul>/<ol> inside `container`: its role ATTRIBUTE (explicit, not implicit) and its children's tags. */
+function listsIn(container: Locator): Promise<{ role: string | null; children: string[] }[]> {
+  return container.evaluate((root) =>
+    Array.from(root.querySelectorAll("ul, ol")).map((list) => ({
+      role: list.getAttribute("role"),
+      children: Array.from(list.children).map((c) => c.tagName),
+    })),
+  );
+}
+
+/** Every <time> inside `container`: its datetime attribute and its text (whitespace collapsed). */
+function timesIn(container: Locator): Promise<TimeTag[]> {
+  return container.evaluate((el) =>
+    Array.from(el.querySelectorAll("time")).map((t) => ({
+      datetime: t.getAttribute("datetime"),
+      text: (t.textContent ?? "").replace(/\s+/g, " ").trim(),
+    })),
+  );
+}
+
+async function allRowTimes(rows: Locator): Promise<TimeTag[][]> {
+  const out: TimeTag[][] = [];
+  for (const row of await rows.all()) out.push(await timesIn(row));
+  return out;
+}
+
+/** One <time> per row: [stored ISO date, displayed date]. */
+function oneTime(datetime: string, text: string): TimeTag[] {
+  return [{ datetime, text }];
+}
+
+/**
+ * For each <time> inside `container`: whether it is inside (or is) an element whose
+ * rendered text, whitespace collapsed, is exactly `dates` (the event's date line).
+ */
+function timesInsideDatesLine(container: Locator, dates: string): Promise<boolean[]> {
+  return container.evaluate((root, wanted) => {
+    const read = (el: Element) => ((el as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim();
+    return Array.from(root.querySelectorAll("time")).map((t) => {
+      for (let el: Element | null = t; el !== null && el !== root.parentElement; el = el.parentElement) {
+        if (read(el) === wanted) return true;
+      }
+      return false;
+    });
+  }, dates);
+}
+
+/** Each event's date <time>s in Sydney (E13). */
+const EVENT_TIMES: readonly { event: PretendEvent; times: TimeTag[] }[] = [
+  {
+    event: COMIC_CON,
+    times: [
+      { datetime: "2026-06-22", text: "22/06/2026" },
+      { datetime: "2026-06-24", text: "24/06/2026" },
+    ],
+  },
+  { event: MARKET, times: [{ datetime: "2026-07-01", text: "01/07/2026" }] },
+  { event: SHELF, times: [{ datetime: "2026-05-02", text: "02/05/2026" }] },
+];
+
+test.describe("T1.17c: lists keep their list meaning (E12)", () => {
+  test('on /events, the event links sit in one list with an explicit role="list": 3 <li> children, one link in each', async ({
+    page,
+  }) => {
+    await open(page, "/events");
+    await expect(eventLink(page, COMIC_CON)).toHaveCount(1);
+    const shape = await eventLink(page, COMIC_CON).evaluate((a) => {
+      const list = a.closest("ul, ol");
+      if (!list) return "the convention's link is not inside a <ul> or <ol>";
+      return {
+        role: list.getAttribute("role"),
+        children: Array.from(list.children).map((c) => c.tagName),
+        linksPerChild: Array.from(list.children).map((c) => c.querySelectorAll("a").length),
+      };
+    });
+    expect(shape).toEqual({ role: "list", children: Array(3).fill("LI"), linksPerChild: Array(3).fill(1) });
+  });
+
+  for (const name of ["Takings by day", "Event & venue costs"] as const) {
+    test(`on the convention's page (owner's example), the "${name}" list has an explicit role="list" and 3 <li> children`, async ({
+      page,
+    }) => {
+      await openExample(page);
+      await expect(region(page, name).locator("li")).toHaveCount(3);
+      expect(await listsIn(region(page, name))).toEqual([{ role: "list", children: ["LI", "LI", "LI"] }]);
+    });
+  }
+});
+
+test.describe("T1.17c: each row's date is one <time datetime> (E13)", () => {
+  test("the owner's example: the three Takings by day rows' <time>s, oldest first", async ({ page }) => {
+    await openExample(page);
+    await expect(dayRows(page)).toHaveCount(3);
+    expect(await allRowTimes(dayRows(page))).toEqual([
+      oneTime("2026-06-22", "22/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+    ]);
+  });
+
+  test("the owner's example: the three cost rows' <time>s, oldest first", async ({ page }) => {
+    await openExample(page);
+    await expect(costRows(page)).toHaveCount(3);
+    expect(await allRowTimes(costRows(page))).toEqual([
+      oneTime("2026-06-22", "22/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+    ]);
+  });
+
+  test("the shelf's bank-transfer day: one <time datetime=\"2026-06-15\">15/06/2026</time>", async ({ page }) => {
+    await openEvent(page, SHELF);
+    await seed(
+      page,
+      [{ date: "2026-06-15", streamId: "vendor-shelf-rental", amountCents: 25000, paymentMethod: "bank_transfer", eventId: SHELF.id }],
+      [],
+    );
+    await expect(dayRows(page)).toHaveCount(1);
+    expect(await timesIn(dayRows(page).first())).toEqual(oneTime("2026-06-15", "15/06/2026"));
+  });
+});
+
+test.describe("T1.17c: an event's dates are <time>s (E13)", () => {
+  for (const { event, times } of EVENT_TIMES) {
+    const shown = times.map((t) => `${t.datetime} "${t.text}"`).join(", ");
+    test(`on /events, "${event.name}"'s link holds exactly these <time>s: ${shown}`, async ({ page }) => {
+      await open(page, "/events");
+      await expect(eventLink(page, event)).toHaveCount(1);
+      expect(await timesIn(eventLink(page, event))).toEqual(times);
+    });
+
+    test(`on /events, "${event.name}"'s <time>s are inside the line reading exactly "${event.dates}"`, async ({ page }) => {
+      await open(page, "/events");
+      await expect(eventLink(page, event).getByText(event.dates, { exact: true })).toBeVisible();
+      expect(await timesInsideDatesLine(eventLink(page, event), event.dates)).toEqual(times.map(() => true));
+    });
+
+    test(`on ${event.name}'s page (no entries), <main> holds exactly these <time>s: ${shown}`, async ({ page }) => {
+      await openEvent(page, event);
+      await expect(main(page).getByText(event.dates, { exact: true })).toBeVisible();
+      expect(await timesIn(main(page))).toEqual(times);
+    });
+
+    test(`on ${event.name}'s page, its <time>s are inside the line reading exactly "${event.dates}"`, async ({ page }) => {
+      await openEvent(page, event);
+      await expect(main(page).getByText(event.dates, { exact: true })).toBeVisible();
+      expect(await timesInsideDatesLine(main(page), event.dates)).toEqual(times.map(() => true));
+    });
+  }
+});
+
+test.describe("T1.17c: an event's <time>s follow the device's today in Perth (E13)", () => {
+  test.use({ timezoneId: PERTH });
+
+  const PERTH_TIMES = [
+    {
+      event: COMIC_CON,
+      times: [
+        { datetime: "2026-06-21", text: "21/06/2026" },
+        { datetime: "2026-06-23", text: "23/06/2026" },
+      ],
+    },
+    { event: MARKET, times: [{ datetime: "2026-06-30", text: "30/06/2026" }] },
+    { event: SHELF, times: [{ datetime: "2026-05-01", text: "01/05/2026" }] },
+  ] as const;
+  for (const { event, times } of PERTH_TIMES) {
+    test(`at 23:30 on 30 June in Perth, "${event.name}"'s link holds <time>s ${times.map((t) => t.datetime).join(", ")}`, async ({
+      page,
+    }) => {
+      await open(page, "/events");
+      await expect(eventLink(page, event)).toHaveCount(1);
+      expect(await timesIn(eventLink(page, event))).toEqual(times);
+    });
+  }
+});
+
+test.describe("T1.17c: takings added while the convention's page is on screen appear at once (E14)", () => {
+  const DAYS_1_AND_3 = EXAMPLE_INCOME.slice(0, 4); // 24/06 cash, card; 22/06 cash, card
+  const DAY_2 = EXAMPLE_INCOME.slice(4); // 23/06 cash, card
+
+  /** Opens the convention, seeds days 1 and 3 plus the costs (checking them), marks the document, seeds day 2. */
+  async function addDay2WhileOnScreen(page: Page): Promise<string> {
+    await openEvent(page, COMIC_CON);
+    await seed(page, DAYS_1_AND_3, EXAMPLE_COSTS);
+    await expect(dayRows(page)).toHaveCount(2);
+    expect(hasToken(await textOf(dayRows(page).nth(0)), "22/06/2026"), "first day row is 22/06").toBe(true);
+    expect(hasToken(await textOf(dayRows(page).nth(1)), "24/06/2026"), "second day row is 24/06").toBe(true);
+    await expectLine(region(page, "Takings by day"), "Takings $2,500.00");
+    await expectLine(region(page, "Result"), "Result $1,501.00");
+    const url = page.url();
+    await setMarker(page);
+    await seed(page, DAY_2, []);
+    return url;
+  }
+
+  test("23/06 appears as the second of three day rows (22/06, 23/06, 24/06), with no move", async ({ page }) => {
+    const url = await addDay2WhileOnScreen(page);
+    await expect(dayRows(page)).toHaveCount(3);
+    const dates: string[] = [];
+    for (const row of await dayRows(page).all()) {
+      const text = await textOf(row);
+      dates.push(["22/06/2026", "23/06/2026", "24/06/2026"].find((d) => hasToken(text, d)) ?? `none in "${text}"`);
+    }
+    expect(dates).toEqual(["22/06/2026", "23/06/2026", "24/06/2026"]);
+    expect(page.url(), "still on the same address").toBe(url);
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
+  });
+
+  test("the new day row (position 2) reads 23/06/2026, Cash $800.00, Card $1,200.00, Total $2,000.00", async ({ page }) => {
+    await addDay2WhileOnScreen(page);
+    await expect(dayRows(page)).toHaveCount(3);
+    const text = await textOf(dayRows(page).nth(1));
+    for (const token of ["23/06/2026", "Cash $800.00", "Card $1,200.00", "Total $2,000.00"]) {
+      expect(hasToken(text, token), `"${text}" holds "${token}"`).toBe(true);
+    }
+  });
+
+  test('the new day row\'s <time> is in place too: datetimes 2026-06-22, 2026-06-23, 2026-06-24', async ({ page }) => {
+    await addDay2WhileOnScreen(page);
+    await expect(dayRows(page)).toHaveCount(3);
+    expect(await allRowTimes(dayRows(page))).toEqual([
+      oneTime("2026-06-22", "22/06/2026"),
+      oneTime("2026-06-23", "23/06/2026"),
+      oneTime("2026-06-24", "24/06/2026"),
+    ]);
+  });
+
+  test('the lines follow at once: "Takings $4,500.00" and "Result $3,501.00"', async ({ page }) => {
+    await addDay2WhileOnScreen(page);
+    await expectLine(region(page, "Takings by day"), "Takings $4,500.00");
+    await expectLine(region(page, "Result"), "Result $3,501.00");
+    expect(await markerStillThere(page), "same document: no reload, no move").toBe(true);
   });
 });

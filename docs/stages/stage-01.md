@@ -772,7 +772,7 @@ Evidence:
 
   The two comment fixes came after the run and don't change behaviour; lint was re-run.
 
-### T1.17c — List accessibility and live updates           Status: todo
+### T1.17c — List accessibility and live updates           Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
 Source: the T1.17b test engineer's and code reviewer's findings.
 Outcome:
@@ -781,6 +781,22 @@ Outcome:
 - **Live updates:** an entry added while a list is on screen appears at once, in its newest-first place.
 Done when: the new tests pass; the full suite and `npm run check` are green.
 Evidence:
+- **Lead decisions (2026-10-29):**
+  - a one-day event has exactly one `<time>`;
+  - an ongoing shelf has a `<time>` only for "From";
+  - live entries appear in each list's own order (newest first on Expenses and stream pages, date order on an event page).
+- **Tests first** (test engineer): expenses X10–X12, income-streams S12–S14 and events E12–E14.
+  - Red run: 70 failures for the intended reasons. The live-update guards already passed.
+  - Proof: 2538 passed with a scratch change.
+- **Built** (frontend engineer):
+  - `role="list"` on all 8 row lists;
+  - `<time dateTime>` in CostRow, the stream income rows and the takings rows;
+  - a new `EventDates` component for event date ranges.
+  - The usage limit cut the engineer off before its final full run; the lead ran it.
+- **Code review: ACCEPT.**
+  - Taken: the stale header comment in `src/lib/event-dates.ts` updated.
+  - **Logged for the next test round:** event-date wording now lives in two places (`formatEventDates`, unit-tested, and the `EventDates` component). The e2e exact-text tests catch any drift today. A shared pure "date parts" helper would make it one source.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 1090/1090). `CI=1 npx playwright test` gave **2538 passed, 0 failed** (19.8 minutes). The comment fix came after the run; lint was re-run.
 
 ### T1.18 — Home summary                                    Status: todo
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no
