@@ -167,6 +167,12 @@
 //       app (client-side), and is NOT added to anything else: the events
 //       list's Result, Home's totals and the Transactions list don't change.
 //
+//     - ADDED (T1.16, from the T1.15 review): where focus goes when the
+//       form closes, so keyboard and screen-reader users aren't dropped on
+//       <body>: Cancel puts focus back on the button that opened the form
+//       ("Add other costs", or "Change"); Save puts it on "Change"; Clear
+//       puts it on "Add other costs".
+//
 // E9. The note: an element in <main> whose whole text is exactly
 //     "Production costs aren't included here." (ASCII apostrophe).
 //
@@ -1392,3 +1398,61 @@ test.describe("T1.15: on a phone at 320×568 with 200% text", () => {
     expect(await outsideWidth(page, NARROW.width)).toEqual([]);
   });
 });
+
+// ═══ E8, added in T1.16: focus after the other-costs form closes ════════════
+
+test.describe("T1.16: focus after Cancel, Save and Clear in other costs", () => {
+  test('Cancel after "Add other costs" puts focus back on "Add other costs"', async ({ page }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), touch(testInfo));
+    await expect(ocAmount(page)).toBeFocused();
+    await press(ocCancel(page), touch(testInfo));
+    await expect(addOtherCostsButton(page)).toBeFocused();
+  });
+
+  test('Cancel after "Change" puts focus back on "Change"', async ({ page }, testInfo) => {
+    const t = touch(testInfo);
+    await openEvent(page, COMIC_CON);
+    await setOtherCosts(page, t, "600");
+    await press(ocChange(page), t);
+    await expect(ocAmount(page)).toBeFocused();
+    await press(ocCancel(page), t);
+    await expect(ocChange(page)).toBeFocused();
+  });
+
+  test('Save puts focus on "Change"', async ({ page }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await setOtherCosts(page, touch(testInfo), "600");
+    await expectLine(otherCosts(page), "Other costs $600.00");
+    await expect(ocChange(page)).toBeFocused();
+  });
+
+  test('Save from the keyboard (Enter in Amount) puts focus on "Change"', async ({ page }, testInfo) => {
+    await openEvent(page, COMIC_CON);
+    await press(addOtherCostsButton(page), touch(testInfo));
+    await ocAmount(page).fill("600");
+    await ocAmount(page).press("Enter");
+    await expectLine(otherCosts(page), "Other costs $600.00");
+    await expect(ocChange(page)).toBeFocused();
+  });
+
+  test('Save after "Change" puts focus on "Change" again', async ({ page }, testInfo) => {
+    const t = touch(testInfo);
+    await openEvent(page, COMIC_CON);
+    await setOtherCosts(page, t, "600");
+    await press(ocChange(page), t);
+    await ocAmount(page).fill("450");
+    await press(ocSave(page), t);
+    await expectLine(otherCosts(page), "Other costs $450.00");
+    await expect(ocChange(page)).toBeFocused();
+  });
+
+  test('Clear puts focus on "Add other costs"', async ({ page }, testInfo) => {
+    const t = touch(testInfo);
+    await openEvent(page, COMIC_CON);
+    await setOtherCosts(page, t, "600");
+    await press(ocClear(page), t);
+    await expect(addOtherCostsButton(page)).toBeFocused();
+  });
+});
+

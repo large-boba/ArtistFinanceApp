@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import AddButton from "@/components/AddButton";
+import StreamsList from "@/components/StreamsList";
 
 // The layout adds " · BentoBudget" after this title.
 export const metadata: Metadata = { title: "Income" };
 
-// A simple page for now: one heading and a note. A later card (T1.16) fills
-// it with your income by stream.
+// The heading, "+ Add" directly under it, then the seven income streams. The
+// list is a client component because the figures come from the entries the
+// artist has added on this device.
 export default function IncomePage() {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">Income</h1>
       <AddButton />
-      <p className="mt-4 text-base text-zinc-700 dark:text-zinc-300">
-        Your income by stream is coming next.
-      </p>
+      <StreamsList />
     </>
   );
 }

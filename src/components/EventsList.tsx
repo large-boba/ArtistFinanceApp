@@ -16,7 +16,7 @@ import Link from "next/link";
 import { formatCents } from "@/lib/money";
 import { pretendEvents } from "@/lib/pretend-data";
 import { eventSummary } from "@/lib/summaries";
-import { eventDatesText } from "./event-dates";
+import { formatEventDates } from "@/lib/event-dates";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage } from "./form-parts";
 import { useDevice } from "./useDevice";
@@ -44,7 +44,7 @@ export default function EventsList() {
             >
               <span className="block text-xl font-bold break-words">{event.name}</span>
               <span className="mt-1 block text-base break-words text-zinc-700 dark:text-zinc-300">
-                {eventDatesText(event, device.locale)}
+                {formatEventDates(event, device.locale)}
               </span>
               <span className="mt-1 block text-lg break-words">
                 Result <span className="font-bold">{formatCents(resultCents, "AUD", device.locale)}</span>

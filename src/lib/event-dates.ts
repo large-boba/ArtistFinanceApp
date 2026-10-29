@@ -5,10 +5,10 @@
 //   several:  "22/06/2026 to 24/06/2026"
 //   ongoing:  "From 02/05/2026, ongoing"
 
-import { formatDateForDisplay } from "@/lib/dates";
-import type { PretendEvent } from "@/lib/pretend-data";
+import { formatDateForDisplay } from "./dates";
+import type { PretendEvent } from "./pretend-data";
 
-export function eventDatesText(event: PretendEvent, locale: string): string {
+export function formatEventDates(event: PretendEvent, locale: string): string {
   const start = formatDateForDisplay(event.startDate, locale);
   if (event.endDate === null) return `From ${start}, ongoing`;
   if (event.endDate === event.startDate) return start;

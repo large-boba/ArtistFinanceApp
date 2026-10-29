@@ -76,6 +76,10 @@
 //    CHANGED (T1.15): Events is no longer a placeholder. T1.15 replaces its
 //    note with the list of pretend events (events.spec.ts E1), so only
 //    Settings must say "coming in Stage N", and Events must NOT.
+//    CHANGED (T1.16): Income is no longer a "coming next" page. T1.16
+//    replaces its note with the seven income streams
+//    (income-streams.spec.ts S1), so only Expenses must say "coming next"
+//    (until T1.17), and Income must NOT.
 //
 // 8. Home button. Home has exactly one control whose accessible name is
 //    exactly "+ Add" (since T1.14; it was "+ Expense", see the CHANGED notes
@@ -234,11 +238,9 @@ type Screen = (typeof SCREENS)[number];
 // now lists the pretend events, so only Settings is left.
 const PLACEHOLDER_SCREENS = SCREENS.filter((s) => ["Settings"].includes(s.name));
 
-// The two new simple pages (claim 7, T1.11): a "coming next" note until
-// T1.16 (Income) and T1.17 (Expenses) fill them in.
-const COMING_NEXT_SCREENS = SCREENS.filter((s) =>
-  ["Expenses", "Income"].includes(s.name),
-);
+// The simple pages (claim 7, T1.11): a "coming next" note until T1.17
+// (Expenses) fills it in. CHANGED (T1.16): Income now lists the streams.
+const COMING_NEXT_SCREENS = SCREENS.filter((s) => ["Expenses"].includes(s.name));
 
 // Removed and de-tabbed pages (claims 16\u201318).
 const REPORTS_PATH = "/reports";
@@ -542,6 +544,11 @@ test.describe("bottom navigation", () => {
   test('Events no longer shows a "coming in Stage N" note (CHANGED (T1.15))', async ({ page }) => {
     await open(page, "/events");
     await expect(page.getByRole("main")).not.toContainText(/coming in Stage \d+/i);
+  });
+
+  test('Income no longer shows a "coming next" note (CHANGED (T1.16))', async ({ page }) => {
+    await open(page, "/income");
+    await expect(page.getByRole("main")).not.toContainText(/\bcoming next\b/i);
   });
 
   for (const screen of COMING_NEXT_SCREENS) {

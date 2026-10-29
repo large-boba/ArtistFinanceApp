@@ -726,3 +726,41 @@ describe("rangeTotals — income, expenses and net for an inclusive date range",
     expect(rangeTotals(state, "2026-06-01", "2026-06-30")).toStrictEqual({ incomeCents: 0, expensesCents: MAX, netCents: -MAX });
   });
 });
+
+// ─── Decision H, pinned directly (T1.16 carry-over) ──────────────────────────
+// The summaries' lists hold the store's OWN entry objects (the very same
+// objects, not copies), so a screen can show and later edit them.
+
+describe("decision H: the summary lists hold the store's own entries", () => {
+  it("eventSummary(...).costs[0] is the very same object as the store's table entry", () => {
+    const state = ownerState();
+    const table = state.entries.find((e) => e.id === "table");
+    expect(table).toBeDefined();
+    // costs are oldest first: the table (22 June) comes first.
+    expect(eventSummary(state, EVENTS, CONVENTION).costs[0]).toBe(table);
+  });
+
+  it("streamSummary(...).income[0] is the very same object as the store's day-3 card entry", () => {
+    const state = ownerState();
+    const d3Card = state.entries.find((e) => e.id === "d3-card");
+    expect(d3Card).toBeDefined();
+    // income is newest first: 24 June, card (added after cash) first.
+    expect(streamSummary(state, EVENTS, SALES_AT_EVENTS).income[0]).toBe(d3Card);
+  });
+
+  it("streamSummary(...).costs[0] is the very same object as the store's hotel entry", () => {
+    const state = ownerState();
+    const hotel = state.entries.find((e) => e.id === "hotel");
+    expect(hotel).toBeDefined();
+    // costs are newest first: the hotel (24 June) comes first.
+    expect(streamSummary(state, EVENTS, SALES_AT_EVENTS).costs[0]).toBe(hotel);
+  });
+
+  it("every entry in the convention's costs is one of the store's entries, each once", () => {
+    const state = ownerState();
+    const costs = eventSummary(state, EVENTS, CONVENTION).costs;
+    expect(costs.map((c) => state.entries.indexOf(c)).every((i) => i >= 0)).toBe(true);
+    expect(new Set(costs).size).toBe(costs.length);
+  });
+});
+

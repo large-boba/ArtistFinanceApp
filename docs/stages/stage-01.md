@@ -632,7 +632,7 @@ Evidence:
   - No separate security review was run; the card says why. The event id from the address is only matched against three fixed ids; any other is a real 404.
 - **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 863/863, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **1949 passed, 0 failed**. After the three small fixes: `npm run check` exit 0, and the events, add-button and app-shell specs gave **923 passed, 0 failed**.
 
-### T1.16 — Income tab and stream pages                     Status: building
+### T1.16 — Income tab and stream pages                     Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright + small Vitest additions)   Security review: no (the stream id from the address is only matched against a fixed list)
 Guide: §10 (seven default streams), §12 "By income stream"; DECISIONS.md "Linking costs to events and streams", "The '+' button".
 Outcome:
@@ -660,6 +660,29 @@ Lead decisions (2026-10-29); the full spec is S1–S11 in `e2e/income-streams.sp
 - **Still to decide at the stage gate:** whether the Events and Income tabs show as current on their sub-pages.
 - **The usage limit** interrupted the test engineer's proof. The lead confirmed the feature files were restored before the build.
 Evidence:
+- **Tests first** (test engineer):
+  - new `e2e/income-streams.spec.ts` (S1–S11, 276 tests), with two datasets worked out by hand;
+  - `events.spec` E8 focus tests and app-shell claim 7 CHANGED;
+  - new `src/lib/event-dates.test.ts`; direct `addCents`/`subtractCents` tests; decision-H identity tests.
+  - Red run: 246 failures for the intended reasons. Proof: 2233 passed with a scratch build. 6 planted bugs were caught.
+- **Built** (frontend engineer):
+  - `event-dates` moved to `src/lib` (`formatEventDates`);
+  - `/income` list (`StreamsList`);
+  - `/income/[id]` (static for the 7 streams; any other id is a 404) with `StreamDetail`.
+  - **Lead viewed the phone screenshot of Sales at events:**
+    - six income rows like "Pretend comic convention · Card";
+    - **Income $4,500.00**;
+    - three costs counted through the convention's usual stream, **Costs $999.00**;
+    - **Result $3,501.00**;
+    - Events links to the convention and the market.
+- **Code review: ACCEPT.** There's no money maths in the components; the attribution matches `streamOfCost`; `/income/new` isn't shadowed.
+  - **Taken into T1.17:**
+    - one shared cost-row component for the event, stream and expenses pages;
+    - clearer wording for the costs line: "…or, with no stream tag, linked to an event that usually earns from it." (a lead decision; the spec changes then).
+  - **Logged:**
+    - the unreachable empty state in `StreamsList`;
+    - the summary error state before real data. The T1.16b cap makes overflow practically impossible.
+- **Lead re-ran from a clean build:** `npm run check` exit 0 (vitest 927/927, check-rules 0 errors, rules tests 61/61). `CI=1 npx playwright test` gave **2233 passed, 0 failed** (18.8 minutes; the first attempt hit the lead's own 10-minute command limit, not a test failure).
 
 ### T1.16b — Amount cap: $9,999,999.99 per entry              Status: todo
 Owner agent: backend-engineer (`src/lib`), then frontend-engineer (form messages)   Tests: test-engineer (Vitest + Playwright)   Security review: no

@@ -24,7 +24,7 @@ import { formatDateForDisplay } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
 import { eventSummary } from "@/lib/summaries";
-import { eventDatesText } from "./event-dates";
+import { formatEventDates } from "@/lib/event-dates";
 import { useEntries } from "./EntriesProvider";
 import { LoadingMessage } from "./form-parts";
 import OtherCostsEditor from "./OtherCostsEditor";
@@ -65,7 +65,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
 
   return (
     <>
-      <p className="mt-4 text-lg break-words">{eventDatesText(event, locale)}</p>
+      <p className="mt-4 text-lg break-words">{formatEventDates(event, locale)}</p>
 
       <section aria-labelledby="event-takings" className={sectionClass}>
         <h2 id="event-takings" className={h2Class}>

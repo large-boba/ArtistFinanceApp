@@ -202,6 +202,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  addCents,
   entriesNewestFirst,
   entriesReducer,
   createEntriesState,
@@ -212,6 +213,7 @@ import {
   type Entry,
   type EventTakingsInput,
   type IncomeInput,
+  subtractCents,
 } from "@/lib/entries";
 import { DRAFT_CATEGORIES, pretendEvents } from "@/lib/pretend-data";
 
@@ -2522,4 +2524,133 @@ describe("inputs must be plain objects: inherited fields can't slip past the fie
     });
     expect(after.entries[0]).toMatchObject({ id: "e0", amountCents: 250 });
   });
+});
+
+// ─── addCents / subtractCents (T1.16 carry-over: direct unit tests) ─────────
+//
+// The exact whole-cent helpers every total goes through (T1.10c). Until now
+// they were only tested through the totals. Contract (entries.ts):
+//   addCents(a, b) = a + b, subtractCents(a, b) = a − b, for whole numbers of
+//   cents of either sign; a RangeError when the answer would go past
+//   ±Number.MAX_SAFE_INTEGER (9,007,199,254,740,991), and a RangeError when
+//   either input isn't a safe integer (a fraction, NaN, ±Infinity, 2^53, or
+//   not a number at all). Expected values are written out by hand.
+
+describe("addCents", () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+
+  it.each([
+    [2, 3, 5],
+    [-2, 3, 1],
+    [2, -3, -1],
+    [-2, -3, -5],
+    [0, 0, 0],
+    [123450, 50, 123500],
+  ])("addCents(%d, %d) is %d", (a, b, sum) => {
+    expect(addCents(a, b)).toBe(sum);
+  });
+
+  it("reaches exactly MAX_SAFE_INTEGER: (MAX − 1) + 1 = 9007199254740991", () => {
+    expect(addCents(MAX - 1, 1)).toBe(9007199254740991);
+  });
+
+  it("reaches exactly −MAX_SAFE_INTEGER: (−MAX + 1) + (−1) = −9007199254740991", () => {
+    expect(addCents(-MAX + 1, -1)).toBe(-9007199254740991);
+  });
+
+  it("MAX + (−MAX) = 0, and MAX + 0 = MAX", () => {
+    expect(addCents(MAX, -MAX)).toBe(0);
+    expect(addCents(MAX, 0)).toBe(MAX);
+  });
+
+  it("refuses to go past MAX: MAX + 1 throws RangeError", () => {
+    expect(() => addCents(MAX, 1)).toThrow(RangeError);
+  });
+
+  it("refuses to go past −MAX: −MAX + (−1) throws RangeError", () => {
+    expect(() => addCents(-MAX, -1)).toThrow(RangeError);
+  });
+
+  it("refuses MAX + MAX (it would round silently in plain JavaScript)", () => {
+    expect(() => addCents(MAX, MAX)).toThrow(RangeError);
+  });
+
+  const NOT_WHOLE_CENTS: readonly [string, unknown][] = [
+    ["a fraction 1.5", 1.5],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["2^53 (one past MAX)", 2 ** 53],
+    ["the string \"1\"", "1"],
+  ];
+  for (const [why, bad] of NOT_WHOLE_CENTS) {
+    it(`refuses ${why} as the first amount (RangeError)`, () => {
+      expect(() => addCents(bad as number, 1)).toThrow(RangeError);
+    });
+    it(`refuses ${why} as the second amount (RangeError)`, () => {
+      expect(() => addCents(1, bad as number)).toThrow(RangeError);
+    });
+  }
+});
+
+describe("subtractCents", () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+
+  it.each([
+    [5, 3, 2],
+    [3, 5, -2],
+    [-3, 5, -8],
+    [-3, -5, 2],
+    [3, -5, 8],
+    [0, 0, 0],
+    [450000, 99900, 350100],
+  ])("subtractCents(%d, %d) is %d", (a, b, difference) => {
+    expect(subtractCents(a, b)).toBe(difference);
+  });
+
+  it("reaches exactly −MAX_SAFE_INTEGER: (−MAX + 1) − 1 = −9007199254740991", () => {
+    expect(subtractCents(-MAX + 1, 1)).toBe(-9007199254740991);
+  });
+
+  it("reaches exactly MAX_SAFE_INTEGER: (MAX − 1) − (−1) = 9007199254740991", () => {
+    expect(subtractCents(MAX - 1, -1)).toBe(9007199254740991);
+  });
+
+  it("MAX − MAX = 0, and −MAX − (−MAX) = 0", () => {
+    expect(subtractCents(MAX, MAX)).toBe(0);
+    expect(subtractCents(-MAX, -MAX)).toBe(0);
+  });
+
+  it("0 − MAX = −MAX (allowed)", () => {
+    expect(subtractCents(0, MAX)).toBe(-MAX);
+  });
+
+  it("refuses to go past −MAX: −MAX − 1 throws RangeError", () => {
+    expect(() => subtractCents(-MAX, 1)).toThrow(RangeError);
+  });
+
+  it("refuses to go past MAX: MAX − (−1) throws RangeError", () => {
+    expect(() => subtractCents(MAX, -1)).toThrow(RangeError);
+  });
+
+  it("refuses −MAX − MAX", () => {
+    expect(() => subtractCents(-MAX, MAX)).toThrow(RangeError);
+  });
+
+  const NOT_WHOLE_CENTS: readonly [string, unknown][] = [
+    ["a fraction 0.1", 0.1],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["-(2^53) (one past −MAX)", -(2 ** 53)],
+    ["null", null],
+  ];
+  for (const [why, bad] of NOT_WHOLE_CENTS) {
+    it(`refuses ${why} as the first amount (RangeError)`, () => {
+      expect(() => subtractCents(bad as number, 1)).toThrow(RangeError);
+    });
+    it(`refuses ${why} as the second amount (RangeError)`, () => {
+      expect(() => subtractCents(1, bad as number)).toThrow(RangeError);
+    });
+  }
 });
