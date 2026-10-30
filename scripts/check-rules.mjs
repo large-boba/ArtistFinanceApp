@@ -327,6 +327,10 @@ function checkEnvFile(text, filePath = "") {
     const [rawName, ...rest] = line.replace(/^\s*export\s+/, "").split("=");
     const name = rawName.trim();
     const value = rest.join("=").trim().replace(/^["']|["']$/g, "");
+    if (name === "NEXT_PUBLIC_E2E") {
+      findings.push({ line: idx + 1, severity: "error", rule: "no-e2e-flag-in-config",
+        message: "NEXT_PUBLIC_E2E turns on the test-only seam; only playwright.config.ts may set it, never an env file (T1.6)" });
+    }
     if (name.startsWith("NEXT_PUBLIC_") && looksSecret(name)) {
       findings.push({ line: idx + 1, severity: "error", rule: "no-public-secret",
         message: `${name} looks like a secret but NEXT_PUBLIC_ ships it to every browser (guide §5)` });
@@ -344,6 +348,11 @@ function checkEnvFile(text, filePath = "") {
 // secrets; those go in .dev.vars (local) or Cloudflare's encrypted secrets.
 function checkWranglerConfig(text, filePath = "wrangler.jsonc") {
   const findings = [];
+  // The test-only seam's build flag must never be set for a deploy (T1.6).
+  for (const m of text.matchAll(/NEXT_PUBLIC_E2E/g)) {
+    findings.push({ line: lineOf(text, m.index), severity: "error", rule: "no-e2e-flag-in-config",
+      message: "NEXT_PUBLIC_E2E turns on the test-only seam; it must never be set in wrangler config (T1.6)" });
+  }
   const flag = (key, index) => {
     if (looksSecret(key)) {
       findings.push({ line: lineOf(text, index), severity: "error", rule: "no-secret-in-wrangler-vars",

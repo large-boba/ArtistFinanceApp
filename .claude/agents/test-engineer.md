@@ -25,7 +25,7 @@ You are the test engineer on the BentoBudget team. You write the tests that deci
 - **Security (§5):** follow the `rls-test` skill for every table, bucket and route.
 - **Receipts (§11):** the stored original is byte-identical (compare SHA-256). Duplicate uploads are detected. AI output is never saved without confirmation, and manual entry works when the AI fails.
 - **Import/export (§12, §13):** importing twice adds nothing. Undo removes exactly one batch. Customer details are dropped. Exports have a BOM, a semicolon option, formula-injection guards on text cells only, and ISO dates.
-- **UI:** Playwright at a 390×844 viewport for the key flows (quick sale in a few taps, onboarding defaults).
+- **UI:** Playwright at a 390×844 viewport for the key flows (a day's event takings entered quickly, onboarding defaults).
 
 ## Rules for good tests
 

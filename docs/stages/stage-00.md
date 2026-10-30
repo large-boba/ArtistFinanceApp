@@ -1,6 +1,6 @@
 # Stage 0 — Set up your workshop
 
-**Status:** in progress. Reopened for T0.5 (Cloudflare hosting, the owner's decision of 2026-10-24); T0.3 and T0.4 wait on the owner. Opened 2026-10-24; stage start commit `dd90913`.
+**Status:** SIGNED OFF by the owner on 2026-10-25. Carried over: T0.3 (run locally), T0.4 (protect `main`) and the Check yourself questions.
 **Guide:** §17 Stage 0, §4 (stack), §1 (habits)
 
 ## You'll learn
@@ -23,7 +23,7 @@ What each tool does:
 | 5 | The first app commit is on GitHub | `54bc667`, merged to `main` in PR #1 |
 | 6 | `main` is protected on GitHub: PR plus green CI required, no force pushes (team addition, not in the guide) | NEEDS OWNER |
 | 7 | The app builds for Cloudflare and runs in a local Cloudflare preview; CI checks the Cloudflare build (owner-requested addition) | T0.5: preview returned 200; CI Cloudflare step green |
-| 8 | The owner can open the app at a Cloudflare preview URL | NEEDS OWNER |
+| 8 | The owner can open the app at a Cloudflare preview URL | Done: https://artistfinanceapp.michaelz110897.workers.dev (Workers Build 2026-10-25) |
 
 ## Task cards
 
@@ -126,7 +126,7 @@ Evidence: commits `b6297ec`, `6a8b3cc` (builder) and `8977204`, `9efd734`, `4a90
   - three verification rounds on the lead's guardrails closed several more bypasses: extra script arguments, scoped package names, `wrangler2`, `node <path>`, `--prefix`, `--call=`;
   - npm audit findings were accepted and recorded in `DECISIONS.md`.
 
-### T0.6 — Owner connects the repo to Cloudflare            Status: waiting on owner (steps sent 2026-10-24)
+### T0.6 — Owner connects the repo to Cloudflare            Status: done
 Owner agent: **owner** (the lead prepares the steps after T0.5 is accepted)
 Outcome: Cloudflare builds the app from GitHub and gives a preview URL the owner can open on their phone.
 Done when: the owner opens the app at its Cloudflare URL.

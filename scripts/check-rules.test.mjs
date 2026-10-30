@@ -276,6 +276,17 @@ test("example env files list names only", () => {
   assert.deepEqual(errorRules(".env.sample", "DB_PASSWORD=hunter2\n"), ["no-secret-in-example"]);
 });
 
+// T1.6 security review: the test seam's flag can't be set by a committed config file.
+test("NEXT_PUBLIC_E2E in env files or wrangler config is an error", () => {
+  for (const file of [".env", ".env.production", ".env.local", ".env.example", ".dev.vars"]) {
+    assert.deepEqual(errorRules(file, "NEXT_PUBLIC_E2E=1\n"), ["no-e2e-flag-in-config"], file);
+  }
+  assert.deepEqual(errorRules(".env.production", "export NEXT_PUBLIC_E2E=\"1\"\n"), ["no-e2e-flag-in-config"]);
+  assert.deepEqual(errorRules("wrangler.jsonc", `{ "vars": { "NEXT_PUBLIC_E2E": "1" } }`), ["no-e2e-flag-in-config"]);
+  assert.deepEqual(errorRules("wrangler.toml", `[vars]\nNEXT_PUBLIC_E2E = "1"\n`), ["no-e2e-flag-in-config"]);
+  assert.deepEqual(rules(".env.production", "NEXT_PUBLIC_SITE_NAME=BentoBudget\n"), []);
+});
+
 test("checkRepo scans supabase/ and src/ and skips node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-rules-"));
   fs.mkdirSync(path.join(root, "supabase/migrations"), { recursive: true });
