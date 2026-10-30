@@ -41,9 +41,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             last line of content is never hidden behind it, whatever the text
             size. It sticks to the bottom of the screen unless it is taller
             than 25% of the window (see BottomNav), in which case it simply
-            sits after the content. (The nav is 4rem tall plus a 1px top border; its 4px
+            sits after the content. The bottom padding (6rem) leaves room for the floating round "+" button (56px
+            tall plus its gaps), so the end of every page can scroll clear of it.
+            (The nav is 4rem tall plus a 1px top border; its 4px
             highlight bar is inside that 4rem. Big text can make it taller.) */}
-        <main className="mx-auto w-full max-w-2xl flex-1 pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-6 pl-[max(1rem,env(safe-area-inset-left))]">
+        <main className="mx-auto w-full max-w-2xl flex-1 pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-24 pl-[max(1rem,env(safe-area-inset-left))]">
           {/* The pretend entries live in memory and are shared by every page
               (T1.6). The provider draws nothing itself. */}
           <EntriesProvider>{children}</EntriesProvider>

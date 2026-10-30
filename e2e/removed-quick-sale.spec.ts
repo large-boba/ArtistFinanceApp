@@ -31,6 +31,9 @@
 //     "+ Add" control. The "no Sale control" checks are kept, and also run
 //     with "+ Add" opened, so neither of its links ("Add income",
 //     "Add expense") brings a sale pad back.
+//     CHANGED (T1.19, owner's change 2026-10-30): the button's accessible
+//     name is now exactly "Add" (a small round "+" button, add-button.spec
+//     B2), so the locators below use "Add" (exact). Nothing else changed.
 //
 // R3. No uncaught errors and no React hydration errors during any test in
 //     this file (same fixture as entries-list.spec.ts D9 and expense-form F10).
@@ -130,20 +133,20 @@ test.describe("Home has no quick-sale control", () => {
     expect(toPad, "links on Home whose path is /sale").toEqual([]);
   });
 
-  test('Home has exactly one visible "+ Add" control (CHANGED (T1.14): was "+ Expense")', async ({ page }) => {
+  test('Home has exactly one visible "Add" control (CHANGED (T1.14): was "+ Expense"; CHANGED (T1.19): was "+ Add")', async ({ page }) => {
     await openHome(page);
     const add = page
-      .getByRole("button", { name: "+ Add", exact: true })
-      .or(page.getByRole("link", { name: "+ Add", exact: true }));
+      .getByRole("button", { name: "Add", exact: true })
+      .or(page.getByRole("link", { name: "Add", exact: true }));
     await expect(add).toHaveCount(1);
     await expect(add).toBeVisible();
   });
 
-  test('with "+ Add" opened, Home still has no link or button whose name contains the word "Sale" (T1.14)', async ({
+  test('with "Add" opened, Home still has no link or button whose name contains the word "Sale" (T1.14)', async ({
     page,
   }) => {
     await openHome(page);
-    const add = page.getByRole("button", { name: "+ Add", exact: true });
+    const add = page.getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add"
     await add.click();
     await expect(add).toHaveAttribute("aria-expanded", "true");
     const saleWord = /\bsale\b/i;
@@ -151,9 +154,9 @@ test.describe("Home has no quick-sale control", () => {
     await expect(page.getByRole("button", { name: saleWord })).toHaveCount(0);
   });
 
-  test('with "+ Add" opened, Home has no link that leads to /sale (T1.14)', async ({ page }) => {
+  test('with "Add" opened, Home has no link that leads to /sale (T1.14)', async ({ page }) => {
     await openHome(page);
-    const add = page.getByRole("button", { name: "+ Add", exact: true });
+    const add = page.getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add"
     await add.click();
     await expect(add).toHaveAttribute("aria-expanded", "true");
     const toPad = await page.evaluate(() =>

@@ -74,6 +74,11 @@
 //     month" section, in document order; the section is the only one with
 //     that name and holds exactly one heading, the h2. The practice-mode
 //     note stays, exactly once.
+//     CHANGED (T1.19, owner's change 2026-10-30): the button (now named
+//     "Add", a small round button in the bottom-right corner) moves to the
+//     END of the page's content. So the order is: the h1 "Home", then the
+//     "This month" section, then "Add" (add-button.spec B12 checks that
+//     nothing at all comes after it).
 // H8. ADDED (T1.18). The month's name is what
 //     Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }) gives
 //     for that month, worked out from the year and month NUMBERS in UTC
@@ -609,14 +614,17 @@ test.describe("Home's layout (ADDED (T1.18))", () => {
     await expect(summary(page).getByRole("heading", { level: 2 })).toHaveText(SECTION);
   });
 
-  test('the h1 "Home" comes before "+ Add", which comes before the "This month" section', async ({ page }) => {
+  // CHANGED (T1.19): was 'the h1 "Home" comes before "+ Add", which comes
+  // before the "This month" section'. The button is now named "Add" and sits
+  // at the end of the content, so it comes AFTER the section.
+  test('the h1 "Home" comes before the "This month" section, which comes before "Add"', async ({ page }) => {
     await openWithHook(page, "/");
     await expect(summary(page)).toHaveCount(1);
     await expect(heading(page)).toHaveText("Home");
-    const add = main(page).getByRole("button", { name: "+ Add", exact: true });
+    const add = main(page).getByRole("button", { name: "Add", exact: true });
     await expect(add).toHaveCount(1);
-    expect(await comesBefore(heading(page), add), "h1 before + Add").toBe(true);
-    expect(await comesBefore(add, summary(page)), "+ Add before the section").toBe(true);
+    expect(await comesBefore(heading(page), summary(page)), "h1 before the section").toBe(true);
+    expect(await comesBefore(summary(page), add), "the section before Add").toBe(true);
   });
 
   test("the practice-mode note stays, exactly once", async ({ page }) => {

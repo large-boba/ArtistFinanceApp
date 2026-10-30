@@ -104,7 +104,11 @@
 //     built without the test flag), like /reports in app-shell claim 16.
 //
 // E3. "+ Add" on the event page: exactly one, after the h1 and before the
-//     first h2. Its links are exactly
+//     first h2. CHANGED (T1.19, owner's change 2026-10-30): the button is
+//     now named "Add" (a small round button in the bottom-right corner) and
+//     sits at the END of the page's content: exactly one, after the h1 and
+//     after every section (so after the last h2's section); "before the
+//     first h2" is removed. Every locator below uses the name "Add". Its links are exactly
 //       /income/new?event=<id>&back=%2Fevents%2F<id>
 //       /expenses/new?event=<id>&back=%2Fevents%2F<id>
 //     (order event, back; URLSearchParams encoding, as add-button B4).
@@ -354,7 +358,7 @@ function eventLink(page: Page, event: PretendEvent): Locator {
 }
 
 function addButton(page: Page): Locator {
-  return main(page).getByRole("button", { name: "+ Add", exact: true });
+  return main(page).getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add"
 }
 
 function otherCosts(page: Page): Locator {
@@ -751,21 +755,21 @@ test.describe("T1.15: the event page's address, heading and title", () => {
 // ═══ E3. "+ Add" on the event page ══════════════════════════════════════════
 
 test.describe('T1.15: "+ Add" on the event page', () => {
-  test('there is exactly one "+ Add", after the h1 and before the first h2', async ({ page }) => {
+  // CHANGED (T1.19): was 'there is exactly one "+ Add", after the h1 and
+  // before the first h2'. The button now sits at the end of the content.
+  test('there is exactly one "Add", after the h1 and after every section', async ({ page }) => {
     await openEvent(page, COMIC_CON);
     await expect(addButton(page)).toHaveCount(1);
-    const place = await main(page).evaluate((m) => {
+    const button = await addButton(page).elementHandle();
+    const place = await main(page).evaluate((m, b) => {
       const h1 = m.querySelector("h1");
-      const h2 = m.querySelector("h2");
-      const button = Array.from(m.querySelectorAll("button")).find(
-        (b) => (b.textContent ?? "").replace(/\s+/g, " ").trim() === "+ Add",
-      );
-      if (!h1 || !h2 || !button) return "missing h1, h2 or button";
-      const afterH1 = (h1.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-      const beforeH2 = (button.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-      return afterH1 && beforeH2 ? "between" : `afterH1 ${afterH1}, beforeH2 ${beforeH2}`;
-    });
-    expect(place).toBe("between");
+      const sections = Array.from(m.querySelectorAll("section"));
+      if (!h1 || sections.length === 0 || !b) return "missing h1, sections or button";
+      const afterH1 = (h1.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      const notAfter = sections.filter((sec) => (sec.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) === 0);
+      return afterH1 && notAfter.length === 0 ? "after both" : `afterH1 ${afterH1}, not after ${notAfter.length} section(s)`;
+    }, button);
+    expect(place).toBe("after both");
   });
 
   for (const event of EVENTS) {
@@ -1421,10 +1425,10 @@ test.describe("T1.15: tap targets are at least 44×44 px", () => {
     });
   }
 
-  test('on the event page, "+ Add" and "Add other costs" are at least 44×44 px', async ({ page }) => {
+  test('on the event page, "Add" and "Add other costs" are at least 44×44 px', async ({ page }) => {
     await openEvent(page, COMIC_CON);
     for (const [label, control] of [
-      ["+ Add", addButton(page)],
+      ["Add", addButton(page)],
       ["Add other costs", addOtherCostsButton(page)],
     ] as const) {
       const b = await box(control);

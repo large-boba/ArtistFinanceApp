@@ -831,7 +831,7 @@ Evidence:
 - **Lead's own run (after the tidy-up, clean `.next`):** `npm run check` exit 0 (1163 unit tests passed, check-rules 0 errors, 0 warnings); `CI=1 npx playwright test`: 2600 passed, 368 skipped (phone-only or desktop-only), 0 failed (19.8m).
 - **Screenshot (phone, pretend data):** "This month / October 2026 / Income $4,500.00 / Expenses $999.00 / Net $3,501.00".
 
-### T1.19 — The "+" button becomes a small round button, bottom right   Status: building
+### T1.19 — The "+" button becomes a small round button, bottom right   Status: done
 Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (same links and `back` handling as T1.14; only the look and position change)
 Guide: §10 (mobile-first, one-handed use), §15 (accessibility); DECISIONS.md "The '+' button" (owner change, 2026-10-30).
 Outcome: `AddButton` stops being a big full-width "+ Add" under the heading and becomes a **small round floating button with "+" in the middle, in the bottom-right corner** (owner's request). Everything else T1.14 built stays.
@@ -862,6 +862,50 @@ Done when:
 - every T1.14 behaviour test still passes (links, pre-fill, `back`, Escape, outside tap, starts closed);
 - `npm run check` exits 0 and the full Playwright run passes.
 Evidence:
+- **Tests first (test-engineer):**
+  - New T1.19 blocks in `e2e/add-button.spec.ts`:
+    - B9: look;
+    - B10: position, pinned;
+    - B11: position, un-pinned, including the un-pin re-measure;
+    - B11b: Tab never leaves focus under the button, un-pinned, including controls that start below the window and the convention page with the owner's example;
+    - B11c: a tap or slow press beside the button still opens the link;
+    - B12: end of content;
+    - B13: the opened links;
+    - B14: never hides content, plus Tab while pinned.
+  - Locators changed from "+ Add" to "Add" across the specs. Each changed or removed assertion is marked `CHANGED/REMOVED (T1.19)`, and the reviewer found nothing weakened.
+  - Red run: 236 failed against the old design (button not found); 102 failed with only the name changed (geometry).
+  - Proof: a scratch build passed the whole suite (2732 passed), and six planted bugs were each caught.
+- **Build (frontend-engineer):**
+  - `AddButton.tsx` is a fixed round button with an aria-hidden "+"/"×" and the name "Add". The group sits after the button in the HTML and is drawn above it with `flex-col-reverse`.
+  - It measures `--nav-peek` (on scroll, resize, ResizeObserver, and a MutationObserver on `data-nav-pinned`).
+  - A `focusin` handler runs one frame after focus, for keyboard focus only (`:focus-visible`), and nudges the scroll so the focused item sits above the button when it fits.
+  - `globals.css`: `.add-fab` sits 16px above the tabs, pinned or un-pinned; scroll padding covers the button.
+  - `layout.tsx`: `<main>` has `pb-24`.
+  - `<AddButton/>` moved to the end of all six pages.
+- **Review loop (code-reviewer), three rounds:**
+  - Round 1, CHANGES NEEDED:
+    1. no re-measure when the tabs un-pin;
+    2. un-pinned scroll padding left focus about 20px under the button.
+
+    Both got new tests (red), then fixes. The lead rejected a pure-CSS `10.5vh` cap: it cleared the button by only 0.6px, and a real iPhone home-bar inset breaks it.
+  - Round 2, CHANGES NEEDED:
+    1. the focus check ran before the browser's scroll;
+    2. it acted on pointer presses, losing a slow press (proven red).
+
+    Fixed with a rAF delay and `:focus-visible`.
+  - Round 3: ACCEPT, no blocking findings.
+  - Optional findings, logged and not taken:
+    - stale "adds 12 buttons" comments in the test helper (test-engineer's file);
+    - a mouse-focused text input next to the button would still be nudged (none exist today);
+    - the scroll padding relies on the handler.
+- **Lead's own run (clean `.next`, after the final fixes):**
+  - `npm run check` exit 0: 1163 unit tests, check-rules 0 errors, rules tests 61/61;
+  - `CI=1 npx playwright test`: **2765 passed, 415 skipped, 0 failed** (24.0m).
+- **Screenshots (390×844 Home):** closed, the indigo "+" circle sits 16px above the tabs, bottom right; open, "Add income" and "Add expense" are stacked and right-aligned above a "×".
+- **For the T1.9 phone check:**
+  - with the largest text, the "+" sits near the bottom corner without scrolling;
+  - on Android, tap event rows level with the "+": each opens first time;
+  - with a keyboard, Tab down the Comic Con page: no highlighted item hides behind the circle.
 
 ### T1.9 — Owner tries it on a real phone                   Status: todo
 Owner agent: **owner**

@@ -33,9 +33,9 @@ export default async function IncomeStreamPage({ params }: PageProps<"/income/[i
   return (
     <>
       <h1 className="text-2xl font-bold break-words">{name}</h1>
+      <StreamDetail streamId={id} />
       {/* Pre-filled with this stream; Save brings you back here. */}
       <AddButton stream={id} />
-      <StreamDetail streamId={id} />
     </>
   );
 }

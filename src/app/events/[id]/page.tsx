@@ -37,9 +37,9 @@ export default async function EventPage({ params }: PageProps<"/events/[id]">) {
   return (
     <>
       <h1 className="text-2xl font-bold break-words">{name}</h1>
+      <EventDetail eventId={id} />
       {/* Pre-filled with this event; Save brings you back here. */}
       <AddButton event={id} />
-      <EventDetail eventId={id} />
     </>
   );
 }

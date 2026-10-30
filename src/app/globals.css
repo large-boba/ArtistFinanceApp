@@ -18,14 +18,40 @@
   }
 }
 
-/* While the nav is pinned to the bottom, keep a focused control clear of it by
-   the nav's real height (BottomNav writes --nav-h and sets data-nav-pinned on
-   <html>). When the nav is too tall it sits in the page flow instead, and any
-   padding would push the top of the page out of reach, so there is none.
-   Before BottomNav has measured, the nav is assumed pinned, and the fallback
-   is its normal height: 4rem plus the 1px border plus the home-bar padding. */
+/* Scroll padding: when Tab focuses something, the browser scrolls it into view
+   and keeps this much of the window's bottom edge clear. BottomNav writes
+   --nav-h and sets data-nav-pinned on <html>.
+   Pinned tabs: clear the nav's real height, plus 88px for the round "+" button
+   (56px) and its 16px gap above the tabs, plus 16px of breathing room. Before
+   BottomNav has measured, the nav is assumed pinned, and the fallback is its
+   normal height: 4rem plus the 1px border plus the home-bar padding. */
 html:not([data-nav-pinned="false"]) {
-  scroll-padding-bottom: var(--nav-h, calc(4rem + 1px + env(safe-area-inset-bottom)));
+  scroll-padding-bottom: calc(var(--nav-h, calc(4rem + 1px + env(safe-area-inset-bottom))) + 88px);
+}
+
+/* Un-pinned tabs sit in the page flow, so there is no nav-h to add, but the
+   button still floats over the page. The padding here is only a first guess,
+   capped at 8% of the window height so that a tall focused item (a big card
+   in a short window, such as a phone on its side with big text) is never
+   pushed off the top of the screen. The exact job of keeping keyboard focus out
+   from under the button is done by a focusin handler in AddButton.tsx. One frame
+   after focus, once the browser has scrolled, it looks at the real positions
+   and scrolls further only when the item fits. */
+html[data-nav-pinned="false"] {
+  scroll-padding-bottom: min(88px, 8vh);
+}
+
+/* Where the floating "+" button sits. Pinned tabs: 16px above them. */
+.add-fab {
+  bottom: calc(var(--nav-h, calc(4rem + 1px + env(safe-area-inset-bottom))) + 16px);
+}
+
+/* Un-pinned tabs scroll with the page. The button stays 1rem (or the home-bar
+   inset) from the window bottom, and lifts to sit 16px above --nav-peek, the
+   part of the tabs currently on screen (AddButton measures it), so it never
+   covers a tab. */
+html[data-nav-pinned="false"] .add-fab {
+  bottom: max(1rem, env(safe-area-inset-bottom), calc(var(--nav-peek, 0px) + 16px));
 }
 
 body {

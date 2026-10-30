@@ -105,6 +105,12 @@
 //    named "+ Expense". The button's own behaviour is in add-button.spec.ts.
 //    Claims 9, 10 and 14 below now check "+ Add" where they checked
 //    "+ Expense" (HOME_BUTTONS); nothing else about them changed.
+//    CHANGED (T1.19, owner's change 2026-10-30): the button's accessible
+//    name is now exactly "Add" (aria-label; it shows an aria-hidden "+" in a
+//    small round button in the bottom-right corner, add-button.spec B2/B9),
+//    so HOME_BUTTONS is ["Add"]. Claims 8, 9, 10 and 14 are otherwise
+//    unchanged and still hold for a button at the bottom: it is on screen
+//    without scrolling and above the nav.
 //
 // 9. Tap targets. Every nav link and Home's "+ Add" are at least 44×44
 //    CSS pixels (their own bounding box, not a parent's).
@@ -312,7 +318,8 @@ function navLink(page: Page, name: string): Locator {
 
 // Home's big buttons (claim 8). "+ Sale" was removed in T1.8 (owner's
 // 2026-10-25 direction). CHANGED (T1.14): "+ Add" replaces "+ Expense".
-const HOME_BUTTONS = ["+ Add"] as const;
+// CHANGED (T1.19): "Add" (was "+ Add").
+const HOME_BUTTONS = ["Add"] as const;
 type HomeButton = (typeof HOME_BUTTONS)[number];
 
 /** The Home control with this exact accessible name, as a button or a link. */
@@ -628,7 +635,7 @@ test.describe("Home's big button", () => {
     await expect(page.getByRole("link", { name: "+ Expense", exact: true })).toHaveCount(0);
   });
 
-  test("on a phone, + Add is fully on screen above the navigation without scrolling", async ({
+  test("on a phone, Add is fully on screen above the navigation without scrolling", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "phone", "phone-layout claim");

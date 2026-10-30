@@ -445,7 +445,7 @@ function cancelLink(page: Page): Locator {
 const HOME_FORM_ADDRESS = "/expenses/new?back=%2F";
 
 function addButton(page: Page): Locator {
-  return main(page).getByRole("button", { name: "+ Add", exact: true });
+  return main(page).getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add" (the button is now a round "+" named "Add")
 }
 
 /** Opens "+ Add" on Home (it must start closed) and returns the "Add expense" link, ready to press. */

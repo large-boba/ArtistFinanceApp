@@ -75,6 +75,11 @@
 //     DIRECTLY under it (the h1's next element sibling is the button or holds
 //     it; exactly one; before the first h2); then the sections. Its links
 //     stay as add-button.spec B4 says (no pre-fill, back=/expenses).
+//     CHANGED (T1.19, owner's change 2026-10-30): the button is now named
+//     "Add" (a small round button in the bottom-right corner) and sits at
+//     the END of the page's content: exactly one, AFTER every section (so
+//     after the last h2's section). "Directly under the h1" and "before the
+//     first h2" are removed. Every locator below uses the name "Add".
 //
 // X2. Sections: exactly these level-2 headings, in order: "Totals",
 //     "All expenses". Each is a <section> labelled by its h2 (a region named
@@ -277,7 +282,7 @@ function expenseRows(page: Page): Locator {
   return allExpenses(page).getByRole("listitem");
 }
 function addButton(page: Page): Locator {
-  return main(page).getByRole("button", { name: "+ Add", exact: true });
+  return main(page).getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add"
 }
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -501,31 +506,30 @@ test.describe("T1.17: the top of /expenses and its sections", () => {
     await expect(heading(page)).toHaveCount(1);
   });
 
-  test('exactly one "+ Add", directly under the h1', async ({ page }) => {
+  // CHANGED (T1.19): these two tests were 'exactly one "+ Add", directly
+  // under the h1' and '"+ Add" comes before the first section heading'. The
+  // button now sits at the end of the content (X1).
+  test('exactly one "Add", after the h1', async ({ page }) => {
     await openExpenses(page);
     await expect(addButton(page)).toHaveCount(1);
-    const direct = await heading(page).evaluate((h1) => {
-      const next = h1.nextElementSibling;
-      if (!next) return "nothing after the h1";
-      const isIt = (el: Element) =>
-        el.tagName === "BUTTON" && (el.textContent ?? "").replace(/\s+/g, " ").trim() === "+ Add";
-      if (isIt(next) || Array.from(next.querySelectorAll("button")).some(isIt)) return "yes";
-      return `next sibling is <${next.tagName.toLowerCase()}> "${(next.textContent ?? "").trim().slice(0, 40)}"`;
-    });
-    expect(direct).toBe("yes");
+    const button = await addButton(page).elementHandle();
+    const after = await heading(page).evaluate(
+      (h1, b) => !!b && (h1.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      button,
+    );
+    expect(after).toBe(true);
   });
 
-  test('"+ Add" comes before the first section heading', async ({ page }) => {
+  test('"Add" comes after every section', async ({ page }) => {
     await openExpenses(page);
-    const place = await main(page).evaluate((m) => {
-      const h2 = m.querySelector("h2");
-      const button = Array.from(m.querySelectorAll("button")).find(
-        (b) => (b.textContent ?? "").replace(/\s+/g, " ").trim() === "+ Add",
-      );
-      if (!h2 || !button) return "missing h2 or button";
-      return (button.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 ? "before" : "after";
-    });
-    expect(place).toBe("before");
+    const button = await addButton(page).elementHandle();
+    const place = await main(page).evaluate((m, b) => {
+      const sections = Array.from(m.querySelectorAll("section"));
+      if (!b || sections.length === 0) return "missing sections or button";
+      const before = sections.filter((sec) => (sec.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) === 0);
+      return before.length === 0 ? "after all" : `not after ${before.length} section(s)`;
+    }, button);
+    expect(place).toBe("after all");
   });
 
   test(`the level-2 headings are exactly ${SECTIONS.join(", ")}, in that order`, async ({ page }) => {
@@ -885,7 +889,7 @@ test.describe("T1.17: tap targets are at least 44×44 px", () => {
     await seed(page, [], ROWS_COSTS);
     await expect(expenseRows(page)).toHaveCount(8);
     const controls = await main(page).locator("a, button").all();
-    expect(controls.length, "at least the + Add button").toBeGreaterThanOrEqual(1);
+    expect(controls.length, "at least the Add button").toBeGreaterThanOrEqual(1);
     for (const control of controls) {
       if (!(await control.isVisible())) continue;
       const name = await textOf(control);

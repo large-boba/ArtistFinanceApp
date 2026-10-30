@@ -101,6 +101,11 @@
 //
 // S3. "+ Add" on a stream page: exactly one, directly under the h1 (the h1's
 //     next element sibling is the button or holds it, as on the tab pages).
+//     CHANGED (T1.19, owner's change 2026-10-30): the button is now named
+//     "Add" (a small round button in the bottom-right corner) and sits at
+//     the END of the page's content: exactly one, after the h1 and after
+//     every section. "Directly under the h1" is removed. Every locator below
+//     uses the name "Add".
 //     Its links are exactly
 //       /income/new?stream=<id>&back=%2Fincome%2F<id>
 //       /expenses/new?stream=<id>&back=%2Fincome%2F<id>
@@ -326,7 +331,7 @@ function streamLink(page: Page, stream: Stream): Locator {
   return linkStartingWith(main(page), stream.name);
 }
 function addButton(page: Page): Locator {
-  return main(page).getByRole("button", { name: "+ Add", exact: true });
+  return main(page).getByRole("button", { name: "Add", exact: true }); // CHANGED (T1.19): was "+ Add"
 }
 function incomeRows(page: Page): Locator {
   return region(page, "Income").getByRole("listitem");
@@ -632,18 +637,21 @@ test.describe("T1.16: the stream page's address, heading and title", () => {
 
 test.describe('T1.16: "+ Add" on a stream page', () => {
   for (const stream of [SALES, ONLINE]) {
-    test(`on ${stream.name}, there is exactly one "+ Add", directly under the h1`, async ({ page }) => {
+    // CHANGED (T1.19): was 'there is exactly one "+ Add", directly under the
+    // h1'. The button now sits at the end of the content.
+    test(`on ${stream.name}, there is exactly one "Add", after the h1 and after every section`, async ({ page }) => {
       await openStream(page, stream);
       await expect(addButton(page)).toHaveCount(1);
-      const direct = await heading(page).evaluate((h1) => {
-        const next = h1.nextElementSibling;
-        if (!next) return "nothing after the h1";
-        const isIt = (el: Element) =>
-          el.tagName === "BUTTON" && (el.textContent ?? "").replace(/\s+/g, " ").trim() === "+ Add";
-        if (isIt(next) || Array.from(next.querySelectorAll("button")).some(isIt)) return "yes";
-        return `next sibling is <${next.tagName.toLowerCase()}> "${(next.textContent ?? "").trim().slice(0, 40)}"`;
-      });
-      expect(direct).toBe("yes");
+      const button = await addButton(page).elementHandle();
+      const place = await main(page).evaluate((m, b) => {
+        const h1 = m.querySelector("h1");
+        const sections = Array.from(m.querySelectorAll("section"));
+        if (!h1 || sections.length === 0 || !b) return "missing h1, sections or button";
+        const afterH1 = (h1.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        const notAfter = sections.filter((sec) => (sec.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) === 0);
+        return afterH1 && notAfter.length === 0 ? "after both" : `afterH1 ${afterH1}, not after ${notAfter.length} section(s)`;
+      }, button);
+      expect(place).toBe("after both");
     });
   }
 
@@ -1094,10 +1102,10 @@ test.describe("T1.16: tap targets are at least 44×44 px", () => {
     });
   }
 
-  test('on Sales at events, "+ Add" and both event links are at least 44×44 px', async ({ page }) => {
+  test('on Sales at events, "Add" and both event links are at least 44×44 px', async ({ page }) => {
     await openStream(page, SALES);
     for (const [label, control] of [
-      ["+ Add", addButton(page)],
+      ["Add", addButton(page)],
       [COMIC_CON.name, linkStartingWith(region(page, "Events"), COMIC_CON.name)],
       [MARKET.name, linkStartingWith(region(page, "Events"), MARKET.name)],
     ] as const) {
