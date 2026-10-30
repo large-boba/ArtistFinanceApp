@@ -831,6 +831,33 @@ Evidence:
 - **Lead's own run (after the tidy-up, clean `.next`):** `npm run check` exit 0 (1163 unit tests passed, check-rules 0 errors, 0 warnings); `CI=1 npx playwright test`: 2600 passed, 368 skipped (phone-only or desktop-only), 0 failed (19.8m).
 - **Screenshot (phone, pretend data):** "This month / October 2026 / Income $4,500.00 / Expenses $999.00 / Net $3,501.00".
 
+### T1.19 — The "+" button becomes a small round button, bottom right   Status: tests
+Owner agent: frontend-engineer   Tests: test-engineer (Playwright)   Security review: no (same links and `back` handling as T1.14; only the look and position change)
+Guide: §10 (mobile-first, one-handed use), §15 (accessibility); DECISIONS.md "The '+' button" (owner change, 2026-10-30).
+Outcome: `AddButton` stops being a big full-width "+ Add" under the heading and becomes a **small round floating button with "+" in the middle, in the bottom-right corner** (owner's request). Everything else T1.14 built stays.
+- **Look:**
+  - a circle at least 56px across (never under 48px), filled indigo, with a white "+" drawn as an `aria-hidden` icon or character and a soft shadow;
+  - its accessible name is **"Add"** (`aria-label`); `aria-expanded` and `aria-controls` stay.
+- **Position:** `position: fixed` in the bottom-right of the window.
+  - **Right edge:** `max(1rem, env(safe-area-inset-right))`.
+  - **While the bottom tabs are pinned:** it sits 1rem **above** them (using `--nav-h`, which BottomNav already writes), so it never covers a tab.
+  - **When the tabs are un-pinned** (`data-nav-pinned="false"`, very large text): it sits `max(1rem, env(safe-area-inset-bottom))` from the bottom of the window.
+- **Opening:** tapping it shows the two links ("Add income", "Add expense") as a compact stack **just above the circle, right-aligned**, inside the window at 320px wide and with 200% text. Each link is at least 44px tall. When open, the "+" may turn into "×"; the accessible name stays "Add".
+- **Placement in each page:** `<AddButton …/>` moves to the **end** of each page's content, so its reading and Tab order match where it appears (bottom). Pages: Home, Events, Expenses, Income, an event page (`event` pre-fill), an income stream page (`stream` pre-fill).
+- **Never hides content:** `<main>` gets enough bottom padding (button height + its gap) that, scrolled to the end, the last line of every page is fully visible and not under the button.
+- **Unchanged from T1.14:** the links and their `event`, `stream` and `back` values; closing on Escape (focus back to the button), a tap outside, or pressing the button again; the group stays `hidden` while closed; it starts closed on each new page.
+Context: `src/components/AddButton.tsx` (T1.14), `src/components/BottomNav.tsx` (`--nav-h`, `data-nav-pinned`), `src/app/globals.css`, `src/app/layout.tsx`, `e2e/add-button.spec.ts`, plus specs that find the button by the name "+ Add".
+Rules that apply: 44px targets; works at 320px and 200% text; no new library; dark mode readable.
+Out of scope: changing which pages show the button, the forms, or the nav.
+Done when:
+- the tests find the button by role `button` and name "Add", and check it's a circle at least 48px across, in the bottom-right corner, and fully above the pinned tabs on a phone (390×844) and on desktop;
+- with the tabs un-pinned (large text) it doesn't overlap the tabs either;
+- the open links sit inside the window, above the button, at 320px with 200% text;
+- on each page, scrolled to the bottom, the last content element doesn't intersect the button;
+- every T1.14 behaviour test still passes (links, pre-fill, `back`, Escape, outside tap, starts closed);
+- `npm run check` exits 0 and the full Playwright run passes.
+Evidence:
+
 ### T1.9 — Owner tries it on a real phone                   Status: todo
 Owner agent: **owner**
 Steps:
